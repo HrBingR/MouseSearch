@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MyAnonamouse Search</title>
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>MyAnonamouse Search</h1>
+        <form method="get" action="/">
+            <div class="form-group">
+                <label for="query">Search Query</label>
+                <input type="text" id="query" name="query" value="{{ query }}">
+            </div>
+
+            <div class="form-group">
+                <label>Search In</label>
+                <div class="checkbox-group">
+                    <input type="checkbox" id="search_in_title" name="search_in_title" {% if search_in_title or not query %}checked{% endif %}>
+                    <label for="search_in_title">Title</label>
+            
+                    <input type="checkbox" id="search_in_author" name="search_in_author" {% if search_in_author or not query %}checked{% endif %}>
+                    <label for="search_in_author">Author</label>
+            
+                    <input type="checkbox" id="search_in_narrator" name="search_in_narrator" {% if search_in_narrator %}checked{% endif %}>
+                    <label for="search_in_narrator">Narrator</label>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="media_type">Media Type</label>
+                <select id="media_type" name="media_type">
+                    <option value="all" {% if media_type == "all" %}selected{% endif %}>All</option>
+                    <option value="13" {% if media_type == "13" %}selected{% endif %}>Audiobooks</option>
+                    <option value="14" {% if media_type == "14" %}selected{% endif %}>E-Books</option>
+                    <option value="15" {% if media_type == "15" %}selected{% endif %}>Musicology</option>
+                    <option value="16" {% if media_type == "16" %}selected{% endif %}>Radio</option>
+                </select>
+            </div>
+
+            <button type="submit">Search</button>
+        </form>
+
+        {% if results %}
+            {% if results|length > 0 %}
+                <h2>Results:</h2>
+                <div>
+                    {% for result in results %}
+                        <div class="result">
+                            <div class="thumbnail">
+                                <img src="/proxy_thumbnail?url={{ result.thumbnail }}" alt="Thumbnail" width="100">
+                            </div>
+                            <div>
+                                <h3>{{ result.title }}</h3>
+                                <p>Author: {{ result.author_info | safe }}</p>
+                                <p>Size: {{ result.size }}</p>
+                                <a href="https://www.myanonamouse.net/tor/download.php?tid={{ result.id }}" target="_blank">Download</a>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+
+                <div class="pagination">
+                    {% for i in range(1, total_pages + 1) %}
+                        <a href="/?query={{ query }}&page={{ i }}" class="{% if page == i %}active{% endif %}">
+                            {{ i }}
+                        </a>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <p>No results found. Try a different search query.</p>
+            {% endif %}
+        {% endif %}
+    </div>
+</body>
+</html>
