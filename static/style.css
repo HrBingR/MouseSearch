@@ -28,6 +28,11 @@ body {
     font-size: 1.5rem;
 }
 
+.title-link {
+    text-decoration: none;
+    color: inherit;
+  }
+  
 /* General styles for form groups */
 .form-group {
     margin-bottom: 15px;
