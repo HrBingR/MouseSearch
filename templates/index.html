@@ -30,8 +30,8 @@
             </div>
 
             <div class="form-group">
-                <label for="media_type">Media Type</label>
-                <select id="media_type" name="media_type">
+                <label for="media_type">Media Type:</label>
+                <select name="media_type" id="media_type">
                     <option value="all" {% if media_type == "all" %}selected{% endif %}>All</option>
                     <option value="13" {% if media_type == "13" %}selected{% endif %}>Audiobooks</option>
                     <option value="14" {% if media_type == "14" %}selected{% endif %}>E-Books</option>
@@ -53,7 +53,11 @@
                                 <img src="/proxy_thumbnail?url={{ result.thumbnail }}" alt="Thumbnail" width="100">
                             </div>
                             <div>
-                                <h3>{{ result.title }}</h3>
+                                <h3>
+                                    <a href="https://www.myanonamouse.net/t/{{ result.id }}" target="_blank">
+                                        {{ result.title }}
+                                    </a>
+                                </h3>
                                 <p>Author: {{ result.author_info | safe }}</p>
                                 <p>Size: {{ result.size }}</p>
                                 <a href="https://www.myanonamouse.net/tor/download.php?tid={{ result.id }}" target="_blank">Download</a>

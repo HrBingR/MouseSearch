@@ -1,5 +1,5 @@
-from flask import Flask, request, render_template, Response, json
-import requests
+from flask import Flask, request, render_template, Response
+import requests, json
 import math
 
 app = Flask(__name__)
@@ -7,33 +7,100 @@ app = Flask(__name__)
 # Base API URL
 API_URL = "https://www.myanonamouse.net/tor/js/loadSearchJSONbasic.php"
 
-# Initial session cookie (replace with your actual values)
+# Session cookies
 session_cookies = {
     "mam_id": "_zXN0MpPPSXWWgMlJ0YLHvPUq9FRh56DRrciTUY908x85dl--29svP04D2mYQuAVDYj8IMWJMRF8ZUrHL9EWUHf5K96jotpO4Oirre13mhtWRS3iVJzXXp4AwgIuQ3r4uXIkNF56Rkffep9deKOGMMouNQqEaNGC_unaDHNj-utOM8uLPxVJtnXhNvIKdFoBaZuIPK-s9N_ZVwopt-dcRpdnhpQcxXx5K7zQVDq9PXuuU6kuXW8SDeLYkn2UvfgyYZwC4Hxgy1IcK8D6Ze1sYmgmkKSfVjCgwmEH",
     "uid": "221118",
 }
 
+language_dict = {
+    "English": 1,
+    "Afrikaans": 17,
+    "Arabic": 32,
+    "Bengali": 35,
+    "Bosnian": 51,
+    "Bulgarian": 18,
+    "Burmese": 6,
+    "Cantonese": 44,
+    "Catalan": 19,
+    "Chinese": 2,
+    "Croatian": 49,
+    "Czech": 20,
+    "Danish": 21,
+    "Dutch": 22,
+    "Estonian": 61,
+    "Farsi": 39,
+    "Finnish": 23,
+    "French": 36,
+    "German": 37,
+    "Greek": 26,
+    "Greek, Ancient": 59,
+    "Gujarati": 3,
+    "Hebrew": 27,
+    "Hindi": 8,
+    "Hungarian": 28,
+    "Icelandic": 63,
+    "Indonesian": 53,
+    "Irish": 56,
+    "Italian": 43,
+    "Japanese": 38,
+    "Javanese": 12,
+    "Kannada": 5,
+    "Korean": 41,
+    "Lithuanian": 50,
+    "Latin": 46,
+    "Latvian": 62,
+    "Malay": 33,
+    "Malayalam": 58,
+    "Manx": 57,
+    "Marathi": 9,
+    "Norwegian": 48,
+    "Polish": 45,
+    "Portuguese": 34,
+    "Brazilian Portuguese (BP)": 52,
+    "Punjabi": 14,
+    "Romanian": 30,
+    "Russian": 16,
+    "Scottish Gaelic": 24,
+    "Sanskrit": 60,
+    "Serbian": 31,
+    "Slovenian": 54,
+    "Spanish": 4,
+    "Castilian Spanish": 55,
+    "Swedish": 40,
+    "Tagalog": 29,
+    "Tamil": 11,
+    "Telugu": 10,
+    "Thai": 7,
+    "Turkish": 42,
+    "Ukrainian": 25,
+    "Urdu": 15,
+    "Vietnamese": 13,
+    "Other": 47
+}
 
 def update_cookies(response):
     """Extract and update cookies from the API response."""
     global session_cookies
     if "set-cookie" in response.headers:
-        # Parse and update the cookies
         cookies = response.cookies.get_dict()
         session_cookies.update(cookies)
 
-
 @app.route("/", methods=["GET", "POST"])
 def search():
-    # Get search parameters from the form
+    # Get search parameters
     search_query = request.args.get("query", "")
     search_in_title = request.args.get("search_in_title", "off") == "on"
     search_in_author = request.args.get("search_in_author", "off") == "on"
     search_in_narrator = request.args.get("search_in_narrator", "off") == "on"
-    media_type = request.args.get("media_type", "all")
+    media_type = request.args.get("media_type", "13")  # Default to Audiobooks
+    language = request.args.get("language", "English")  # Default to English
+    per_page = int(request.args.get("perpage", 10))  # number of results
     page = int(request.args.get("page", 1))
-    per_page = 10
     start_number = (page - 1) * per_page
+
+    # Map the language to its corresponding integer
+    language_id = language_dict.get(language, 1)  # Default to English (1)
 
     # Prepare API parameters
     params = {
@@ -42,38 +109,37 @@ def search():
         "tor[startNumber]": start_number,
         "perpage": per_page,
         "thumbnail": "true",  # Always include thumbnails
+        "tor[browse_lang][]": language_id, 
     }
 
-    # Add search_in parameters
+    # Add filters
     params["tor[srchIn][title]"] = search_in_title
     params["tor[srchIn][author]"] = search_in_author
     params["tor[srchIn][narrator]"] = search_in_narrator
 
-    # Add media type filter
     if media_type != "all":
         params["tor[main_cat][]"] = media_type
 
-    # Prepare headers with cookies
     headers = {
         "Cookie": "; ".join([f"{k}={v}" for k, v in session_cookies.items()])
     }
 
-    # Make API request
     if search_query:
         response = requests.get(API_URL, headers=headers, params=params)
-        
-        # Update cookies from the API response
+
+        # Update cookies
         update_cookies(response)
-        
+
         if response.status_code == 200:
             results = response.json()
             total_results = results.get("total", 0)
             total_pages = math.ceil(total_results / per_page)
             data = results.get("data", [])
 
-            # Parse and clean author_info for each result
+            # Parse author and narrator info
             for item in data:
                 item["author_info"] = parse_author_info(item.get("author_info", ""))
+                item["narrator_info"] = parse_author_info(item.get("narrator_info", ""))
         else:
             total_results = 0
             total_pages = 0
@@ -90,32 +156,29 @@ def search():
         search_in_author=search_in_author,
         search_in_narrator=search_in_narrator,
         media_type=media_type,
+        language=language,
         results=data,
         page=page,
         total_pages=total_pages,
     )
 
-def parse_author_info(author_info):
-    """Extract and return only the author's names from author_info."""
+def parse_author_info(info):
+    """Parse JSON fields like author or narrator info."""
     try:
-        # Convert the JSON string into a Python dictionary
-        authors = json.loads(author_info)
-        # Join all author names into a single string (e.g., "Author1, Author2")
+        authors = json.loads(info)  # Use the standard `json` module
         return ", ".join(authors.values())
     except (json.JSONDecodeError, TypeError):
-        # If parsing fails or the field is empty, return "Unknown Author"
-        return "Unknown Author"
+        return "Unknown"
 
 @app.route("/proxy_thumbnail")
 def proxy_thumbnail():
-    """Proxy thumbnails to bypass cookie or CORS issues."""
+    """Proxy thumbnails to handle cookies and bypass CORS issues."""
     url = request.args.get("url")
     if not url:
         return "No URL provided", 400
     headers = {"Cookie": "; ".join([f"{k}={v}" for k, v in session_cookies.items()])}
     response = requests.get(url, headers=headers, stream=True)
     return Response(response.content, content_type=response.headers.get("Content-Type"))
-
 
 if __name__ == "__main__":
     app.run(debug=True)
