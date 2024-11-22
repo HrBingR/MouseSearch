@@ -73,46 +73,58 @@
         </form>
 
         {% if results %}
-            {% if results|length > 0 %}
-                <h2>Results:</h2>
-                <div>
+        <div class="results-container">
+            <table class="results-table">
+                <thead>
+                    <tr>
+                        <th>Thumbnail</th>
+                        <th>Filetype</th>
+                        <th>Details</th>
+                        <th>Seeders / Leechers</th>
+                    </tr>
+                </thead>
+                <tbody>
                     {% for result in results %}
-                        <div class="result">
-                            <div class="thumbnail">
-                                <img src="/proxy_thumbnail?url={{ result.thumbnail }}" alt="Thumbnail" width="100">
+                    <tr>
+                        <!-- Thumbnail -->
+                        <td>
+                            <img src="/proxy_thumbnail?url={{ result.thumbnail }}" alt="Thumbnail" width="100">
+                        </td>
+        
+                        <!-- Filetype -->
+                        <td>
+                            <p>{{ result.filetype }}</p> <!-- Filetype column -->
+                        </td>
+        
+                        <!-- Details -->
+                        <td>
+                            <div class="result-title">
+                                <a href="https://www.myanonamouse.net/t/{{ result.id }}" target="_blank">
+                                    {{ result.title }}
+                                </a>
                             </div>
-                            <div>
-                                <h3>
-                                    <a href="https://www.myanonamouse.net/t/{{ result.id }}" target="_blank">
-                                        {{ result.title }}
-                                    </a>
-                                </h3>
-                                <p>Author: {{ result.author_info | safe }}</p>
-                                <p>Narrator: {{ result.narrator_info | safe }}</p>
-                                <p>Size: {{ result.size }}</p>
-                                <p>Date: {{ result.added }}</p>
-                                <a href="https://www.myanonamouse.net/tor/download.php/{{ result.dl }}" target="_blank">Download .torrent</a>
-                        
-                                <!-- Add to qBittorrent button -->
-                                <form action="/add_to_qbittorrent" method="POST" style="display:inline;">
-                                    <input type="hidden" name="torrent_url" value="https://www.myanonamouse.net/tor/download.php/{{ result.dl }}">
-                                    <button type="submit">Add to qBittorrent</button>
-                                </form>
-                            </div>
-                        </div>
+                            <p>Author: {{ result.author_info | safe }}</p>
+                            <p>Narrator: {{ result.narrator_info | safe }}</p>
+                            <p>Size: {{ result.size }}</p>
+                            <p>Date: {{ result.added }}</p>
+                            <a href="https://www.myanonamouse.net/tor/download.php/{{ result.dl }}" target="_blank">Download .torrent</a>
+                            
+                            <!-- Add to qBittorrent button -->
+                            <form action="/add_to_qbittorrent" method="POST">
+                                <input type="hidden" name="torrent_url" value="https://www.myanonamouse.net/tor/download.php/{{ result.dl }}">
+                                <button type="submit">Add to qBittorrent</button>
+                            </form>
+                        </td>
+        
+                        <!-- Seeders / Leechers -->
+                        <td>
+                            <p>&uarr; {{ result.seeders }} / &darr; {{ result.leechers }}</p>
+                        </td>
+                    </tr>
                     {% endfor %}
-                </div>
-
-                <div class="pagination">
-                    {% for i in range(1, total_pages + 1) %}
-                        <a href="/?query={{ query }}&page={{ i }}" class="{% if page == i %}active{% endif %}">
-                            {{ i }}
-                        </a>
-                    {% endfor %}
-                </div>
-            {% else %}
-                <p>No results found. Try a different search query.</p>
-            {% endif %}
+                </tbody>
+            </table>
+        </div>
         {% endif %}
     </div>
 </body>
