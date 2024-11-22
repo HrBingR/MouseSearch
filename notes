@@ -1,0 +1,28 @@
+Anomamouse search
+
+Sorting results:
+Readarr sorting:
+1. quality trumps all
+    - How does it determine?
+        - seems like Readarr just assigns quality score based on extension
+        - FLAC > m4b > mp3 > unknown
+2. Custom format score
+    - Prefer whatever user selects
+    - E.g. m4b,
+- Readarr downloads the first book that is highest quality, unable 
+3. Protocol
+4. Indexer
+5. Peers
+6. Age
+7. Size
+8. Book count
+
+I’ll probably look at:
+1. Quality
+2. Format
+3. Peers
+4. Age
+5. Size
+6. ? Book count?
+
+Instead of stopping with first positive, I might compile an overall match score which each component weighted differently.

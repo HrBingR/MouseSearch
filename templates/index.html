@@ -36,8 +36,9 @@
     </script>
 </head>
 <body>
-    <div class="container">
-        <h1><a href="/" class="title-link">MyAnonamouse Search</a></h1>
+    <div class="wrapper-container">
+        <div class="search-container">
+        <div class = "pagetitle"><a href="/" class="title-link">MyAnonamouse Search</a></div>
         <form method="get" action="/">
             <div class="form-group">
                 <label for="query">Search Query</label>
@@ -71,7 +72,7 @@
 
             <button type="submit">Search</button>
         </form>
-
+        </div>
         {% if results %}
         <div class="results-container">
             <table class="results-table">
@@ -107,6 +108,7 @@
                             <p>Narrator: {{ result.narrator_info | safe }}</p>
                             <p>Size: {{ result.size }}</p>
                             <p>Date: {{ result.added }}</p>
+                            <p>Score: {{ result.score.total_score }}</p>
                             <a href="https://www.myanonamouse.net/tor/download.php/{{ result.dl }}" target="_blank">Download .torrent</a>
                             
                             <!-- Add to qBittorrent button -->

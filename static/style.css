@@ -8,7 +8,7 @@ body {
     line-height: 1.6;
 }
 
-.container {
+.wrapper-container {
     max-width: 1200px;
     margin: 20px auto;
     padding: 20px;
@@ -17,6 +17,14 @@ body {
     border-radius: 8px;
 }
 
+.search-container {
+    display: flex;
+flex-direction: column;
+align-items: center;
+justify-content: center;
+
+text-align: center;
+}
 /* Title Styling */
 .title-link {
     text-decoration: none;

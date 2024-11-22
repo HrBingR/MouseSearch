@@ -1,4 +1,4 @@
-from flask import Flask, request, render_template, Response
+from flask import Flask, request, render_template, Response, make_response
 import requests, json, argparse
 import math
 from datetime import datetime
@@ -147,6 +147,8 @@ def search():
                 item["author_info"] = parse_author_info(item.get("author_info", ""))
                 item["narrator_info"] = parse_author_info(item.get("narrator_info", ""))
                 item["added"] = format_date(item.get("added", "Unknown"))
+            ranked_results = rank_results(data)
+            data = ranked_results
         else:
             total_results = 0
             total_pages = 0
@@ -156,7 +158,7 @@ def search():
         total_pages = 0
         data = []
 
-    return render_template(
+    response = make_response(render_template(
         "index.html",
         query=search_query,
         search_in_title=search_in_title,
@@ -167,7 +169,12 @@ def search():
         results=data,
         page=page,
         total_pages=total_pages,
-    )
+    ))
+
+    # Set Cache-Control header for 1 day (86400 seconds)
+    response.headers["Cache-Control"] = "public, max-age=86400"
+    response.headers["Vary"] = "Accept-Encoding"
+    return response
 
 def parse_author_info(info):
     """Parse JSON fields like author or narrator info."""
@@ -185,16 +192,81 @@ def format_date(date_string):
     except (ValueError, TypeError):
         return "Unknown"
     
+def calculate_score(result, max_seeders, max_normalized_downloads, newest_date):
+    from datetime import datetime
+
+    # Filetype scoring (max 50 points)
+    filetype_scores = {'m4b': 50, 'mp3': 30}
+    filetype_score = filetype_scores.get(result['filetype'], 10)
+    
+    # Seeders scoring (max 30 points)
+    seeders_score = (result['seeders'] / max_seeders) * 30 if max_seeders > 0 else 0
+    
+    # Age of torrent in years
+    torrent_date = datetime.strptime(result['added'], '%Y-%m-%d')
+    torrent_age_years = max((newest_date - torrent_date).days / 365.25, 0.1)  # Prevent division by zero
+    
+    # Downloads per year
+    downloads_per_year = result['times_completed'] / torrent_age_years
+    
+    # Normalize downloads per year to a 20-point scale
+    normalized_downloads_score = (downloads_per_year / max_normalized_downloads) * 20 if max_normalized_downloads > 0 else 0
+    
+    # Composite score
+    total_score = filetype_score + seeders_score + normalized_downloads_score
+    
+    return {
+        'filetype_score': filetype_score,
+        'seeders_score': seeders_score,
+        'normalized_downloads_score': normalized_downloads_score,
+        'total_score': total_score
+    }
+
+def rank_results(search_results):
+    from datetime import datetime
+
+    # Get newest date
+    added_dates = [datetime.strptime(result['added'], '%Y-%m-%d') for result in search_results]
+    newest_date = max(added_dates) if added_dates else datetime.now()
+    
+    # Determine maximum seeders and downloads per year
+    max_seeders = max(result['seeders'] for result in search_results) if search_results else 0
+    
+    # Calculate max downloads per year
+    max_normalized_downloads = 0
+    for result in search_results:
+        torrent_date = datetime.strptime(result['added'], '%Y-%m-%d')
+        torrent_age_years = max((newest_date - torrent_date).days / 365.25, 0.1)
+        downloads_per_year = result['times_completed'] / torrent_age_years
+        if downloads_per_year > max_normalized_downloads:
+            max_normalized_downloads = downloads_per_year
+    
+    # Add scores to results
+    for result in search_results:
+        result['score'] = calculate_score(result, max_seeders, max_normalized_downloads, newest_date)
+    
+    # Sort results by total_score (descending)
+    ranked_results = sorted(search_results, key=lambda x: x['score']['total_score'], reverse=True)
+    return ranked_results
+
 @app.route("/proxy_thumbnail")
 def proxy_thumbnail():
     """Proxy thumbnails to handle cookies and bypass CORS issues."""
     url = request.args.get("url")
     if not url:
         return "No URL provided", 400
+
     headers = {"Cookie": "; ".join([f"{k}={v}" for k, v in session_cookies.items()])}
     response = requests.get(url, headers=headers, stream=True)
-    return Response(response.content, content_type=response.headers.get("Content-Type"))
 
+    if response.status_code == 200:
+        proxy_response = Response(response.content, content_type=response.headers.get("Content-Type"))
+        # Add Cache-Control headers for the browser
+        proxy_response.headers["Cache-Control"] = "public, max-age=86400"  # Cache for 1 day
+        return proxy_response
+    else:
+        return "Failed to fetch image", 500
+    
 @app.route("/add_to_qbittorrent", methods=["POST"])
 def add_to_qbittorrent():
     """Adds a torrent to qBittorrent via its Web API."""
