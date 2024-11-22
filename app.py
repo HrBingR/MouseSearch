@@ -13,6 +13,10 @@ session_cookies = {
     "uid": "221118",
 }
 
+QB_URL = "http://192.168.4.73:6767"  # qBittorrent Web UI URL
+QB_USERNAME = "admin"  # Replace with your username
+QB_PASSWORD = "Emulation5!"  # Replace with your password
+
 language_dict = {
     "English": 1,
     "Afrikaans": 17,
@@ -108,7 +112,8 @@ def search():
         "tor[sortType]": "default",
         "tor[startNumber]": start_number,
         "perpage": per_page,
-        "thumbnail": "true",  # Always include thumbnails
+        "thumbnail": "true",  # Always include thumbnails,
+        "dlLink": "true", # show a torrent link that doesn't require auth
         "tor[browse_lang][]": language_id, 
     }
 
@@ -179,6 +184,37 @@ def proxy_thumbnail():
     headers = {"Cookie": "; ".join([f"{k}={v}" for k, v in session_cookies.items()])}
     response = requests.get(url, headers=headers, stream=True)
     return Response(response.content, content_type=response.headers.get("Content-Type"))
+
+@app.route("/add_to_qbittorrent", methods=["POST"])
+def add_to_qbittorrent():
+    """Adds a torrent to qBittorrent via its Web API."""
+    torrent_url = request.form.get("torrent_url")
+    
+    if not torrent_url:
+        return {"error": "No torrent URL provided"}, 400
+
+    # Authenticate with qBittorrent
+    session = requests.Session()
+    login_response = session.post(f"{QB_URL}/api/v2/auth/login", data={
+        "username": QB_USERNAME,
+        "password": QB_PASSWORD
+    })
+
+    if login_response.status_code != 200 or login_response.text != "Ok.":
+        return {"error": "Failed to authenticate with qBittorrent"}, 500
+
+    # Send the torrent URL to qBittorrent
+    add_response = session.post(f"{QB_URL}/api/v2/torrents/add", data={
+        "urls": torrent_url,
+        "category": "prowlarr",  # qBittorrent category
+        "content_layout": "Subfolder", # create subfolder
+        "cookie": session_cookies
+    })
+
+    if add_response.status_code == 200:
+        return {"success": "Torrent added successfully"}
+    else:
+        return {"error": "Failed to add torrent to qBittorrent"}, 500
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run the Flask app with custom address and port.")

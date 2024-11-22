@@ -60,7 +60,13 @@
                                 </h3>
                                 <p>Author: {{ result.author_info | safe }}</p>
                                 <p>Size: {{ result.size }}</p>
-                                <a href="https://www.myanonamouse.net/tor/download.php?tid={{ result.id }}" target="_blank">Download</a>
+                                <a href="https://www.myanonamouse.net/tor/download.php/{{ result.dl }}" target="_blank">Download .torrent</a>
+                        
+                                <!-- Add to qBittorrent button -->
+                                <form action="/add_to_qbittorrent" method="POST" style="display:inline;">
+                                    <input type="hidden" name="torrent_url" value="https://www.myanonamouse.net/tor/download.php/{{ result.dl }}">
+                                    <button type="submit">Add to qBittorrent</button>
+                                </form>
                             </div>
                         </div>
                     {% endfor %}
