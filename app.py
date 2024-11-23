@@ -4,88 +4,24 @@ import math
 from datetime import datetime
 from dotenv import load_dotenv
 
-# Load .env file
-load_dotenv()
+from language_dict import language_dict
 
 app = Flask(__name__)
 
+# Load .env file
+load_dotenv()
+
 # Base API URL
 API_URL = os.getenv("MAM_API_URL", "https://www.myanonamouse.net/tor/js/loadSearchJSONbasic.php")
-# Session cookies
+
 session_cookies = {
     "mam_id": os.getenv("MAM_ID", ""),
     "uid": os.getenv("MAM_UID", ""),
 }
 
 QB_URL = os.getenv("QB_URL", "http://localhost:8080")  # Replace with your qBittorrent URL, e.g., "http://localhost:8080"
-QB_USERNAME = os.getenv("QB_USERNAME", "username")
-QB_PASSWORD = os.getenv("QB_PASSWORD", "password")
-
-language_dict = {
-    "English": 1,
-    "Afrikaans": 17,
-    "Arabic": 32,
-    "Bengali": 35,
-    "Bosnian": 51,
-    "Bulgarian": 18,
-    "Burmese": 6,
-    "Cantonese": 44,
-    "Catalan": 19,
-    "Chinese": 2,
-    "Croatian": 49,
-    "Czech": 20,
-    "Danish": 21,
-    "Dutch": 22,
-    "Estonian": 61,
-    "Farsi": 39,
-    "Finnish": 23,
-    "French": 36,
-    "German": 37,
-    "Greek": 26,
-    "Greek, Ancient": 59,
-    "Gujarati": 3,
-    "Hebrew": 27,
-    "Hindi": 8,
-    "Hungarian": 28,
-    "Icelandic": 63,
-    "Indonesian": 53,
-    "Irish": 56,
-    "Italian": 43,
-    "Japanese": 38,
-    "Javanese": 12,
-    "Kannada": 5,
-    "Korean": 41,
-    "Lithuanian": 50,
-    "Latin": 46,
-    "Latvian": 62,
-    "Malay": 33,
-    "Malayalam": 58,
-    "Manx": 57,
-    "Marathi": 9,
-    "Norwegian": 48,
-    "Polish": 45,
-    "Portuguese": 34,
-    "Brazilian Portuguese (BP)": 52,
-    "Punjabi": 14,
-    "Romanian": 30,
-    "Russian": 16,
-    "Scottish Gaelic": 24,
-    "Sanskrit": 60,
-    "Serbian": 31,
-    "Slovenian": 54,
-    "Spanish": 4,
-    "Castilian Spanish": 55,
-    "Swedish": 40,
-    "Tagalog": 29,
-    "Tamil": 11,
-    "Telugu": 10,
-    "Thai": 7,
-    "Turkish": 42,
-    "Ukrainian": 25,
-    "Urdu": 15,
-    "Vietnamese": 13,
-    "Other": 47
-}
+QB_USERNAME = os.getenv("QB_USERNAME", "admin")
+QB_PASSWORD = os.getenv("QB_PASSWORD", "adminadmin")
 
 def update_cookies(response):
     """Extract and update cookies from the API response."""
@@ -152,6 +88,7 @@ def search():
                 item["added"] = format_date(item.get("added", "Unknown"))
             ranked_results = rank_results(data)
             data = ranked_results
+            data = check_existing_torrents(ranked_results)
         else:
             total_results = 0
             total_pages = 0
@@ -253,6 +190,40 @@ def rank_results(search_results):
     # Sort results by total_score (descending)
     ranked_results = sorted(search_results, key=lambda x: x['score']['total_score'], reverse=True)
     return ranked_results
+
+def check_existing_torrents(search_results):
+    """Check if torrents from the API results are already in qBittorrent."""
+    # Authenticate with qBittorrent
+    session = requests.Session()
+    login_response = session.post(f"{QB_URL}/api/v2/auth/login", data={
+        "username": QB_USERNAME,
+        "password": QB_PASSWORD
+    })
+
+    if login_response.status_code != 200 or login_response.text != "Ok.":
+        raise Exception("Failed to authenticate with qBittorrent")
+
+    # Collect all hashes from the search results
+    hashes = [result.get("hash", "").upper() for result in search_results if result.get("hash")]
+    #if not hashes:
+        #return search_results  # No hashes to check
+
+    # Query qBittorrent for these hashes
+    hash_filter = "|".join(hashes)  # Join hashes with "|" as required by the API
+    torrents_response = session.get(f"{QB_URL}/api/v2/torrents/info", params={"hashes": hash_filter})
+
+    if torrents_response.status_code != 200:
+        raise Exception("Failed to fetch filtered torrents from qBittorrent")
+
+    # Extract existing hashes from the qBittorrent response
+    existing_hashes = {torrent["hash"] for torrent in torrents_response.json()}
+
+    # Mark results as inClient based on existing hashes
+    for result in search_results:
+        result_hash = result.get("hash", "").upper()
+        result["inClient"] = result_hash in existing_hashes
+
+    return search_results
 
 @app.route("/proxy_thumbnail")
 def proxy_thumbnail():
