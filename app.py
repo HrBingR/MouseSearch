@@ -32,23 +32,7 @@ def update_cookies(response):
 
 @app.route("/", methods=["GET", "POST"])
 def search():
-        # Fetch available categories from qBittorrent
-    session = requests.Session()
-    login_response = session.post(f"{QB_URL}/api/v2/auth/login", data={
-        "username": QB_USERNAME,
-        "password": QB_PASSWORD
-    })
-
-    if login_response.status_code == 200 and login_response.text == "Ok.":
-        categories_response = session.get(f"{QB_URL}/api/v2/sync/maindata?rid=0")
-        if categories_response.status_code == 200:
-            categories = categories_response.json().get("categories", {})
-        else:
-            categories = {}
-    else:
-        categories = {}
-
-
+    categories = {}
     # Get search parameters
     search_query = request.args.get("query", "")
     search_in_title = request.args.get("search_in_title", "off") == "on"
@@ -88,7 +72,7 @@ def search():
 
     if search_query:
         response = requests.get(API_URL, headers=headers, params=params)
-
+        categories = get_categories()
         # Update cookies
         update_cookies(response)
 
@@ -263,13 +247,12 @@ def proxy_thumbnail():
     
 @app.route("/add_to_qbittorrent", methods=["POST"])
 def add_to_qbittorrent():
-    """Adds a torrent to qBittorrent via its Web API."""
     torrent_url = request.form.get("torrent_url")
-    
+    category = request.form.get("category", "").strip()  # Optional category
+
     if not torrent_url:
         return {"error": "No torrent URL provided"}, 400
 
-    # Authenticate with qBittorrent
     session = requests.Session()
     login_response = session.post(f"{QB_URL}/api/v2/auth/login", data={
         "username": QB_USERNAME,
@@ -279,44 +262,49 @@ def add_to_qbittorrent():
     if login_response.status_code != 200 or login_response.text != "Ok.":
         return {"error": "Failed to authenticate with qBittorrent"}, 500
 
-    # Send the torrent URL to qBittorrent
-    add_response = session.post(f"{QB_URL}/api/v2/torrents/add", data={
+    # Send the torrent URL and category to qBittorrent
+    add_data = {
         "urls": torrent_url,
-        "category": "prowlarr",  # qBittorrent category
-        "content_layout": "Subfolder", # create subfolder
-        "cookie": session_cookies
-    })
+        "content_layout": "Subfolder",  # Example layout option
+    }
+    if category:  # Include category if provided
+        add_data["category"] = category
+
+    add_response = session.post(f"{QB_URL}/api/v2/torrents/add", data=add_data)
 
     if add_response.status_code == 200:
         return {"success": "Torrent added successfully"}
     else:
         return {"error": "Failed to add torrent to qBittorrent"}, 500
 
-@app.route("/get_categories", methods=["GET"])
+
 def get_categories():
-    """Fetch all available categories from qBittorrent."""
-    # Authenticate with qBittorrent
     session = requests.Session()
     login_response = session.post(f"{QB_URL}/api/v2/auth/login", data={
         "username": QB_USERNAME,
         "password": QB_PASSWORD
     })
 
-    if login_response.status_code != 200 or login_response.text != "Ok.":
-        return {"error": "Failed to authenticate with qBittorrent"}, 500
+    categories = {}  # Default to an empty dictionary
 
-    # Fetch categories
-    categories_response = session.get(f"{QB_URL}/api/v2/sync/maindata?rid=0")
+    if login_response.status_code == 200 and login_response.text == "Ok.":
+        categories_response = session.get(f"{QB_URL}/api/v2/sync/maindata?rid=0")
+        if categories_response.status_code == 200:
+            try:
+                # Extract categories
+                categories = categories_response.json().get("categories", {})
+                if not isinstance(categories, dict):
+                    categories = {}
+            except Exception as e:
+                print("Error parsing categories:", e)
+                categories = {}
+        else:
+            print("Failed to fetch categories. Response status:", categories_response.status_code)
+    else:
+        print("Failed to authenticate with qBittorrent.")
 
-    if categories_response.status_code != 200:
-        return {"error": "Failed to fetch categories from qBittorrent"}, 500
+    return categories 
 
-    # Extract categories
-    response_json = categories_response.json()
-    categories = response_json.get("categories", {})
-
-    # Return categories
-    return {"categories": categories}, 200
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run the Flask app with custom address and port.")

@@ -205,3 +205,7 @@ button:hover {
 .result-title a:hover {
     color: #3498db; /* Highlight color on hover */
 }
+
+.category-dropdown {
+    width:auto
+}

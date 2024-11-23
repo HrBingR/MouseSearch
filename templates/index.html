@@ -19,29 +19,35 @@
                 });
 
             
-            const forms = document.querySelectorAll("form[action='/add_to_qbittorrent']");
-            forms.forEach((form) => {
-                form.addEventListener("submit", function (event) {
-                    event.preventDefault(); // Prevent the default form submission
-                    const formData = new FormData(form);
-    
-                    fetch("/add_to_qbittorrent", {
-                        method: "POST",
-                        body: formData,
-                    })
-                        .then((response) => response.json())
-                        .then((data) => {
-                            if (data.success) {
-                                alert("Torrent added successfully!");
-                            } else {
-                                alert("Failed to add torrent: " + data.error);
-                            }
+                const forms = document.querySelectorAll("form[action='/add_to_qbittorrent']");
+                forms.forEach((form) => {
+                    form.addEventListener("submit", function (event) {
+                        event.preventDefault(); // Prevent default form submission
+                        const formData = new FormData(form);
+
+                        // Get the category value from the dropdown
+                        const categoryDropdown = form.querySelector("select[name='category']");
+                        if (categoryDropdown) {
+                            formData.append("category", categoryDropdown.value);
+                        }
+
+                        fetch("/add_to_qbittorrent", {
+                            method: "POST",
+                            body: formData,
                         })
-                        .catch((error) => {
-                            alert("An error occurred: " + error.message);
-                        });
+                            .then((response) => response.json())
+                            .then((data) => {
+                                if (data.success) {
+                                    alert("Torrent added successfully!");
+                                } else {
+                                    alert("Failed to add torrent: " + data.error);
+                                }
+                            })
+                            .catch((error) => {
+                                alert("An error occurred: " + error.message);
+                            });
+                    });
                 });
-            });
         });
     </script>
 </head>
@@ -89,7 +95,7 @@
                 <thead>
                     <tr>
                         <th>Thumbnail</th>
-                        <th>Filetype</th>
+                        <th></th>
                         <th>Details</th>
                         <th>Seeders / Leechers</th>
                     </tr>
@@ -125,7 +131,14 @@
                             <form action="/add_to_qbittorrent" method="POST">
                                 <input type="hidden" name="torrent_url" value="https://www.myanonamouse.net/tor/download.php/{{ result.dl }}">
                                 <button type="submit">Add to qBittorrent</button>
+                                <select name="category" class="category-dropdown">
+                                    <option value="">Select Category</option>
+                                    {% for category_name, category_info in categories.items() %}
+                                    <option value="{{ category_name }}">{{ category_name }}</option>
+                                    {% endfor %}
+                                </select>
                             </form>
+                            
                         </td>
         
                         <!-- Seeders / Leechers -->
