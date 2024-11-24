@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MyAnonamouse Search</title>
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='style.css') }}">
+
+    <script>
+            document.addEventListener("DOMContentLoaded", function () {
+                // Normalize search query on form submission
+                const searchForm = document.querySelector("form[action='/']");
+                searchForm.addEventListener("submit", function (event) {
+                    const queryInput = searchForm.querySelector("input[name='query']");
+                    if (queryInput) {
+                        // Normalize the query to lowercase
+                        queryInput.value = queryInput.value.trim().toLowerCase();
+                    }
+                });
+
+            
+                const forms = document.querySelectorAll("form[action='/add_to_qbittorrent']");
+                forms.forEach((form) => {
+                    form.addEventListener("submit", function (event) {
+                        event.preventDefault(); // Prevent default form submission
+                        const formData = new FormData(form);
+
+                        // Get the category value from the dropdown
+                        const categoryDropdown = form.querySelector("select[name='category']");
+                        if (categoryDropdown) {
+                            formData.append("category", categoryDropdown.value);
+                        }
+
+                        fetch("/add_to_qbittorrent", {
+                            method: "POST",
+                            body: formData,
+                        })
+                            .then((response) => response.json())
+                            .then((data) => {
+                                if (data.success) {
+                                    alert("Torrent added successfully!");
+                                } else {
+                                    alert("Failed to add torrent: " + data.error);
+                                }
+                            })
+                            .catch((error) => {
+                                alert("An error occurred: " + error.message);
+                            });
+                    });
+                });
+        });
+    </script>
+</head>
+<body>
+    <div class="wrapper-container">
+        <div class="search-container">
+        <div class = "pagetitle"><a href="/" class="title-link">MyAnonamouse Search</a></div>
+        <form method="get" action="/">
+            <div class="form-group">
+                <label for="query">Search Query</label>
+                <input type="text" id="query" name="query" value="{{ query }}">
+            </div>
+
+            <div class="form-group">
+                <label>Search In</label>
+                <div class="checkbox-group">
+                    <input type="checkbox" id="search_in_title" name="search_in_title" {% if search_in_title or not query %}checked{% endif %}>
+                    <label for="search_in_title">Title</label>
+            
+                    <input type="checkbox" id="search_in_author" name="search_in_author" {% if search_in_author or not query %}checked{% endif %}>
+                    <label for="search_in_author">Author</label>
+            
+                    <input type="checkbox" id="search_in_narrator" name="search_in_narrator" {% if search_in_narrator %}checked{% endif %}>
+                    <label for="search_in_narrator">Narrator</label>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="media_type">Media Type:</label>
+                <select name="media_type" id="media_type">
+                    <option value="all" {% if media_type == "all" %}selected{% endif %}>All</option>
+                    <option value="13" {% if media_type == "13" %}selected{% endif %}>Audiobooks</option>
+                    <option value="14" {% if media_type == "14" %}selected{% endif %}>E-Books</option>
+                    <option value="15" {% if media_type == "15" %}selected{% endif %}>Musicology</option>
+                    <option value="16" {% if media_type == "16" %}selected{% endif %}>Radio</option>
+                </select>
+            </div>
+
+            <button type="submit">Search</button>
+        </form>
+        </div>
+        {% if results %}
+        <div class="results-container">
+            <table class="results-table">
+                <thead>
+                    <tr>
+                        <th>Thumbnail</th>
+                        <th></th>
+                        <th>Details</th>
+                        <th>Seeders / Leechers</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for result in results %}
+                    <tr>
+                        <!-- Thumbnail -->
+                        <td>
+                            <img src="/proxy_thumbnail?url={{ result.thumbnail }}" alt="Thumbnail" width="100">
+                        </td>
+        
+                        <!-- Filetype -->
+                        <td>
+                            <p>{{ result.filetype }}</p> <!-- Filetype column -->
+                        </td>
+        
+                        <!-- Details -->
+                        <td>
+                            <div class="result-title">
+                                <a href="https://www.myanonamouse.net/t/{{ result.id }}" target="_blank">
+                                    {{ result.title }}
+                                </a>
+                            </div>
+                            <p>Author: {{ result.author_info | safe }}</p>
+                            <p>Narrator: {{ result.narrator_info | safe }}</p>
+                            <p>Size: {{ result.size }}</p>
+                            <p>Date: {{ result.added }}</p>
+                            <p>Score: {{ result.score.total_score }}</p>
+                            <a href="https://www.myanonamouse.net/tor/download.php/{{ result.dl }}" target="_blank">Download .torrent</a>
+                            
+                            <!-- Add to qBittorrent button -->
+                            <form action="/add_to_qbittorrent" method="POST">
+                                <input type="hidden" name="torrent_url" value="https://www.myanonamouse.net/tor/download.php/{{ result.dl }}">
+                                <button type="submit">Add to qBittorrent</button>
+                                <select name="category" class="category-dropdown">
+                                    <option value="">Select Category</option>
+                                    {% for category_name, category_info in categories.items() %}
+                                    <option value="{{ category_name }}">{{ category_name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </form>
+                            
+                        </td>
+        
+                        <!-- Seeders / Leechers -->
+                        <td>
+                            <p>&uarr; {{ result.seeders }} / &darr; {{ result.leechers }}</p>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+    </div>
+</body>
+</html>

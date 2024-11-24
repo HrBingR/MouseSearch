@@ -1,156 +1,311 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MyAnonamouse Search</title>
-    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='style.css') }}">
+<html lang="en" data-bs-theme="dark"><head><script src="safari-web-extension://1ED3B8A5-C046-4B33-A5AC-8256EACEC9D3/content/fido2-page-script.js"></script><script src="https://getbootstrap.com/docs/5.3/assets/js/color-modes.js"></script>
 
-    <script>
-            document.addEventListener("DOMContentLoaded", function () {
-                // Normalize search query on form submission
-                const searchForm = document.querySelector("form[action='/']");
-                searchForm.addEventListener("submit", function (event) {
-                    const queryInput = searchForm.querySelector("input[name='query']");
-                    if (queryInput) {
-                        // Normalize the query to lowercase
-                        queryInput.value = queryInput.value.trim().toLowerCase();
-                    }
-                });
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="">
+    <meta name="author" content="Mark Otto, Jacob Thornton, and Bootstrap contributors">
+    <meta name="generator" content="Hugo 0.122.0">
+    <title>Offcanvas navbar template · Bootstrap v5.3</title>
 
-            
-                const forms = document.querySelectorAll("form[action='/add_to_qbittorrent']");
-                forms.forEach((form) => {
-                    form.addEventListener("submit", function (event) {
-                        event.preventDefault(); // Prevent default form submission
-                        const formData = new FormData(form);
+    <link rel="canonical" href="https://getbootstrap.com/docs/5.3/examples/offcanvas-navbar/">
 
-                        // Get the category value from the dropdown
-                        const categoryDropdown = form.querySelector("select[name='category']");
-                        if (categoryDropdown) {
-                            formData.append("category", categoryDropdown.value);
-                        }
+    
 
-                        fetch("/add_to_qbittorrent", {
-                            method: "POST",
-                            body: formData,
-                        })
-                            .then((response) => response.json())
-                            .then((data) => {
-                                if (data.success) {
-                                    alert("Torrent added successfully!");
-                                } else {
-                                    alert("Failed to add torrent: " + data.error);
-                                }
-                            })
-                            .catch((error) => {
-                                alert("An error occurred: " + error.message);
-                            });
-                    });
-                });
-        });
-    </script>
-</head>
-<body>
-    <div class="wrapper-container">
-        <div class="search-container">
-        <div class = "pagetitle"><a href="/" class="title-link">MyAnonamouse Search</a></div>
-        <form method="get" action="/">
-            <div class="form-group">
-                <label for="query">Search Query</label>
-                <input type="text" id="query" name="query" value="{{ query }}">
-            </div>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@docsearch/css@3">
 
-            <div class="form-group">
-                <label>Search In</label>
-                <div class="checkbox-group">
-                    <input type="checkbox" id="search_in_title" name="search_in_title" {% if search_in_title or not query %}checked{% endif %}>
-                    <label for="search_in_title">Title</label>
-            
-                    <input type="checkbox" id="search_in_author" name="search_in_author" {% if search_in_author or not query %}checked{% endif %}>
-                    <label for="search_in_author">Author</label>
-            
-                    <input type="checkbox" id="search_in_narrator" name="search_in_narrator" {% if search_in_narrator %}checked{% endif %}>
-                    <label for="search_in_narrator">Narrator</label>
-                </div>
-            </div>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/css/bootstrap.min.css" integrity="sha512-jnSuA4Ss2PkkikSOLtYs8BlYIeeIK1h99ty4YfvRPAlzr377vr3CXDb7sb7eEEBYjDtcYj+AjBH3FLv5uSJuXg==" crossorigin="anonymous" referrerpolicy="no-referrer" />
 
-            <div class="form-group">
-                <label for="media_type">Media Type:</label>
-                <select name="media_type" id="media_type">
-                    <option value="all" {% if media_type == "all" %}selected{% endif %}>All</option>
-                    <option value="13" {% if media_type == "13" %}selected{% endif %}>Audiobooks</option>
-                    <option value="14" {% if media_type == "14" %}selected{% endif %}>E-Books</option>
-                    <option value="15" {% if media_type == "15" %}selected{% endif %}>Musicology</option>
-                    <option value="16" {% if media_type == "16" %}selected{% endif %}>Radio</option>
-                </select>
-            </div>
+    <!-- Favicons -->
+<link rel="apple-touch-icon" href="https://getbootstrap.com/docs/5.3/assets/img/favicons/apple-touch-icon.png" sizes="180x180">
+<link rel="icon" href="https://getbootstrap.com/docs/5.3/assets/img/favicons/favicon-32x32.png" sizes="32x32" type="image/png">
+<link rel="icon" href="https://getbootstrap.com/docs/5.3/assets/img/favicons/favicon-16x16.png" sizes="16x16" type="image/png">
+<link rel="manifest" href="https://getbootstrap.com/docs/5.3/assets/img/favicons/manifest.json">
+<link rel="mask-icon" href="https://getbootstrap.com/docs/5.3/assets/img/favicons/safari-pinned-tab.svg" color="#712cf9">
+<link rel="icon" href="https://getbootstrap.com/docs/5.3/assets/img/favicons/favicon.ico">
+<meta name="theme-color" content="#712cf9">
 
-            <button type="submit">Search</button>
-        </form>
-        </div>
-        {% if results %}
-        <div class="results-container">
-            <table class="results-table">
-                <thead>
-                    <tr>
-                        <th>Thumbnail</th>
-                        <th></th>
-                        <th>Details</th>
-                        <th>Seeders / Leechers</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for result in results %}
-                    <tr>
-                        <!-- Thumbnail -->
-                        <td>
-                            <img src="/proxy_thumbnail?url={{ result.thumbnail }}" alt="Thumbnail" width="100">
-                        </td>
-        
-                        <!-- Filetype -->
-                        <td>
-                            <p>{{ result.filetype }}</p> <!-- Filetype column -->
-                        </td>
-        
-                        <!-- Details -->
-                        <td>
-                            <div class="result-title">
-                                <a href="https://www.myanonamouse.net/t/{{ result.id }}" target="_blank">
-                                    {{ result.title }}
-                                </a>
-                            </div>
-                            <p>Author: {{ result.author_info | safe }}</p>
-                            <p>Narrator: {{ result.narrator_info | safe }}</p>
-                            <p>Size: {{ result.size }}</p>
-                            <p>Date: {{ result.added }}</p>
-                            <p>Score: {{ result.score.total_score }}</p>
-                            <a href="https://www.myanonamouse.net/tor/download.php/{{ result.dl }}" target="_blank">Download .torrent</a>
-                            
-                            <!-- Add to qBittorrent button -->
-                            <form action="/add_to_qbittorrent" method="POST">
-                                <input type="hidden" name="torrent_url" value="https://www.myanonamouse.net/tor/download.php/{{ result.dl }}">
-                                <button type="submit">Add to qBittorrent</button>
-                                <select name="category" class="category-dropdown">
-                                    <option value="">Select Category</option>
-                                    {% for category_name, category_info in categories.items() %}
-                                    <option value="{{ category_name }}">{{ category_name }}</option>
-                                    {% endfor %}
-                                </select>
-                            </form>
-                            
-                        </td>
-        
-                        <!-- Seeders / Leechers -->
-                        <td>
-                            <p>&uarr; {{ result.seeders }} / &darr; {{ result.leechers }}</p>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-        {% endif %}
+
+    <style>
+      .bd-placeholder-img {
+        font-size: 1.125rem;
+        text-anchor: middle;
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        user-select: none;
+      }
+
+      @media (min-width: 768px) {
+        .bd-placeholder-img-lg {
+          font-size: 3.5rem;
+        }
+      }
+
+      .b-example-divider {
+        width: 100%;
+        height: 3rem;
+        background-color: rgba(0, 0, 0, .1);
+        border: solid rgba(0, 0, 0, .15);
+        border-width: 1px 0;
+        box-shadow: inset 0 .5em 1.5em rgba(0, 0, 0, .1), inset 0 .125em .5em rgba(0, 0, 0, .15);
+      }
+
+      .b-example-vr {
+        flex-shrink: 0;
+        width: 1.5rem;
+        height: 100vh;
+      }
+
+      .bi {
+        vertical-align: -.125em;
+        fill: currentColor;
+      }
+
+      .nav-scroller {
+        position: relative;
+        z-index: 2;
+        height: 2.75rem;
+        overflow-y: hidden;
+      }
+
+      .nav-scroller .nav {
+        display: flex;
+        flex-wrap: nowrap;
+        padding-bottom: 1rem;
+        margin-top: -1px;
+        overflow-x: auto;
+        text-align: center;
+        white-space: nowrap;
+        -webkit-overflow-scrolling: touch;
+      }
+
+      .btn-bd-primary {
+        --bd-violet-bg: #712cf9;
+        --bd-violet-rgb: 112.520718, 44.062154, 249.437846;
+
+        --bs-btn-font-weight: 600;
+        --bs-btn-color: var(--bs-white);
+        --bs-btn-bg: var(--bd-violet-bg);
+        --bs-btn-border-color: var(--bd-violet-bg);
+        --bs-btn-hover-color: var(--bs-white);
+        --bs-btn-hover-bg: #6528e0;
+        --bs-btn-hover-border-color: #6528e0;
+        --bs-btn-focus-shadow-rgb: var(--bd-violet-rgb);
+        --bs-btn-active-color: var(--bs-btn-hover-color);
+        --bs-btn-active-bg: #5a23c8;
+        --bs-btn-active-border-color: #5a23c8;
+      }
+
+      .bd-mode-toggle {
+        z-index: 1500;
+      }
+
+      .bd-mode-toggle .dropdown-menu .active .bi {
+        display: block !important;
+      }
+    </style>
+
+    
+    <!-- Custom styles for this template -->
+    <link href="{{ url_for('static', filename='offcanvas-navbar.css') }}" rel="stylesheet">
+  </head>
+  <body class="bg-body-tertiary">
+    <svg xmlns="http://www.w3.org/2000/svg" class="d-none">
+      <symbol id="check2" viewBox="0 0 16 16">
+        <path d="M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0z"></path>
+      </symbol>
+      <symbol id="circle-half" viewBox="0 0 16 16">
+        <path d="M8 15A7 7 0 1 0 8 1v14zm0 1A8 8 0 1 1 8 0a8 8 0 0 1 0 16z"></path>
+      </symbol>
+      <symbol id="moon-stars-fill" viewBox="0 0 16 16">
+        <path d="M6 .278a.768.768 0 0 1 .08.858 7.208 7.208 0 0 0-.878 3.46c0 4.021 3.278 7.277 7.318 7.277.527 0 1.04-.055 1.533-.16a.787.787 0 0 1 .81.316.733.733 0 0 1-.031.893A8.349 8.349 0 0 1 8.344 16C3.734 16 0 12.286 0 7.71 0 4.266 2.114 1.312 5.124.06A.752.752 0 0 1 6 .278z"></path>
+        <path d="M10.794 3.148a.217.217 0 0 1 .412 0l.387 1.162c.173.518.579.924 1.097 1.097l1.162.387a.217.217 0 0 1 0 .412l-1.162.387a1.734 1.734 0 0 0-1.097 1.097l-.387 1.162a.217.217 0 0 1-.412 0l-.387-1.162A1.734 1.734 0 0 0 9.31 6.593l-1.162-.387a.217.217 0 0 1 0-.412l1.162-.387a1.734 1.734 0 0 0 1.097-1.097l.387-1.162zM13.863.099a.145.145 0 0 1 .274 0l.258.774c.115.346.386.617.732.732l.774.258a.145.145 0 0 1 0 .274l-.774.258a1.156 1.156 0 0 0-.732.732l-.258.774a.145.145 0 0 1-.274 0l-.258-.774a1.156 1.156 0 0 0-.732-.732l-.774-.258a.145.145 0 0 1 0-.274l.774-.258c.346-.115.617-.386.732-.732L13.863.1z"></path>
+      </symbol>
+      <symbol id="sun-fill" viewBox="0 0 16 16">
+        <path d="M8 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM8 0a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-1 0v-2A.5.5 0 0 1 8 0zm0 13a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-1 0v-2A.5.5 0 0 1 8 13zm8-5a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1 0-1h2a.5.5 0 0 1 .5.5zM3 8a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1 0-1h2A.5.5 0 0 1 3 8zm10.657-5.657a.5.5 0 0 1 0 .707l-1.414 1.415a.5.5 0 1 1-.707-.708l1.414-1.414a.5.5 0 0 1 .707 0zm-9.193 9.193a.5.5 0 0 1 0 .707L3.05 13.657a.5.5 0 0 1-.707-.707l1.414-1.414a.5.5 0 0 1 .707 0zm9.193 2.121a.5.5 0 0 1-.707 0l-1.414-1.414a.5.5 0 0 1 .707-.707l1.414 1.414a.5.5 0 0 1 0 .707zM4.464 4.465a.5.5 0 0 1-.707 0L2.343 3.05a.5.5 0 1 1 .707-.707l1.414 1.414a.5.5 0 0 1 0 .708z"></path>
+      </symbol>
+    </svg>
+
+    <div class="dropdown position-fixed bottom-0 end-0 mb-3 me-3 bd-mode-toggle">
+      <button class="btn btn-bd-primary py-2 dropdown-toggle d-flex align-items-center" id="bd-theme" type="button" aria-expanded="false" data-bs-toggle="dropdown" aria-label="Toggle theme (dark)">
+        <svg class="bi my-1 theme-icon-active" width="1em" height="1em"><use href="#moon-stars-fill"></use></svg>
+        <span class="visually-hidden" id="bd-theme-text">Toggle theme</span>
+      </button>
+      <ul class="dropdown-menu dropdown-menu-end shadow" aria-labelledby="bd-theme-text">
+        <li>
+          <button type="button" class="dropdown-item d-flex align-items-center" data-bs-theme-value="light" aria-pressed="false">
+            <svg class="bi me-2 opacity-50" width="1em" height="1em"><use href="#sun-fill"></use></svg>
+            Light
+            <svg class="bi ms-auto d-none" width="1em" height="1em"><use href="#check2"></use></svg>
+          </button>
+        </li>
+        <li>
+          <button type="button" class="dropdown-item d-flex align-items-center active" data-bs-theme-value="dark" aria-pressed="true">
+            <svg class="bi me-2 opacity-50" width="1em" height="1em"><use href="#moon-stars-fill"></use></svg>
+            Dark
+            <svg class="bi ms-auto d-none" width="1em" height="1em"><use href="#check2"></use></svg>
+          </button>
+        </li>
+        <li>
+          <button type="button" class="dropdown-item d-flex align-items-center" data-bs-theme-value="auto" aria-pressed="false">
+            <svg class="bi me-2 opacity-50" width="1em" height="1em"><use href="#circle-half"></use></svg>
+            Auto
+            <svg class="bi ms-auto d-none" width="1em" height="1em"><use href="#check2"></use></svg>
+          </button>
+        </li>
+      </ul>
     </div>
-</body>
-</html>
+
+    
+<nav class="navbar fixed-top navbar-dark bg-dark" aria-label="Main navigation">
+  <div class="container-fluid">
+    <a class="navbar-brand" href="#"></a>
+    <button class="navbar-toggler p-0 border-0" type="button" data-bs-toggle="offcanvas" data-bs-target="#settingsOffcanvas">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+
+  </div>
+</nav>
+
+
+
+<main class="container">
+    <div class="d-flex justify-content-center align-items-center p-3 my-3 text-white bg-purple rounded shadow-sm">
+        <div class="lh-1 text-center">
+          <h1 class="h6 mb-0 text-white lh-1">MyAnonamouse Search</h1>
+        </div>
+      </div>
+
+  <div class="my-3 p-3 bg-body rounded shadow-sm">
+    <h6 class="border-bottom pb-2 mb-0">Search</h6>
+    <div class="d-flex text-body-secondary pt-3">
+      <svg class="bd-placeholder-img flex-shrink-0 me-2 rounded" width="32" height="32" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Placeholder: 32x32" preserveAspectRatio="xMidYMid slice" focusable="false"><title>Placeholder</title><rect width="100%" height="100%" fill="#007bff"></rect><text x="50%" y="50%" fill="#007bff" dy=".3em">32x32</text></svg>
+      <p class="pb-3 mb-0 small lh-sm border-bottom">
+        <strong class="d-block text-gray-dark">@username</strong>
+        Some representative placeholder content, with some information about this user. Imagine this being some sort of status update, perhaps?
+      </p>
+    </div>
+    <div class="d-flex text-body-secondary pt-3">
+      <svg class="bd-placeholder-img flex-shrink-0 me-2 rounded" width="32" height="32" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Placeholder: 32x32" preserveAspectRatio="xMidYMid slice" focusable="false"><title>Placeholder</title><rect width="100%" height="100%" fill="#e83e8c"></rect><text x="50%" y="50%" fill="#e83e8c" dy=".3em">32x32</text></svg>
+      <p class="pb-3 mb-0 small lh-sm border-bottom">
+        <strong class="d-block text-gray-dark">@username</strong>
+        Some more representative placeholder content, related to this other user. Another status update, perhaps.
+      </p>
+    </div>
+    <div class="d-flex text-body-secondary pt-3">
+      <svg class="bd-placeholder-img flex-shrink-0 me-2 rounded" width="32" height="32" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Placeholder: 32x32" preserveAspectRatio="xMidYMid slice" focusable="false"><title>Placeholder</title><rect width="100%" height="100%" fill="#6f42c1"></rect><text x="50%" y="50%" fill="#6f42c1" dy=".3em">32x32</text></svg>
+      <p class="pb-3 mb-0 small lh-sm border-bottom">
+        <strong class="d-block text-gray-dark">@username</strong>
+        This user also gets some representative placeholder content. Maybe they did something interesting, and you really want to highlight this in the recent updates.
+      </p>
+    </div>
+    <small class="d-block text-end mt-3">
+      <a href="#">All updates</a>
+    </small>
+  </div>
+
+  <div class="my-3 p-3 bg-body rounded shadow-sm">
+    <h6 class="border-bottom pb-2 mb-0">Results</h6>
+    <div class="d-flex text-body-secondary pt-3">
+      <svg class="bd-placeholder-img flex-shrink-0 me-2 rounded" width="32" height="32" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Placeholder: 32x32" preserveAspectRatio="xMidYMid slice" focusable="false"><title>Placeholder</title><rect width="100%" height="100%" fill="#007bff"></rect><text x="50%" y="50%" fill="#007bff" dy=".3em">32x32</text></svg>
+      <div class="pb-3 mb-0 small lh-sm border-bottom w-100">
+        <div class="d-flex justify-content-between">
+          <strong class="text-gray-dark">Full Name</strong>
+          <a href="#">Follow</a>
+        </div>
+        <span class="d-block">@username</span>
+      </div>
+    </div>
+    <div class="d-flex text-body-secondary pt-3">
+      <svg class="bd-placeholder-img flex-shrink-0 me-2 rounded" width="32" height="32" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Placeholder: 32x32" preserveAspectRatio="xMidYMid slice" focusable="false"><title>Placeholder</title><rect width="100%" height="100%" fill="#007bff"></rect><text x="50%" y="50%" fill="#007bff" dy=".3em">32x32</text></svg>
+      <div class="pb-3 mb-0 small lh-sm border-bottom w-100">
+        <div class="d-flex justify-content-between">
+          <strong class="text-gray-dark">Full Name</strong>
+          <a href="#">Follow</a>
+        </div>
+        <span class="d-block">@username</span>
+      </div>
+    </div>
+    <div class="d-flex text-body-secondary pt-3">
+      <svg class="bd-placeholder-img flex-shrink-0 me-2 rounded" width="32" height="32" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Placeholder: 32x32" preserveAspectRatio="xMidYMid slice" focusable="false"><title>Placeholder</title><rect width="100%" height="100%" fill="#007bff"></rect><text x="50%" y="50%" fill="#007bff" dy=".3em">32x32</text></svg>
+      <div class="pb-3 mb-0 small lh-sm border-bottom w-100">
+        <div class="d-flex justify-content-between">
+          <strong class="text-gray-dark">Full Name</strong>
+          <a href="#">Follow</a>
+        </div>
+        <span class="d-block">@username</span>
+      </div>
+    </div>
+    <small class="d-block text-end mt-3">
+      <a href="#">All suggestions</a>
+    </small>
+  </div>
+</main>
+<!-- New Settings Offcanvas -->
+<div
+class="offcanvas offcanvas-end"
+tabindex="-1"
+id="settingsOffcanvas"
+aria-labelledby="settingsOffcanvasLabel"
+>
+    <div class="offcanvas-header">
+        <h5 class="offcanvas-title" id="settingsOffcanvasLabel">Settings</h5>
+        <button type="button" class="btn-close text-reset" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+    </div>
+    <div class="offcanvas-body">
+        <form id="settings-form" method="POST" action="/update_settings">
+            <h5 class="text-center border-bottom pb-2 mb-0">qBittorrent</h5>
+            <div class="mb-3">
+            <label for="qb_url" class="form-label">qBittorrent URL</label>
+            <input
+                type="text"
+                class="form-control"
+                id="qb_url"
+                name="qb_url"
+                value="{{ qb_url }}"
+                required
+            />
+            </div>
+            <div class="mb-3">
+            <label for="qb_username" class="form-label">Username</label>
+            <input
+                type="text"
+                class="form-control"
+                id="qb_username"
+                name="qb_username"
+                value="{{ qb_username }}"
+                required
+            />
+            </div>
+            <div class="mb-3">
+            <label for="qb_password" class="form-label">Password</label>
+            <input
+                type="password"
+                class="form-control"
+                id="qb_password"
+                name="qb_password"
+                value="{{ qb_password }}"
+                required
+            />
+            </div>
+
+            <h5 class="text-center border-bottom pb-2">MyAnonamouse</h5>
+            <div class="mb-3">
+            <label for="mam_id" class="form-label">MAM ID</label>
+            <input
+                type="text"
+                class="form-control"
+                id="mam_id"
+                name="mam_id"
+                value="{{ mam_id }}"
+                required
+            />
+            </div>
+
+            <button type="submit" class="btn btn-primary">Save Settings</button>
+        </form>
+    </div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/js/bootstrap.bundle.min.js" integrity="sha512-7Pi/otdlbbCR+LnW+F7PwFcSDJOuUJB3OxtEHbg4vSMvzvJjde4Po1v4BR9Gdc9aXNUNFVUY+SK51wWT8WF0Gg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="{{ url_for('static', filename='offcanvas-navbar.js') }}"></script>
+
+</body></html>

@@ -30,15 +30,10 @@ def update_cookies(response):
         cookies = response.cookies.get_dict()
         session_cookies.update(cookies)
 
-
-#@app.route("/", methods=["GET", "POST"])
-#def home():
-#    return render_template('index.html')
-
 @app.route("/", methods=["GET", "POST"])
 def search():
     categories = {}
-    # Get search parameters, if present
+    # Get search parameters
     search_query = request.args.get("query", "")
     search_in_title = request.args.get("search_in_title", "off") == "on"
     search_in_author = request.args.get("search_in_author", "off") == "on"
