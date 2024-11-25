@@ -235,7 +235,7 @@ def check_existing_torrents(search_results):
     """Check if torrents from the API results are already in qBittorrent."""
     # Authenticate with qBittorrent
     session = requests.Session()
-    login_response = session.post(f"{app.config["QB_URL"]}/api/v2/auth/login", data={
+    login_response = session.post(f"{app.config['QB_URL']}/api/v2/auth/login", data={
         "username": app.config["QB_USERNAME"],
         "password": app.config["QB_PASSWORD"]
     },headers=app.config['BASE_HEADERS'])
@@ -250,7 +250,7 @@ def check_existing_torrents(search_results):
 
     # Query qBittorrent for these hashes
     hash_filter = "|".join(hashes)  # Join hashes with "|" as required by the API
-    torrents_response = session.get(f"{app.config["QB_URL"]}/api/v2/torrents/info", params={"hashes": hash_filter})
+    torrents_response = session.get(f"{app.config['QB_URL']}/api/v2/torrents/info", params={"hashes": hash_filter})
 
     if torrents_response.status_code != 200:
         raise Exception("Failed to fetch filtered torrents from qBittorrent")
@@ -292,7 +292,7 @@ def add_to_qbittorrent():
         return {"error": "No torrent URL provided"}, 400
 
     session = requests.Session()
-    login_response = session.post(f"{app.config["QB_URL"]}/api/v2/auth/login", data={
+    login_response = session.post(f"{app.config['QB_URL']}/api/v2/auth/login", data={
         "username": app.config["QB_USERNAME"],
         "password": app.config["QB_PASSWORD"]
     },
@@ -310,7 +310,7 @@ def add_to_qbittorrent():
     if category:  # Include category if provided
         add_data["category"] = category
 
-    add_response = session.post(f"{app.config["QB_URL"]}/api/v2/torrents/add", data=add_data, headers=app.config['BASE_HEADERS'])
+    add_response = session.post(f"{app.config['QB_URL']}/api/v2/torrents/add", data=add_data, headers=app.config['BASE_HEADERS'])
 
     if add_response.status_code == 200:
         return jsonify({"status": "success", "message": "Torrent added successfully"}), 200
@@ -321,7 +321,7 @@ def add_to_qbittorrent():
 def get_categories():
     session = requests.Session()
 
-    login_response = session.post(f"{app.config["QB_URL"]}/api/v2/auth/login", data={
+    login_response = session.post(f"{app.config['QB_URL']}/api/v2/auth/login", data={
         "username": app.config["QB_USERNAME"],
         "password": app.config["QB_PASSWORD"],
         },
@@ -331,7 +331,7 @@ def get_categories():
     categories = {}  # Default to an empty dictionary
 
     if login_response.status_code == 200 and login_response.text == "Ok.":
-        categories_response = session.get(f"{app.config["QB_URL"]}/api/v2/sync/maindata?rid=0",headers=app.config['BASE_HEADERS'])
+        categories_response = session.get(f"{app.config['QB_URL']}/api/v2/sync/maindata?rid=0",headers=app.config['BASE_HEADERS'])
         if categories_response.status_code == 200:
             try:
                 # Extract categories
