@@ -317,20 +317,24 @@ aria-labelledby="settingsOffcanvasLabel"
             const messageDiv = document.getElementById('response-message');
             if (data.status === 'success') {
                 messageDiv.innerHTML = '<div class="alert alert-success">' + data.message + '</div>';
+                showToast(data.message, 'success');
             } else {
                 messageDiv.innerHTML = '<div class="alert alert-danger">Failed to save settings. Please try again.</div>';
+                showToast("Failed to save settings. Please try again.", 'danger');
             }
         })
         .catch(error => {
             console.error('Error:', error);
             const messageDiv = document.getElementById('response-message');
             messageDiv.innerHTML = '<div class="alert alert-danger">An error occurred while saving settings.</div>';
+            showToast("An error occurred while saving settings.", 'danger');
         });
     });
 </script>
 
 <script>
-    document.addEventListener("DOMContentLoaded", function() {
+    document.addEventListener("DOMContentLoaded", function() 
+    {
         const searchForm = document.getElementById("search-form");
         const resultsContainer = document.getElementById("results-container");
         //const spinner = document.getElementById("spinner"); // Ensure spinner is retrieved
@@ -366,10 +370,13 @@ aria-labelledby="settingsOffcanvasLabel"
                     throw new Error("Network response was not ok");
                 }
                 return response.text(); // Get response HTML
+                
             })
             .then(html => {
                 // Update the results container
                 resultsContainer.innerHTML = html;
+                
+                showToast(data.success, 'success'); // Show success toast
             })
             .catch(error => {
                 console.error("Error during AJAX request:", error);
@@ -384,12 +391,76 @@ aria-labelledby="settingsOffcanvasLabel"
         });
         });
 
-        
+        // Use event delegation to handle dynamically added buttons
+    document.getElementById('results-container').addEventListener('click', function (event) {
+        if (event.target && event.target.classList.contains('add-to-qbittorrent-button')) {
+            event.preventDefault();
+
+            const button = event.target;
+            const form = button.closest('form');
+            const formData = new FormData(form);
+            const messageDiv = form.nextElementSibling;
+
+            fetch('/add_to_qbittorrent', {
+                method: 'POST',
+                body: formData,
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    messageDiv.innerHTML = '<div class="alert alert-success">' + data.message + '</div>';
+                    showToast(data.message, 'success');
+                    
+                } else {
+                    messageDiv.innerHTML = '<div class="alert alert-danger">Failed to add torrent. Please try again.</div>';
+                    showToast("Failed to add torrent. Please try again.", 'danger');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                messageDiv.innerHTML = '<div class="alert alert-danger">An error occurred while adding the torrent.</div>';
+                showToast("An error occurred while adding the torrent.", 'danger');
+            });
+        }
+    });
     
         
     });
 </script>
 
+<script>
+// Function to display a toast
+function showToast(message, type = 'primary') {
+    // Get the toast element
+    const toastContainer = document.getElementById('toast-container');
+    const toastElement = document.getElementById('server-response-toast');
+    const toastMessage = document.getElementById('toast-message');
+
+    // Update the message and style
+    toastMessage.innerText = message;
+    toastElement.className = `toast align-items-center text-bg-${type} border-0`; // Dynamically set toast type (success, danger, etc.)
+
+    // Create a new Bootstrap toast instance
+    const toast = new bootstrap.Toast(toastElement);
+
+    // Show the toast
+    toast.show();
+}
+
+</script>
+
+
+<!-- Toast Container -->
+<div id="toast-container" aria-live="polite" aria-atomic="true" class="position-fixed bottom-0 end-0 p-3" style="z-index: 1100;">
+  <div id="server-response-toast" class="toast align-items-center text-bg-primary border-0" role="alert" aria-live="assertive" aria-atomic="true">
+      <div class="d-flex">
+          <div class="toast-body" id="toast-message">
+              <!-- Message will be dynamically updated here -->
+          </div>
+          <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+      </div>
+  </div>
+</div>
 
 
 </body></html>

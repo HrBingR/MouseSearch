@@ -114,14 +114,24 @@ def search():
         total_pages = 0
         data = []
 
-        # Check if the request is an AJAX request
+    # AJAX request for search query
     if request.headers.get("X-Requested-With") == "XMLHttpRequest":
-        return render_template(
+
+        if total_results == 0:
+            # If no results, render a "No results" message
+            return render_template("partials/results.html", no_results=True)
+
+        ajax_response = make_response(render_template(
             "partials/results.html",  # Create a partial template for the results
             results=data,
             categories=categories
-        )
-    
+        ))
+        # Set Cache-Control header for 1 day (86400 seconds)
+        ajax_response.headers["Cache-Control"] = "public, max-age=86400"
+        ajax_response.headers["Vary"] = "Accept-Encoding"
+        return ajax_response
+        
+    # response for initial page load
     response = make_response(render_template(
         "index.html",
         query=search_query,
@@ -303,9 +313,9 @@ def add_to_qbittorrent():
     add_response = session.post(f"{app.config["QB_URL"]}/api/v2/torrents/add", data=add_data, headers=app.config['BASE_HEADERS'])
 
     if add_response.status_code == 200:
-        return {"success": "Torrent added successfully"}
+        return jsonify({"status": "success", "message": "Torrent added successfully"}), 200
     else:
-        return {"error": "Failed to add torrent to qBittorrent"}, 500
+        return jsonify({"status": "error", "message": "Failed to add torrent to qBittorrent"}), 500
 
 
 def get_categories():

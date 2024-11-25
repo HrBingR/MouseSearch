@@ -1,65 +1,121 @@
-{% for result in results %}
-<div class="row py-4 border-bottom">
-    <div class="col-6 col-md-4">
-    <img 
-        class="img-fluid me-2 rounded"
-        src="{{ url_for('proxy_thumbnail', url=result.thumbnail) }}" 
-        alt="Thumbnail" 
-    >
-</div>
-    <div class="col-6 col-md-5 pb-3 mb-0 small lh-sm">
-        <div class="d-flex justify-content-between">
-            <strong class="text-gray-dark">{{ result.title }}</strong>
-            
-        </div>
-        <span class="d-block">Narrator: {{ result.narrator_info or "Unknown" }}</span>
-        <span class="d-block">File Type: {{ result.filetype }}</span>
-        <span class="d-block">Size: {{ result.size }}</span>
-        <span class="d-block">Date Added: {{ result.added }}</span>
-        <span class="d-block">Seeders/Leechers: {{ result.seeders }}/{{ result.leechers }}</span>
-        <span class="d-block">Total Score: {{ result.score.total_score }}</span>
+{% if no_results %}
+    <div class="alert alert-warning text-center" role="alert">
+        No results found. Please try a different search query.
     </div>
-    <div class="col-12 col-md-3 py-2">
-        <form action="/add_to_qbittorrent" method="POST">
-            <button type="submit" id="add-to-qbittorrent-button" class="btn btn-primary d-grid gap-2 d-md-block">Add to qBittorrent</button>
-            <!-- <a href="{{ result.dllink }}" id="add-to-qbittorrent-button" class="btn btn-primary d-grid gap-2 d-md-block">Add to qBittorrent</a> -->
-            <input type="hidden" name="torrent_url" value="https://www.myanonamouse.net/tor/download.php/{{ result.dl }}">
-            
-            <select name="category" class="form-select category-dropdown">
-                <option value="">Select Category</option>
-                {% for category_name, category_info in categories.items() %}
-                <option value="{{ category_name }}">{{ category_name }}</option>
-                {% endfor %}
-            </select>
-        </form>
-        
+{% else %}
+    {% for result in results %}
+    <div class="row py-4 border-bottom">
+        <div class="col-6 col-md-4">
+        <img 
+            class="img-fluid me-2 rounded"
+            src="{{ url_for('proxy_thumbnail', url=result.thumbnail) }}" 
+            alt="Thumbnail" 
+        >
+    </div>
+        <div class="col-6 col-md-5 pb-3 mb-0 small lh-sm">
+            <div class="d-flex justify-content-between">
+                <strong class="text-gray-dark">{{ result.title }}</strong>
+                
+            </div>
+            <span class="d-block">Narrator: {{ result.narrator_info or "Unknown" }}</span>
+            <span class="d-block">File Type: {{ result.filetype }}</span>
+            <span class="d-block">Size: {{ result.size }}</span>
+            <span class="d-block">Date Added: {{ result.added }}</span>
+            <span class="d-block">Seeders/Leechers: {{ result.seeders }}/{{ result.leechers }}</span>
+            <span class="d-block">Total Score: {{ result.score.total_score }}</span>
         </div>
-</div>
-{% endfor %}
+        <div class="col-12 col-md-3 py-2">
+            <form action="/add_to_qbittorrent" method="POST">
+                <button type="button" class="btn btn-primary d-grid gap-2 d-md-block add-to-qbittorrent-button" style="width:100%">Add to qBittorrent</button>
+                <!-- <a href="{{ result.dllink }}" id="add-to-qbittorrent-button" class="btn btn-primary d-grid gap-2 d-md-block">Add to qBittorrent</a> -->
+                <input type="hidden" name="torrent_url" value="https://www.myanonamouse.net/tor/download.php/{{ result.dl }}">
+                
+                <select name="category" class="form-select category-dropdown">
+                    <option value="">Category</option>
+                    {% for category_name, category_info in categories.items() %}
+                    <option value="{{ category_name }}">{{ category_name }}</option>
+                    {% endfor %}
+                </select>
+            </form>
+            <div id="response-message"></div>
+            
+            </div>
+    </div>
+    {% endfor %}
 
-<!-- add to qBittorrent -->
-<script>
-    document.getElementById('add-to-qbittorrent-button').addEventListener('click', function () {
-        const form = document.getElementById('settings-form');
-        const formData = new FormData(form);
-  
-        fetch('/update_settings', {
-            method: 'POST',
-            body: formData,
-        })
-        .then(response => response.json())
-        .then(data => {
-            const messageDiv = document.getElementById('response-message');
-            if (data.status === 'success') {
-                messageDiv.innerHTML = '<div class="alert alert-success">' + data.message + '</div>';
-            } else {
-                messageDiv.innerHTML = '<div class="alert alert-danger">Failed to save settings. Please try again.</div>';
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            const messageDiv = document.getElementById('response-message');
-            messageDiv.innerHTML = '<div class="alert alert-danger">An error occurred while saving settings.</div>';
+    <!-- add to qBittorrent -->
+    {% for result in results %}
+    <div class="row py-4 border-bottom">
+        <div class="col-6 col-md-4">
+            <img 
+                class="img-fluid me-2 rounded"
+                src="{{ url_for('proxy_thumbnail', url=result.thumbnail) }}" 
+                alt="Thumbnail" 
+            >
+        </div>
+        <div class="col-6 col-md-5 pb-3 mb-0 small lh-sm">
+            <div class="d-flex justify-content-between">
+                <strong class="text-gray-dark">{{ result.title }}</strong>
+            </div>
+            <span class="d-block">Narrator: {{ result.narrator_info or "Unknown" }}</span>
+            <span class="d-block">File Type: {{ result.filetype }}</span>
+            <span class="d-block">Size: {{ result.size }}</span>
+            <span class="d-block">Date Added: {{ result.added }}</span>
+            <span class="d-block">Seeders/Leechers: {{ result.seeders }}/{{ result.leechers }}</span>
+            <span class="d-block">Total Score: {{ result.score.total_score }}</span>
+        </div>
+        <div class="col-12 col-md-3 py-2">
+            <form class="torrent-form" method="POST">
+                <button type="button" class="btn btn-primary d-grid gap-2 d-md-block add-to-qbittorrent-button" style="width:100%">
+                    Add to qBittorrent
+                </button>
+                <input type="hidden" name="torrent_url" value="https://www.myanonamouse.net/tor/download.php/{{ result.dl }}">
+                <select name="category" class="form-select category-dropdown">
+                    <option value="">Category</option>
+                    {% for category_name, category_info in categories.items() %}
+                    <option value="{{ category_name }}">{{ category_name }}</option>
+                    {% endfor %}
+                </select>
+            </form>
+            <div class="response-message"></div>
+        </div>
+    </div>
+    {% endfor %}
+
+    <script>
+        // Ensure script runs after DOM is fully loaded
+        document.addEventListener('DOMContentLoaded', () => {
+            // Select all buttons with the specific class
+            document.querySelectorAll('.add-to-qbittorrent-button').forEach(button => {
+                button.addEventListener('click', function (event) {
+                    event.preventDefault();
+
+                    // Get the parent form of the clicked button
+                    const form = button.closest('form');
+                    const formData = new FormData(form);
+
+                    // Get the nearest response message container
+                    const messageDiv = form.nextElementSibling;
+
+                    fetch('/add_to_qbittorrent', {
+                        method: 'POST',
+                        body: formData,
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.status === 'success') {
+                            messageDiv.innerHTML = '<div class="alert alert-success">' + data.message + '</div>';
+                        } else {
+                            messageDiv.innerHTML = '<div class="alert alert-danger">Failed to add torrent. Please try again.</div>';
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        messageDiv.innerHTML = '<div class="alert alert-danger">An error occurred while adding the torrent.</div>';
+                    });
+                });
+            });
         });
-    });
-  </script>
+    </script>
+
+{% endif %}
