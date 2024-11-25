@@ -20,7 +20,46 @@
         <span class="d-block">Total Score: {{ result.score.total_score }}</span>
     </div>
     <div class="col-12 col-md-3 py-2">
-        <a href="{{ result.dllink }}" class="btn btn-primary d-grid gap-2 d-md-block">Add to qBittorrent</a>
+        <form action="/add_to_qbittorrent" method="POST">
+            <button type="submit" id="add-to-qbittorrent-button" class="btn btn-primary d-grid gap-2 d-md-block">Add to qBittorrent</button>
+            <!-- <a href="{{ result.dllink }}" id="add-to-qbittorrent-button" class="btn btn-primary d-grid gap-2 d-md-block">Add to qBittorrent</a> -->
+            <input type="hidden" name="torrent_url" value="https://www.myanonamouse.net/tor/download.php/{{ result.dl }}">
+            
+            <select name="category" class="form-select category-dropdown">
+                <option value="">Select Category</option>
+                {% for category_name, category_info in categories.items() %}
+                <option value="{{ category_name }}">{{ category_name }}</option>
+                {% endfor %}
+            </select>
+        </form>
+        
         </div>
 </div>
 {% endfor %}
+
+<!-- add to qBittorrent -->
+<script>
+    document.getElementById('add-to-qbittorrent-button').addEventListener('click', function () {
+        const form = document.getElementById('settings-form');
+        const formData = new FormData(form);
+  
+        fetch('/update_settings', {
+            method: 'POST',
+            body: formData,
+        })
+        .then(response => response.json())
+        .then(data => {
+            const messageDiv = document.getElementById('response-message');
+            if (data.status === 'success') {
+                messageDiv.innerHTML = '<div class="alert alert-success">' + data.message + '</div>';
+            } else {
+                messageDiv.innerHTML = '<div class="alert alert-danger">Failed to save settings. Please try again.</div>';
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            const messageDiv = document.getElementById('response-message');
+            messageDiv.innerHTML = '<div class="alert alert-danger">An error occurred while saving settings.</div>';
+        });
+    });
+  </script>
