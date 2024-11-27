@@ -58,6 +58,45 @@ def login_mam():
         return True
     return False
 
+# get user stats
+@app.route('/mam/user', methods=['GET'])
+def mam_user_stats():
+    # Extract query parameters
+    user_id = request.args.get('id')
+    notify = request.args.get('notify')
+    pretty = request.args.get('pretty')
+    snatch_summary = request.args.get('snatch_summary')
+
+    # Validate that the required parameter is present
+    if not user_id:
+        return jsonify({'error': 'The "id" parameter is required.'}), 400
+
+    # Base URL from config
+    url = app.config["MAM_URL"]
+
+    # Construct the request parameters
+    params = {'id': user_id}  # id is required
+    if notify is not None:
+        params['notify'] = notify
+    if pretty is not None:
+        params['pretty'] = pretty
+    if snatch_summary is not None:
+        params['snatch_summary'] = snatch_summary
+
+    # Make the GET request with cookies and query parameters
+    response = requests.get(
+        f"{url}/jsonLoad.php",
+        cookies=mam_session_cookies,
+        params=params,  # Pass query parameters here
+    )
+    
+    if response.status_code == 200:
+        # Update cookies if the server sends new ones
+        new_cookies = response.cookies.get_dict()
+        mam_session_cookies.update(new_cookies)
+        return jsonify(response.json())  # Ensure JSON response is wrapped in Flask's jsonify
+    return jsonify({'status': 'not connected'}), response.status_code
+
 # Function to login to qBittorrent
 def login_qbittorrent():
     qb_url = app.config["QB_URL"]
