@@ -342,6 +342,12 @@ aria-labelledby="settingsOffcanvasLabel"
                 messageDiv.innerHTML = '<div class="alert alert-danger">Failed to save settings. Please try again.</div>';
                 showToast("Failed to save settings. Please try again.", 'danger');
             }
+                    // Update the QB URL in the accordion
+            const qbLink = document.getElementById('qbLink');
+            const qbUrl = formData.get('QB_URL'); // Extract QB_URL directly from the form data
+            qbLink.textContent = qbUrl;
+            qbLink.href = qbUrl;
+            checkQBStatus();
         })
         .catch(error => {
             console.error('Error:', error);
@@ -349,12 +355,7 @@ aria-labelledby="settingsOffcanvasLabel"
             messageDiv.innerHTML = '<div class="alert alert-danger">An error occurred while saving settings.</div>';
             showToast("An error occurred while saving settings.", 'danger');
         });
-        // Update the QB URL in the accordion
-        const qbLink = document.getElementById('qbLink');
-        const qbUrl = formData.get('QB_URL'); // Extract QB_URL directly from the form data
-        qbLink.textContent = qbUrl;
-        qbLink.href = qbUrl;
-        checkQBStatus();
+
     });
 </script>
 
