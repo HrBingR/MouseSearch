@@ -704,6 +704,8 @@ def update_settings():
 
     app.config["MAM_ID"] = request.form.get("MAM_ID", app.config["MAM_ID"])
     app.config["MAM_UID"] = request.form.get("MAM_UID", app.config["MAM_UID"])
+    app.config["QB_CATEGORY"] = request.form.get("QB_CATEGORY", app.config.get("QB_CATEGORY", ""))  # Add QB_CATEGORY
+
     mam_session_cookies["mam_id"] = app.config["MAM_ID"]
     mam_session_cookies["mam_uid"] = app.config["MAM_UID"]
 
@@ -712,7 +714,7 @@ def update_settings():
         "FLASK_SECRET_KEY": app.secret_key,
         "MAM_API_URL": app.config["MAM_URL"],
         "QB_URL": app.config["QB_URL"],
-        "QB_CATEGORY": app.config.get("QB_CATEGORY", ""),
+        "QB_CATEGORY": app.config.get("QB_CATEGORY", ""),  # Include QB_CATEGORY
         "QB_USERNAME": app.config["QB_USERNAME"],
         "QB_PASSWORD": app.config["QB_PASSWORD"],
         "MAM_ID": app.config["MAM_ID"],
