@@ -214,26 +214,47 @@ def mam_status():
 def qb_status():
     qb_url = app.config.get("QB_URL")
     if not qb_url:
-        return jsonify({'status': 'NOT CONFIGURED'}), 400
+        return jsonify({
+            "status": "error",
+            "message": "QB_URL is not configured.",
+            "code": 400
+        }), 400  # Explicitly returning 400 for bad configuration
 
     if 'qb_session' not in session:
         if not login_qbittorrent():
-            return jsonify({'status': 'NOT CONNECTED'})
+            return jsonify({
+                "status": "error",
+                "message": "Unable to connect to qBittorrent session.",
+                "code": 503
+            }), 503  # Explicitly returning 503 if session login fails
 
     session_obj = requests.Session()
     session_obj.cookies.update(session['qb_session'])
     headers = app.config.get("BASE_HEADERS", {})
-    
+
     try:
         response = session_obj.get(f"{qb_url}/api/v2/app/version", headers=headers)
-        response.raise_for_status()
+        response.raise_for_status()  # Raises an exception for HTTP error responses
 
         if response.status_code == 200:
-            return jsonify({'status': 'CONNECTED'})
+            return jsonify({
+                "status": "success",
+                "message": "qBittorrent is connected.",
+                "code": 200
+            }), 200  # Explicitly returning 200 for success
     except requests.exceptions.RequestException as e:
         app.logger.error(f"Error checking qBittorrent status: {e}")
-    
-    return jsonify({'status': 'NOT CONNECTED'})
+        return jsonify({
+            "status": "error",
+            "message": f"Failed to connect to qBittorrent: {str(e)}",
+            "code": 503
+        }), 503  # Explicitly returning 503 for request errors
+
+    return jsonify({
+        "status": "error",
+        "message": "Unknown connection issue with qBittorrent.",
+        "code": 500
+    }), 500  # Fallback for unhandled cases
 
 @app.route('/qb/categories', methods=['GET'])
 def qb_categories():
@@ -380,8 +401,18 @@ def search():
     headers = {
         "Cookie": "; ".join([f"{k}={v}" for k, v in mam_session_cookies.items()])
     }
-    
-    QB_STATUS = json.loads(qb_status().get_data(as_text=True))['status']
+    qbstatus = qb_status()
+    qb_status_response, status_code = qbstatus  # Destructure the tuple
+
+    # Extract JSON from the response
+    qb_status_json = qb_status_response.get_json()  
+
+    # Determine the QB_STATUS based on the HTTP status code or JSON content
+    if status_code != 200 or qb_status_json.get("status") != "success":
+        QB_STATUS = "NOT CONNECTED"
+    else:
+        QB_STATUS = "CONNECTED"
+    #QB_STATUS = json.loads(qbstatus[0].get_data(as_text=True))['status']
     categories = get_categories()
     error_message = None
     if search_query:
@@ -642,7 +673,7 @@ def add_to_qbittorrent():
     else:
         return jsonify({"status": "error", "message": "Failed to add torrent to qBittorrent"}), 500
 
-
+@app.route('/qb/categories', methods=['GET'])
 def get_categories():
     global QB_SESSION
     if not QB_SESSION:

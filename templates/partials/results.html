@@ -1,6 +1,6 @@
 {% if error_message %}
     <div class="alert alert-danger text-center" role="alert">
-        {{ error_message }}
+        {{ error_message }} (Please check your MyAnonAmouse authentication)
     </div>
 {% elif no_results %}
     <div class="alert alert-warning text-center" role="alert">
@@ -51,7 +51,7 @@
                     {% endfor %}
                 </select>
             </form>
-            <div id="response-message"></div>
+            <div class="response-message-result"></div>
         
             <!-- Show contextual message if qBittorrent is not connected -->
             {% if QB_STATUS != 'CONNECTED' %}
