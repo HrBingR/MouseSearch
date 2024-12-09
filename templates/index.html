@@ -237,7 +237,7 @@
       </main>
   </div>
 
-  <div class="my-3 p-3 bg-body rounded shadow-sm">
+  <div class="my-3 p-3 bg-body rounded shadow-sm results-container-wrapper" id="results-container-wrapper">
     <h6 class="border-bottom pb-2 mb-0">Results</h6>
     <div id="results-container">
         <!-- Results will be dynamically loaded here -->
@@ -416,6 +416,11 @@ aria-labelledby="settingsOffcanvasLabel"
                 // Reset the search button appearance and text
                 searchButton.disabled = false;
                 searchButton.innerHTML = "Search";
+                const targetDiv = document.getElementById('results-container-wrapper');
+
+                targetDiv.scrollIntoView({
+                  behavior: 'smooth' // Optional for smooth scrolling
+                });
         });
         });
 

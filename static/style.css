@@ -10,3 +10,7 @@ body {
         max-width: 1000px !important;
     }
 }
+
+.results-container-wrapper {
+  scroll-margin-top: 50px;
+}
