@@ -218,11 +218,11 @@
 <div class="accordion my-3" id="qbAccordion">
   <div class="accordion-item">
       <h2 class="accordion-header" id="qbAccordionHeading">
-          <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#qbAccordionCollapse" aria-expanded="true" aria-controls="qbAccordionCollapse">
+          <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#qbAccordionCollapse" aria-expanded="true" aria-controls="qbAccordionCollapse">
               qBittorrent
           </button>
       </h2>
-      <div id="qbAccordionCollapse" class="accordion-collapse collapse show" aria-labelledby="qbAccordionHeading" data-bs-parent="#qbAccordion">
+      <div id="qbAccordionCollapse" class="accordion-collapse collapse" aria-labelledby="qbAccordionHeading" data-bs-parent="#qbAccordion">
           <div class="accordion-body">
               <a href="{{ QB_URL }}" id="qbLink" target="_blank" class="">{{ QB_URL }}</a>
               <br> 
@@ -291,6 +291,16 @@ aria-labelledby="settingsOffcanvasLabel"
                     required
                 />
             </div>
+            <div class="mb-3">
+              <label for="QB_CATEGORY class="form-label">Default category</label>
+              <input
+                  type="text"
+                  class="form-control"
+                  id="QB_CATEGORY"
+                  name="QB_CATEGORY"
+                  value="{{ QB_CATEGORY }}"
+              />
+          </div>
     
             <h5 class="text-center border-bottom pb-2">MyAnonamouse</h5>
             <div class="mb-3">
@@ -339,13 +349,14 @@ aria-labelledby="settingsOffcanvasLabel"
             messageDiv.innerHTML = '<div class="alert alert-danger">An error occurred while saving settings.</div>';
             showToast("An error occurred while saving settings.", 'danger');
         });
+        checkQBStatus();
     });
 </script>
 
 <script>
     document.addEventListener("DOMContentLoaded", function() 
     {
-        checkQBStatus();
+        // checkQBStatus();
         const searchForm = document.getElementById("search-form");
         const resultsContainer = document.getElementById("results-container");
         //const spinner = document.getElementById("spinner"); // Ensure spinner is retrieved
@@ -475,7 +486,7 @@ function showToast(message, type = 'primary') {
 
 <script>
 function checkQBStatus() {
-        fetch('/get_qb_status')
+        fetch('/qb/status')
             .then(response => {
                 if (!response.ok) {
                     throw new Error("Network response was not ok");
