@@ -1,47 +1,348 @@
-from flask import Flask, request, render_template, Response, make_response, jsonify
+from flask import Flask, request, render_template, Response, make_response, jsonify, session
 import requests, json, argparse, os
 import math
 from datetime import datetime
 from dotenv import load_dotenv
+from requests.exceptions import RequestException
 
 from language_dict import language_dict
 
 app = Flask(__name__)
 
-# Load .env file
+# Load environment variables from .env file, if present
 load_dotenv()
-print(f"QB_URL from .env: {os.getenv('QB_URL')}")
 
-# Base API URL
-app.config["API_URL"] = os.getenv("MAM_API_URL", "https://www.myanonamouse.net/tor/js/loadSearchJSONbasic.php")
-
-
-
-app.config["QB_URL"] = os.getenv("QB_URL", "http://localhost:8080")  # Default example
-app.config["QB_USERNAME"] = os.getenv("QB_USERNAME", "admin")
-app.config["QB_PASSWORD"] = os.getenv("QB_PASSWORD", "")
-app.config["MAM_ID"] = os.getenv("MAM_ID", "")
-app.config["MAM_UID"] = os.getenv("MAM_UID", "")
-
-app.config['BASE_HEADERS'] = {
-    "CF-Access-Client-Id": os.environ.get("CFAccessClientId"),
-    "CF-Access-Client-Secret": os.environ.get("CFAccessClientSecret")
+# Define fallback values
+FALLBACK_CONFIG = {
+    "FLASK_SECRET_KEY": os.urandom(24).hex(),
+    "MAM_API_URL": "https://www.myanonamouse.net",
+    "QB_URL": "http://localhost:8080",
+    "QB_CATEGORY": "",
+    "QB_USERNAME": "admin",
+    "QB_PASSWORD": "",
+    "MAM_ID": "",
+    "MAM_UID": "",
+    "CF_ACCESS_CLIENT_ID": None,
+    "CF_ACCESS_CLIENT_SECRET": None
 }
 
-session_cookies = {
+
+CONFIG_FILE = "config.json"
+
+def load_config():
+    """Load configuration from config.json and environment variables."""
+    config = FALLBACK_CONFIG.copy()
+
+    # Try to load the config.json file
+    if os.path.exists(CONFIG_FILE):
+        with open(CONFIG_FILE, "r") as f:
+            file_config = json.load(f)
+            config.update(file_config)
+
+    # Override with environment variables if available
+    config.update({
+        "FLASK_SECRET_KEY": os.getenv("FLASK_SECRET_KEY", config["FLASK_SECRET_KEY"]),
+        "MAM_API_URL": os.getenv("MAM_API_URL", config["MAM_API_URL"]),
+        "QB_URL": os.getenv("QB_URL", config["QB_URL"]),
+        "QB_CATEGORY": os.getenv("QB_CATEGORY", config["QB_CATEGORY"]),
+        "QB_USERNAME": os.getenv("QB_USERNAME", config["QB_USERNAME"]),
+        "QB_PASSWORD": os.getenv("QB_PASSWORD", config["QB_PASSWORD"]),
+        "MAM_ID": os.getenv("MAM_ID", config["MAM_ID"]),
+        "MAM_UID": os.getenv("MAM_UID", config["MAM_UID"]),
+        "CF_ACCESS_CLIENT_ID": os.getenv("CF_ACCESS_CLIENT_ID", config["CF_ACCESS_CLIENT_ID"]),
+        "CF_ACCESS_CLIENT_SECRET": os.getenv("CF_ACCESS_CLIENT_SECRET", config["CF_ACCESS_CLIENT_SECRET"]),
+    })
+
+    return config
+
+def save_config(config):
+    """Save configuration to config.json."""
+    with open(CONFIG_FILE, "w") as f:
+        json.dump(config, f, indent=4)
+
+# Load configuration
+# config = load_config()
+
+def load_new_app_config():
+    """
+    Reload the configuration into the app.
+
+    This function loads the configuration from the config.json file and
+    environment variables, and updates the app's configuration with the new
+    values.
+    """
+    new_config = load_config()
+
+    # Update the app's secret key
+    app.secret_key = new_config["FLASK_SECRET_KEY"]
+
+    # Update the app's configuration with the new values
+    app.config["MAM_URL"] = new_config["MAM_API_URL"]
+    app.config["QB_URL"] = new_config["QB_URL"]
+    app.config["QB_CATEGORY"] = new_config["QB_CATEGORY"]
+    app.config["QB_USERNAME"] = new_config["QB_USERNAME"]
+    app.config["QB_PASSWORD"] = new_config["QB_PASSWORD"]
+    app.config["MAM_ID"] = new_config["MAM_ID"]
+    app.config["MAM_UID"] = new_config["MAM_UID"]
+
+    # Update the app's base headers with the new Cloudflare access client ID
+    # and secret
+    app.config["BASE_HEADERS"] = {
+        "CF-Access-Client-Id": new_config["CF_ACCESS_CLIENT_ID"],
+        "CF-Access-Client-Secret": new_config["CF_ACCESS_CLIENT_SECRET"],
+    }
+
+    mam_session_cookies = {
     "mam_id": app.config["MAM_ID"],
     "uid": app.config["MAM_UID"],
 }
 
+load_new_app_config()
+
+mam_session_cookies = {
+    "mam_id": app.config["MAM_ID"],
+    "uid": app.config["MAM_UID"],
+}
+
+# QBITTORRENT SESSION
+QB_SESSION = None
+
 def update_cookies(response):
     """Extract and update cookies from the API response."""
-    global session_cookies
+    global mam_session_cookies
     if "set-cookie" in response.headers:
         cookies = response.cookies.get_dict()
-        session_cookies.update(cookies)
+        mam_session_cookies.update(cookies)
 
+
+# Function to login to MyAnonamouse
+def login_mam():
+    url = app.config["MAM_URL"]
+    response = requests.get(
+        f"{url}/jsonLoad.php",
+        cookies=mam_session_cookies,
+    )
+    if response.status_code == 200:
+        # Update cookies if the server sends new ones
+        new_cookies = response.cookies.get_dict()
+        mam_session_cookies.update(new_cookies)
+        return True
+    return False
+
+# get user stats
+@app.route('/mam/user', methods=['GET'])
+def mam_user_stats():
+    # Extract query parameters
+    user_id = request.args.get('id')
+    notify = request.args.get('notify')
+    pretty = request.args.get('pretty')
+    snatch_summary = request.args.get('snatch_summary')
+
+    # Validate that the required parameter is present
+    if not user_id:
+        return jsonify({'error': 'The "id" parameter is required.'}), 400
+
+    # Base URL from config
+    url = app.config["MAM_URL"]
+
+    # Construct the request parameters
+    params = {'id': user_id}  # id is required
+    if notify is not None:
+        params['notify'] = notify
+    if pretty is not None:
+        params['pretty'] = pretty
+    if snatch_summary is not None:
+        params['snatch_summary'] = snatch_summary
+
+    # Make the GET request with cookies and query parameters
+    response = requests.get(
+        f"{url}/jsonLoad.php",
+        cookies=mam_session_cookies,
+        params=params,  # Pass query parameters here
+    )
+    
+    if response.status_code == 200:
+        # Update cookies if the server sends new ones
+        new_cookies = response.cookies.get_dict()
+        mam_session_cookies.update(new_cookies)
+        return jsonify(response.json())  # Ensure JSON response is wrapped in Flask's jsonify
+    return jsonify({'status': 'not connected'}), response.status_code
+
+def login_qbittorrent():
+    qb_url = app.config.get("QB_URL")
+    if not qb_url:
+        app.logger.error("QB_URL is not configured in the application settings.")
+        return False
+
+    data = {
+        'username': app.config.get("QB_USERNAME"),
+        'password': app.config.get("QB_PASSWORD"),
+    }
+
+    if not data['username'] or not data['password']:
+        app.logger.error("QB_USERNAME or QB_PASSWORD is not configured.")
+        return False
+
+    session_obj = requests.Session()
+    headers = app.config.get("BASE_HEADERS", {})
+
+    try:
+        response = session_obj.post(f"{qb_url}/api/v2/auth/login", data=data, headers=headers)
+        response.raise_for_status()
+
+        if response.status_code == 200 and "Ok" in response.text:
+            # Store session cookies
+            session['qb_session'] = session_obj.cookies.get_dict()
+            app.logger.info("Successfully logged in to qBittorrent.")
+            return True
+        else:
+            app.logger.warning(f"Login failed with response: {response.text}")
+            return False
+    except requests.exceptions.RequestException as e:
+        app.logger.error(f"An error occurred during login to qBittorrent: {e}")
+        return False
+
+@app.route('/mam/status', methods=['GET'])
+def mam_status():
+    if login_mam():
+        return jsonify({'status': 'connected'})
+    else:
+        return jsonify({'status': 'not connected'})
+    
+# Endpoint to check qBittorrent status
+@app.route('/qb/status', methods=['GET'])
+def qb_status():
+    qb_url = app.config.get("QB_URL")
+    if not qb_url:
+        return jsonify({'status': 'NOT CONFIGURED'}), 400
+
+    if 'qb_session' not in session:
+        if not login_qbittorrent():
+            return jsonify({'status': 'NOT CONNECTED'})
+
+    session_obj = requests.Session()
+    session_obj.cookies.update(session['qb_session'])
+    headers = app.config.get("BASE_HEADERS", {})
+    
+    try:
+        response = session_obj.get(f"{qb_url}/api/v2/app/version", headers=headers)
+        response.raise_for_status()
+
+        if response.status_code == 200:
+            return jsonify({'status': 'CONNECTED'})
+    except requests.exceptions.RequestException as e:
+        app.logger.error(f"Error checking qBittorrent status: {e}")
+    
+    return jsonify({'status': 'NOT CONNECTED'})
+
+@app.route('/qb/categories', methods=['GET'])
+def qb_categories():
+    qb_url = app.config["QB_URL"]
+    if 'qb_session' not in session:
+        if not login_qbittorrent():
+            return jsonify({'error': 'Not connected to qBittorrent'}), 401
+    session_obj = requests.Session()
+    session_obj.cookies.update(session['qb_session'])
+    headers = app.config.get("BASE_HEADERS", {})
+    response = session_obj.get(f"{qb_url}/api/v2/torrents/categories", headers=headers)
+    if response.status_code == 200:
+        return jsonify(response.json())
+    return jsonify({'error': 'Failed to fetch categories'}), response.status_code
+
+@app.route('/qb/add', methods=['POST'])
+def qb_add_torrent():
+    qb_url = app.config["QB_URL"]
+    if 'qb_session' not in session:
+        if not login_qbittorrent():
+            return jsonify({'error': 'Not connected to qBittorrent'}), 401
+    torrent_url = request.json.get('torrent_url')
+    category = request.json.get('category', '')
+    session_obj = requests.Session()
+    session_obj.cookies.update(session['qb_session'])
+    headers = app.config.get("BASE_HEADERS", {})
+    data = {
+        'urls': torrent_url,
+        'category': category,
+    }
+    response = session_obj.post(f"{qb_url}/api/v2/torrents/add", data=data, headers=headers)
+    if response.status_code == 200:
+        return jsonify({'message': 'Torrent added successfully'})
+    return jsonify({'error': 'Failed to add torrent'}), response.status_code
+
+@app.route('/mam/search', methods=['GET'])
+def mam_search():
+    """
+    Perform a search on MyAnonamouse (MAM) API with filters.
+    Query parameters:
+      - query: The search term
+      - search_in_title: Search in title (default: off)
+      - search_in_author: Search in author (default: off)
+      - search_in_narrator: Search in narrator (default: off)
+      - media_type: Media type filter (default: 13, Audiobooks)
+      - language: Language filter (default: English)
+      - perpage: Results per page (default: 10)
+      - page: Page number (default: 1)
+    """
+    if not login_mam():
+        return jsonify({'error': 'Failed to connect to MyAnonamouse'}), 401
+
+    # Retrieve query parameters
+    search_query = request.args.get("query", "")
+    if not search_query:
+        return jsonify({'error': 'Search query is required'}), 400
+
+    search_in_title = request.args.get("search_in_title", "off") == "on"
+    search_in_author = request.args.get("search_in_author", "off") == "on"
+    search_in_narrator = request.args.get("search_in_narrator", "off") == "on"
+    media_type = request.args.get("media_type", "13")  # Default to Audiobooks
+    language = request.args.get("language", "English")
+    per_page = int(request.args.get("perpage", 10))
+    page = int(request.args.get("page", 1))
+    start_number = (page - 1) * per_page
+
+    # Map language to its corresponding ID
+    language_id = language_dict.get(language, 1)  # Default to English
+
+    # Prepare API parameters
+    params = {
+        "tor[text]": search_query,
+        "tor[sortType]": "default",
+        "tor[startNumber]": start_number,
+        "perpage": per_page,
+        "thumbnail": "true",
+        "dlLink": "true",
+        "tor[browse_lang][]": language_id,
+        "tor[srchIn][title]": search_in_title,
+        "tor[srchIn][author]": search_in_author,
+        "tor[srchIn][narrator]": search_in_narrator,
+    }
+
+    if media_type != "all":
+        params["tor[main_cat][]"] = media_type
+
+    # Send request to MAM API
+    headers = app.config.get("BASE_HEADERS", {})
+    headers["Cookie"] = "; ".join([f"{k}={v}" for k, v in mam_session_cookies.items()])
+    response = requests.get(f"{app.config['MAM_URL']}/tor/js/loadSearchJSONbasic.php", params=params, headers=headers)
+
+    if response.status_code == 200:
+        results = response.json()
+        return jsonify({
+            "results": results.get("data", []),
+            "total_results": results.get("total", 0),
+            "page": page,
+            "total_pages": -(-results.get("total", 0) // per_page),  # Ceiling division
+        })
+    else:
+        return jsonify({
+            'error': 'Failed to perform search',
+            'status_code': response.status_code,
+            'message': response.text,
+        }), response.status_code
+    
 @app.route("/", methods=["GET", "POST"])
 def search():
+    global QB_SESSION
     categories = {}
     # Get search parameters, if present
     search_query = request.args.get("query", "")
@@ -77,33 +378,47 @@ def search():
         params["tor[main_cat][]"] = media_type
 
     headers = {
-        "Cookie": "; ".join([f"{k}={v}" for k, v in session_cookies.items()])
+        "Cookie": "; ".join([f"{k}={v}" for k, v in mam_session_cookies.items()])
     }
-
+    
+    QB_STATUS = json.loads(qb_status().get_data(as_text=True))['status']
+    categories = get_categories()
+    error_message = None
     if search_query:
-        response = requests.get(app.config["API_URL"], headers=headers, params=params)
-        categories = get_categories()
-        # Update cookies
-        update_cookies(response)
+        try:
+            response = requests.get(
+                f"{app.config['MAM_URL']}/tor/js/loadSearchJSONbasic.php",
+                headers=headers,
+                params=params
+            )
+            update_cookies(response)  # Update cookies
+            
+            if response.status_code == 200:
+                results = response.json()
+                total_results = results.get("total", 0)
+                total_pages = math.ceil(total_results / per_page)
+                data = results.get("data", [])
 
-        if response.status_code == 200:
-            results = response.json()
-            total_results = results.get("total", 0)
-            total_pages = math.ceil(total_results / per_page)
-            data = results.get("data", [])
+                # Parse author and narrator info
+                for item in data:
+                    item["author_info"] = parse_author_info(item.get("author_info", ""))
+                    item["narrator_info"] = parse_author_info(item.get("narrator_info", ""))
+                    item["added"] = format_date(item.get("added", "Unknown"))
+                ranked_results = rank_results(data)
+                data = ranked_results
+            else:
+                # Extract and include the response content in the error message
+                error_detail = response.text or "Unknown error"
+                error_message = f"Error {response.status_code}: {error_detail}"
+                raise Exception(error_message)
 
-            # Parse author and narrator info
-            for item in data:
-                item["author_info"] = parse_author_info(item.get("author_info", ""))
-                item["narrator_info"] = parse_author_info(item.get("narrator_info", ""))
-                item["added"] = format_date(item.get("added", "Unknown"))
-            ranked_results = rank_results(data)
-            data = ranked_results
-            # data = check_existing_torrents(ranked_results)
-        else:
+        except Exception as e:
+            error_message = str(e)
             total_results = 0
             total_pages = 0
             data = []
+            mam_session_cookies.clear()
+
     else:
         total_results = 0
         total_pages = 0
@@ -113,19 +428,21 @@ def search():
     if request.headers.get("X-Requested-With") == "XMLHttpRequest":
 
         if total_results == 0:
-            # If no results, render a "No results" message
-            return render_template("partials/results.html", no_results=True)
+            # If no results or an error, render a message
+            return render_template("partials/results.html", no_results=True, error_message=error_message)
 
         ajax_response = make_response(render_template(
             "partials/results.html",  # Create a partial template for the results
             results=data,
-            categories=categories
+            categories=categories,
+            QB_CATEGORY=app.config["QB_CATEGORY"],
+            QB_STATUS=QB_STATUS,
         ))
         # Set Cache-Control header for 1 day (86400 seconds)
         ajax_response.headers["Cache-Control"] = "public, max-age=86400"
         ajax_response.headers["Vary"] = "Accept-Encoding"
         return ajax_response
-        
+
     # response for initial page load
     response = make_response(render_template(
         "index.html",
@@ -139,11 +456,14 @@ def search():
         page=page,
         total_pages=total_pages,
         categories=categories,
+        error_message=error_message if total_results == 0 else None,  # Include error message if present
         QB_URL=app.config["QB_URL"],
         QB_USERNAME=app.config["QB_USERNAME"],
         QB_PASSWORD="",
+        QB_STATUS=QB_STATUS,
         MAM_ID=app.config["MAM_ID"],
         MAM_UID=app.config["MAM_UID"],
+        QB_CATEGORY=app.config["QB_CATEGORY"],
     ))
 
     # Set Cache-Control header for 1 day (86400 seconds)
@@ -267,7 +587,7 @@ def proxy_thumbnail():
     if not url:
         return "No URL provided", 400
 
-    headers = {"Cookie": "; ".join([f"{k}={v}" for k, v in session_cookies.items()])}
+    headers = {"Cookie": "; ".join([f"{k}={v}" for k, v in mam_session_cookies.items()])}
     response = requests.get(url, headers=headers, stream=True)
 
     if response.status_code == 200:
@@ -278,6 +598,16 @@ def proxy_thumbnail():
     else:
         return "Failed to fetch image", 500
     
+    
+@app.route('/get_qb_status', methods=['GET'])
+def get_qb_status():
+    global QB_SESSION
+    if QB_SESSION:
+        qb_status = "CONNECTED"
+    else:
+        qb_status = "NOT CONNECTED"
+    return jsonify({"status": qb_status})
+
 @app.route("/add_to_qbittorrent", methods=["POST"])
 def add_to_qbittorrent():
     torrent_url = request.form.get("torrent_url")
@@ -314,37 +644,56 @@ def add_to_qbittorrent():
 
 
 def get_categories():
-    session = requests.Session()
+    global QB_SESSION
+    if not QB_SESSION:
+        QB_SESSION = requests.Session()
 
-    login_response = session.post(f"{app.config['QB_URL']}/api/v2/auth/login", data={
-        "username": app.config["QB_USERNAME"],
-        "password": app.config["QB_PASSWORD"],
-        },
-        headers=app.config['BASE_HEADERS']
+    try:
+        # Login request
+        login_response = QB_SESSION.post(
+            f"{app.config['QB_URL']}/api/v2/auth/login",
+            data={
+                "username": app.config["QB_USERNAME"],
+                "password": app.config["QB_PASSWORD"],
+            },
+            headers=app.config['BASE_HEADERS']
         )
+        # Check login success
+        if login_response.status_code != 200 or login_response.text != "Ok.":
+            print("Authentication failed. Status:", login_response.status_code, "Response:", login_response.text)
+            return {}
 
-    categories = {}  # Default to an empty dictionary
+        # Fetch categories
+        categories_response = QB_SESSION.get(
+            f"{app.config['QB_URL']}/api/v2/sync/maindata?rid=0",
+            headers=app.config['BASE_HEADERS']
+        )
+        if categories_response.status_code != 200:
+            print("Failed to fetch categories. Status:", categories_response.status_code, "Response:", categories_response.text)
+            return {}
 
-    if login_response.status_code == 200 and login_response.text == "Ok.":
-        categories_response = session.get(f"{app.config['QB_URL']}/api/v2/sync/maindata?rid=0",headers=app.config['BASE_HEADERS'])
-        if categories_response.status_code == 200:
-            try:
-                # Extract categories
-                categories = categories_response.json().get("categories", {})
-                if not isinstance(categories, dict):
-                    categories = {}
-            except Exception as e:
-                print("Error parsing categories:", e)
-                categories = {}
-        else:
-            print("Failed to fetch categories. Response status:", categories_response.status_code)
-    else:
-        print("Failed to authenticate with qBittorrent.")
+        # Parse response JSON
+        try:
+            categories = categories_response.json().get("categories", {})
+            if not isinstance(categories, dict):
+                print("Invalid categories format received. Resetting to empty dictionary.")
+                return {}
+            return categories
+        except ValueError as ve:
+            print("Error decoding JSON from categories response:", ve)
+            return {}
 
-    return categories 
+    except requests.RequestException as req_err:
+        print("HTTP Request failed:", req_err)
+        return {}
+
+    except Exception as e:
+        print("An unexpected error occurred:", e)
+        return {}
 
 @app.route("/update_settings", methods=["POST"])
 def update_settings():
+    # Update the settings from the POST request
     app.config["QB_URL"] = request.form.get("QB_URL", app.config["QB_URL"])
     app.config["QB_USERNAME"] = request.form.get("QB_USERNAME", app.config["QB_USERNAME"])
     
@@ -354,14 +703,25 @@ def update_settings():
         app.config["QB_PASSWORD"] = qb_password
 
     app.config["MAM_ID"] = request.form.get("MAM_ID", app.config["MAM_ID"])
+    app.config["MAM_UID"] = request.form.get("MAM_UID", app.config["MAM_UID"])
+    mam_session_cookies["mam_id"] = app.config["MAM_ID"]
+    mam_session_cookies["mam_uid"] = app.config["MAM_UID"]
 
-    # (Optional) Save back to .env (if needed)
-    # Uncomment this if saving to .env is required
-    # with open('.env', 'w') as f:
-    #     f.write(f"QB_URL={app.config['QB_URL']}\n")
-    #     f.write(f"QB_USERNAME={app.config['QB_USERNAME']}\n")
-    #     f.write(f"QB_PASSWORD={app.config['QB_PASSWORD']}\n")
-    #     f.write(f"MAM_ID={app.config['MAM_ID']}\n")
+    # Save updated settings to config.json
+    updated_config = {
+        "FLASK_SECRET_KEY": app.secret_key,
+        "MAM_API_URL": app.config["MAM_URL"],
+        "QB_URL": app.config["QB_URL"],
+        "QB_CATEGORY": app.config.get("QB_CATEGORY", ""),
+        "QB_USERNAME": app.config["QB_USERNAME"],
+        "QB_PASSWORD": app.config["QB_PASSWORD"],
+        "MAM_ID": app.config["MAM_ID"],
+        "MAM_UID": app.config["MAM_UID"],
+        "CF_ACCESS_CLIENT_ID": app.config["BASE_HEADERS"].get("CF-Access-Client-Id"),
+        "CF_ACCESS_CLIENT_SECRET": app.config["BASE_HEADERS"].get("CF-Access-Client-Secret")
+    }
+    save_config(updated_config)
+    load_new_app_config()
 
     return jsonify({"status": "success", "message": "Settings updated successfully!"})
 

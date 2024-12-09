@@ -7,8 +7,6 @@
     <meta name="generator" content="Hugo 0.122.0">
     <title>MyAnonamouse Search</title>
 
-    
-
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@docsearch/css@3">
 
     <link rel="stylesheet" href="static/bootstrap/css/bootstrap.min.css"/>
@@ -220,13 +218,17 @@
 <div class="accordion my-3" id="qbAccordion">
   <div class="accordion-item">
       <h2 class="accordion-header" id="qbAccordionHeading">
-          <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#qbAccordionCollapse" aria-expanded="true" aria-controls="qbAccordionCollapse">
-              qBittorrent URL
+          <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#qbAccordionCollapse" aria-expanded="true" aria-controls="qbAccordionCollapse">
+              qBittorrent
           </button>
       </h2>
-      <div id="qbAccordionCollapse" class="accordion-collapse collapse show" aria-labelledby="qbAccordionHeading" data-bs-parent="#qbAccordion">
+      <div id="qbAccordionCollapse" class="accordion-collapse collapse" aria-labelledby="qbAccordionHeading" data-bs-parent="#qbAccordion">
           <div class="accordion-body">
-              <a href="{{ QB_URL }}" id="qbLink" target="_blank" class="btn btn-link">{{ QB_URL }}</a>
+              <a href="{{ QB_URL }}" id="qbLink" target="_blank" class="">{{ QB_URL }}</a>
+              <br> 
+              Status: <span class="{{ 'text-success' if QB_STATUS == 'CONNECTED' else 'text-danger' }}">
+                {{ QB_STATUS }}
+              </span>
           </div>
       </div>
   </div>
@@ -289,6 +291,16 @@ aria-labelledby="settingsOffcanvasLabel"
                     required
                 />
             </div>
+            <div class="mb-3">
+              <label for="QB_CATEGORY class="form-label">Default category</label>
+              <input
+                  type="text"
+                  class="form-control"
+                  id="QB_CATEGORY"
+                  name="QB_CATEGORY"
+                  value="{{ QB_CATEGORY }}"
+              />
+          </div>
     
             <h5 class="text-center border-bottom pb-2">MyAnonamouse</h5>
             <div class="mb-3">
@@ -337,12 +349,14 @@ aria-labelledby="settingsOffcanvasLabel"
             messageDiv.innerHTML = '<div class="alert alert-danger">An error occurred while saving settings.</div>';
             showToast("An error occurred while saving settings.", 'danger');
         });
+        checkQBStatus();
     });
 </script>
 
 <script>
     document.addEventListener("DOMContentLoaded", function() 
     {
+        // checkQBStatus();
         const searchForm = document.getElementById("search-form");
         const resultsContainer = document.getElementById("results-container");
         //const spinner = document.getElementById("spinner"); // Ensure spinner is retrieved
@@ -403,7 +417,7 @@ aria-labelledby="settingsOffcanvasLabel"
     document.getElementById('results-container').addEventListener('click', function (event) {
         if (event.target && event.target.classList.contains('add-to-qbittorrent-button')) {
             event.preventDefault();
-
+            checkQBStatus();
             const button = event.target;
             const form = button.closest('form');
             const formData = new FormData(form);
@@ -470,5 +484,27 @@ function showToast(message, type = 'primary') {
   </div>
 </div>
 
+<script>
+function checkQBStatus() {
+        fetch('/qb/status')
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error("Network response was not ok");
+                }
+                return response.json();
+            })
+            .then(data => {
+                const statusSpan = document.querySelector("#qbAccordionCollapse .text-success, #qbAccordionCollapse .text-danger");
+                if (statusSpan) {
+                    statusSpan.textContent = data.status;
+                    statusSpan.className = data.status === "CONNECTED" ? "text-success" : "text-danger";
+                }
+            })
+            .catch(error => {
+                console.error("Error fetching QB_STATUS:", error);
+            });
+    }
+
+</script>
 
 </body></html>

@@ -1,5 +1,8 @@
-
-{% if no_results %}
+{% if error_message %}
+    <div class="alert alert-danger text-center" role="alert">
+        {{ error_message }}
+    </div>
+{% elif no_results %}
     <div class="alert alert-warning text-center" role="alert">
         No results found. Please try a different search query.
     </div>
@@ -27,61 +30,38 @@
         </div>
         <div class="col-12 col-md-3 py-2">
             <form action="/add_to_qbittorrent" method="POST">
-                <button type="button" class="btn btn-primary d-grid gap-2 d-md-block add-to-qbittorrent-button" style="width:100%">Add to qBittorrent</button>
-                <!-- <a href="{{ result.dllink }}" id="add-to-qbittorrent-button" class="btn btn-primary d-grid gap-2 d-md-block">Add to qBittorrent</a> -->
+                <div class="d-grid gap-2 d-md-block" style="width:100%" 
+                    {% if QB_STATUS != 'CONNECTED' %}data-bs-toggle="tooltip" title="qBittorrent is not connected. Check your connection settings."{% endif %}>
+                    <button type="button" 
+                            class="btn btn-primary add-to-qbittorrent-button" 
+                            style="width:100%" 
+                            {% if QB_STATUS != 'CONNECTED' %}disabled{% endif %}>
+                        Add to qBittorrent
+                    </button>
+                </div>
                 <input type="hidden" name="torrent_url" value="https://www.myanonamouse.net/tor/download.php/{{ result.dl }}">
                 
                 <select name="category" class="form-select category-dropdown">
-                    <option value="">Category</option>
+                    <option value="" {% if not QB_CATEGORY %}selected{% endif %}>Category</option>
                     {% for category_name, category_info in categories.items() %}
-                    <option value="{{ category_name }}">{{ category_name }}</option>
+                    <option value="{{ category_name }}" 
+                            {% if QB_CATEGORY == category_name %}selected{% endif %}>
+                        {{ category_name }}
+                    </option>
                     {% endfor %}
                 </select>
             </form>
             <div id="response-message"></div>
-            
+        
+            <!-- Show contextual message if qBittorrent is not connected -->
+            {% if QB_STATUS != 'CONNECTED' %}
+            <div class="alert alert-warning mt-2" role="alert">
+                Unable to connect to qBittorrent. Please check your connection settings.
             </div>
+            {% endif %}
+        </div>
     </div>
     {% endfor %}
-
-    <!-- add to qBittorrent
-    {% for result in results %}
-    <div class="row py-4 border-bottom">
-        <div class="col-6 col-md-4">
-            <img 
-                class="img-fluid me-2 rounded"
-                src="{{ url_for('proxy_thumbnail', url=result.thumbnail) }}" 
-                alt="Thumbnail" 
-            >
-        </div>
-        <div class="col-6 col-md-5 pb-3 mb-0 small lh-sm">
-            <div class="d-flex justify-content-between">
-                <strong class="text-gray-dark">{{ result.title }}</strong>
-            </div>
-            <span class="d-block">Narrator: {{ result.narrator_info or "Unknown" }}</span>
-            <span class="d-block">File Type: {{ result.filetype }}</span>
-            <span class="d-block">Size: {{ result.size }}</span>
-            <span class="d-block">Date Added: {{ result.added }}</span>
-            <span class="d-block">Seeders/Leechers: {{ result.seeders }}/{{ result.leechers }}</span>
-            <span class="d-block">Total Score: {{ result.score.total_score }}</span>
-        </div>
-        <div class="col-12 col-md-3 py-2">
-            <form class="torrent-form" method="POST">
-                <button type="button" class="btn btn-primary d-grid gap-2 d-md-block add-to-qbittorrent-button" style="width:100%">
-                    Add to qBittorrent
-                </button>
-                <input type="hidden" name="torrent_url" value="https://www.myanonamouse.net/tor/download.php/{{ result.dl }}">
-                <select name="category" class="form-select category-dropdown">
-                    <option value="">Category</option>
-                    {% for category_name, category_info in categories.items() %}
-                    <option value="{{ category_name }}">{{ category_name }}</option>
-                    {% endfor %}
-                </select>
-            </form>
-            <div class="response-message"></div>
-        </div>
-    </div>
-    {% endfor %} -->
 
     <script>
         // Ensure script runs after DOM is fully loaded
