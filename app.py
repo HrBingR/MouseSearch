@@ -1,15 +1,30 @@
 from flask import Flask, request, render_template, Response, make_response, jsonify, session
-import requests, json, argparse, os
+import requests
+import json
+import argparse
+import os
+import atexit
 import math
-from datetime import datetime
+from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from requests.exceptions import RequestException
+from flask_apscheduler import APScheduler
 
 from language_dict import language_dict
 
-app = Flask(__name__)
+# --- SCHEDULER AND STATE SETUP ---
+class Config:
+    SCHEDULER_API_ENABLED = True
 
-# Load environment variables from .env file, if present
+app = Flask(__name__)
+app.config.from_object(Config())
+scheduler = APScheduler()
+scheduler.init_app(app)
+scheduler.start()
+atexit.register(lambda: scheduler.shutdown())
+
+IP_STATE_FILE = "ip_state.json"
+CONFIG_FILE = "config.json"
 load_dotenv()
 
 # Define fallback values
@@ -23,89 +38,66 @@ FALLBACK_CONFIG = {
     "MAM_ID": "",
     "MAM_UID": "",
     "CF_ACCESS_CLIENT_ID": None,
-    "CF_ACCESS_CLIENT_SECRET": None
+    "CF_ACCESS_CLIENT_SECRET": None,
 }
 
-
-CONFIG_FILE = "config.json"
-
 def load_config():
-    """Load configuration with priority: config.json > Env Vars > Fallbacks."""
-    # Start with fallback defaults
     config = FALLBACK_CONFIG.copy()
-
-    # 1. Load from Environment Variables. These will serve as a base if not in config.json.
-    env_config = {
-        key: os.getenv(key) for key in config.keys()
-    }
-    # Filter out any 'None' values so they don't overwrite fallbacks with nothing
+    env_config = {key: os.getenv(key) for key in config.keys()}
     env_config_filtered = {k: v for k, v in env_config.items() if v is not None}
     config.update(env_config_filtered)
-
-    # 2. Load from config.json, which will override any fallbacks or env vars.
     if os.path.exists(CONFIG_FILE):
         with open(CONFIG_FILE, "r") as f:
             try:
-                file_config = json.load(f)
-                config.update(file_config)
+                config.update(json.load(f))
             except json.JSONDecodeError:
-                # Handle case where config.json is corrupted or empty
-                app.logger.warning(
-                    f"Could not decode {CONFIG_FILE}. Using fallbacks/env vars."
-                )
-
+                app.logger.warning(f"Could not decode {CONFIG_FILE}.")
     return config
 
 def save_config(config):
-    """Save configuration to config.json."""
+    # Ensure only known keys are saved to prevent complex objects from being written
+    config_to_save = {key: config.get(key) for key in FALLBACK_CONFIG.keys()}
     with open(CONFIG_FILE, "w") as f:
-        json.dump(config, f, indent=4)
-
-# Load configuration
-# config = load_config()
+        json.dump(config_to_save, f, indent=4)
 
 def load_new_app_config():
-    """
-    Reload the configuration into the app.
-
-    This function loads the configuration from the config.json file and
-    environment variables, and updates the app's configuration with the new
-    values.
-    """
+    """Reload config and automatically fetch MAM_UID if it's missing."""
     new_config = load_config()
 
-    # Update the app's secret key
+    # If MAM_UID is missing but MAM_ID is present, try to fetch it
+    if not new_config.get("MAM_UID") and new_config.get("MAM_ID"):
+        app.logger.info("MAM_UID is not set. Attempting to fetch from API...")
+        try:
+            api_url = new_config.get("MAM_API_URL", FALLBACK_CONFIG["MAM_API_URL"])
+            cookies = {"mam_id": new_config["MAM_ID"]}
+            response = requests.get(f"{api_url}/jsonLoad.php", cookies=cookies, timeout=10)
+            response.raise_for_status()
+            data = response.json()
+            
+            if uid := data.get("uid"):
+                uid_str = str(uid)
+                app.logger.info(f"Successfully fetched MAM_UID: {uid_str}")
+                new_config["MAM_UID"] = uid_str
+                save_config(new_config) # Save the newly fetched UID
+            else:
+                app.logger.warning("Fetched data from MAM API, but 'uid' key was not found.")
+        except (RequestException, json.JSONDecodeError) as e:
+            app.logger.error(f"Failed to fetch MAM_UID from API: {e}")
+
+    # Continue loading config into the app
     app.secret_key = new_config["FLASK_SECRET_KEY"]
-
-    # Update the app's configuration with the new values
-    app.config["MAM_URL"] = new_config["MAM_API_URL"]
-    app.config["QB_URL"] = new_config["QB_URL"]
-    app.config["QB_CATEGORY"] = new_config["QB_CATEGORY"]
-    app.config["QB_USERNAME"] = new_config["QB_USERNAME"]
-    app.config["QB_PASSWORD"] = new_config["QB_PASSWORD"]
-    app.config["MAM_ID"] = new_config["MAM_ID"]
-    app.config["MAM_UID"] = new_config["MAM_UID"]
-
-    # Update the app's base headers with the new Cloudflare access client ID
-    # and secret
+    app.config.update(new_config)
+    
     app.config["BASE_HEADERS"] = {
-        "CF-Access-Client-Id": new_config["CF_ACCESS_CLIENT_ID"],
-        "CF-Access-Client-Secret": new_config["CF_ACCESS_CLIENT_SECRET"],
+        "CF-Access-Client-Id": new_config.get("CF_ACCESS_CLIENT_ID"),
+        "CF-Access-Client-Secret": new_config.get("CF_ACCESS_CLIENT_SECRET"),
     }
-
-    mam_session_cookies = {
-    "mam_id": app.config["MAM_ID"],
-    "uid": app.config["MAM_UID"],
-}
+    
+    global mam_session_cookies
+    mam_session_cookies = {"mam_id": app.config.get("MAM_ID"), "uid": app.config.get("MAM_UID")}
 
 load_new_app_config()
 
-mam_session_cookies = {
-    "mam_id": app.config["MAM_ID"],
-    "uid": app.config["MAM_UID"],
-}
-
-# QBITTORRENT SESSION
 QB_SESSION = None
 
 def update_cookies(response):
@@ -118,652 +110,189 @@ def update_cookies(response):
 
 # Function to login to MyAnonamouse
 def login_mam():
-    url = app.config["MAM_URL"]
-    response = requests.get(
-        f"{url}/jsonLoad.php",
-        cookies=mam_session_cookies,
-    )
+    url = app.config.get("MAM_API_URL")
+    if not url: return False
+    # Make sure we have both cookies before trying to log in
+    if not all([mam_session_cookies.get("mam_id"), mam_session_cookies.get("uid")]):
+        return False
+    response = requests.get(f"{url}/jsonLoad.php", cookies=mam_session_cookies)
     if response.status_code == 200:
-        # Update cookies if the server sends new ones
-        new_cookies = response.cookies.get_dict()
-        mam_session_cookies.update(new_cookies)
+        if new_cookies := response.cookies.get_dict():
+            mam_session_cookies.update(new_cookies)
         return True
     return False
 
-# get user stats
-@app.route('/mam/user', methods=['GET'])
-def mam_user_stats():
-    # Extract query parameters
-    user_id = request.args.get('id')
-    notify = request.args.get('notify')
-    pretty = request.args.get('pretty')
-    snatch_summary = request.args.get('snatch_summary')
-
-    # Validate that the required parameter is present
-    if not user_id:
-        return jsonify({'error': 'The "id" parameter is required.'}), 400
-
-    # Base URL from config
-    url = app.config["MAM_URL"]
-
-    # Construct the request parameters
-    params = {'id': user_id}  # id is required
-    if notify is not None:
-        params['notify'] = notify
-    if pretty is not None:
-        params['pretty'] = pretty
-    if snatch_summary is not None:
-        params['snatch_summary'] = snatch_summary
-
-    # Make the GET request with cookies and query parameters
-    response = requests.get(
-        f"{url}/jsonLoad.php",
-        cookies=mam_session_cookies,
-        params=params,  # Pass query parameters here
-    )
-    
-    if response.status_code == 200:
-        # Update cookies if the server sends new ones
-        new_cookies = response.cookies.get_dict()
-        mam_session_cookies.update(new_cookies)
-        return jsonify(response.json())  # Ensure JSON response is wrapped in Flask's jsonify
-    return jsonify({'status': 'not connected'}), response.status_code
-
 def login_qbittorrent():
-    qb_url = app.config.get("QB_URL")
-    if not qb_url:
-        app.logger.error("QB_URL is not configured in the application settings.")
-        return False
-
-    data = {
-        'username': app.config.get("QB_USERNAME"),
-        'password': app.config.get("QB_PASSWORD"),
-    }
-
-    if not data['username'] or not data['password']:
-        app.logger.error("QB_USERNAME or QB_PASSWORD is not configured.")
-        return False
-
+    qb_url, username, password = app.config.get("QB_URL"), app.config.get("QB_USERNAME"), app.config.get("QB_PASSWORD")
+    if not all([qb_url, username, password]): return False
     session_obj = requests.Session()
-    headers = app.config.get("BASE_HEADERS", {})
-
     try:
-        response = session_obj.post(f"{qb_url}/api/v2/auth/login", data=data, headers=headers)
-        response.raise_for_status()
-
-        if response.status_code == 200 and "Ok" in response.text:
-            # Store session cookies
+        response = session_obj.post(f"{qb_url}/api/v2/auth/login", data={'username': username, 'password': password}, headers=app.config.get("BASE_HEADERS", {}))
+        if "Ok" in response.text:
             session['qb_session'] = session_obj.cookies.get_dict()
-            app.logger.info("Successfully logged in to qBittorrent.")
             return True
-        else:
-            app.logger.warning(f"Login failed with response: {response.text}")
-            return False
-    except requests.exceptions.RequestException as e:
-        app.logger.error(f"An error occurred during login to qBittorrent: {e}")
-        return False
+    except RequestException: return False
+    return False
 
 @app.route('/mam/status', methods=['GET'])
-def mam_status():
-    if login_mam():
-        return jsonify({'status': 'connected'})
-    else:
-        return jsonify({'status': 'not connected'})
-    
-# Endpoint to check qBittorrent status
+def mam_status(): return jsonify({'status': 'connected' if login_mam() else 'not connected'})
+
 @app.route('/qb/status', methods=['GET'])
 def qb_status():
-    qb_url = app.config.get("QB_URL")
-    if not qb_url:
-        return jsonify({
-            "status": "error",
-            "message": "QB_URL is not configured.",
-            "code": 400
-        }), 400  # Explicitly returning 400 for bad configuration
-
-    if 'qb_session' not in session:
-        if not login_qbittorrent():
-            return jsonify({
-                "status": "error",
-                "message": "Unable to connect to qBittorrent session.",
-                "code": 503
-            }), 503  # Explicitly returning 503 if session login fails
-
+    if 'qb_session' not in session and not login_qbittorrent():
+        return jsonify({"status": "error", "message": "Unable to connect to qBittorrent."}), 503
     session_obj = requests.Session()
     session_obj.cookies.update(session['qb_session'])
-    headers = app.config.get("BASE_HEADERS", {})
-
     try:
-        response = session_obj.get(f"{qb_url}/api/v2/app/version", headers=headers)
-        response.raise_for_status()  # Raises an exception for HTTP error responses
-
-        if response.status_code == 200:
-            return jsonify({
-                "status": "success",
-                "message": "qBittorrent is connected.",
-                "code": 200
-            }), 200  # Explicitly returning 200 for success
-    except requests.exceptions.RequestException as e:
-        app.logger.error(f"Error checking qBittorrent status: {e}")
-        return jsonify({
-            "status": "error",
-            "message": f"Failed to connect to qBittorrent: {str(e)}",
-            "code": 503
-        }), 503  # Explicitly returning 503 for request errors
-
-    return jsonify({
-        "status": "error",
-        "message": "Unknown connection issue with qBittorrent.",
-        "code": 500
-    }), 500  # Fallback for unhandled cases
+        response = session_obj.get(f"{app.config['QB_URL']}/api/v2/app/version", headers=app.config.get("BASE_HEADERS", {}))
+        response.raise_for_status()
+        return jsonify({"status": "success", "message": "qBittorrent is connected."}), 200
+    except RequestException as e:
+        return jsonify({"status": "error", "message": f"Failed to connect: {e}"}), 503
 
 @app.route('/qb/categories', methods=['GET'])
 def qb_categories():
-    qb_url = app.config["QB_URL"]
-    if 'qb_session' not in session:
-        if not login_qbittorrent():
-            return jsonify({'error': 'Not connected to qBittorrent'}), 401
+    if 'qb_session' not in session and not login_qbittorrent():
+        return jsonify({'error': 'Not connected to qBittorrent'}), 401
     session_obj = requests.Session()
     session_obj.cookies.update(session['qb_session'])
-    headers = app.config.get("BASE_HEADERS", {})
-    response = session_obj.get(f"{qb_url}/api/v2/torrents/categories", headers=headers)
-    if response.status_code == 200:
-        return jsonify(response.json())
-    return jsonify({'error': 'Failed to fetch categories'}), response.status_code
+    response = session_obj.get(f"{app.config['QB_URL']}/api/v2/torrents/categories", headers=app.config.get("BASE_HEADERS", {}))
+    return jsonify(response.json()) if response.ok else (jsonify({'error': 'Failed to fetch categories'}), response.status_code)
 
 @app.route('/qb/add', methods=['POST'])
 def qb_add_torrent():
-    qb_url = app.config["QB_URL"]
-    if 'qb_session' not in session:
-        if not login_qbittorrent():
-            return jsonify({'error': 'Not connected to qBittorrent'}), 401
-    torrent_url = request.json.get('torrent_url')
-    category = request.json.get('category', '')
+    if 'qb_session' not in session and not login_qbittorrent():
+        return jsonify({'error': 'Not connected to qBittorrent'}), 401
+    data = {'urls': request.json.get('torrent_url'), 'category': request.json.get('category', '')}
     session_obj = requests.Session()
     session_obj.cookies.update(session['qb_session'])
-    headers = app.config.get("BASE_HEADERS", {})
-    data = {
-        'urls': torrent_url,
-        'category': category,
-    }
-    response = session_obj.post(f"{qb_url}/api/v2/torrents/add", data=data, headers=headers)
-    if response.status_code == 200:
-        return jsonify({'message': 'Torrent added successfully'})
-    return jsonify({'error': 'Failed to add torrent'}), response.status_code
+    response = session_obj.post(f"{app.config['QB_URL']}/api/v2/torrents/add", data=data, headers=app.config.get("BASE_HEADERS", {}))
+    return jsonify({'message': 'Torrent added successfully'}) if response.ok else (jsonify({'error': 'Failed to add torrent'}), response.status_code)
+
+def parse_author_info(info):
+    try: return ", ".join(json.loads(info).values())
+    except (json.JSONDecodeError, TypeError): return "Unknown"
+
+def format_date(date_string):
+    try: return datetime.strptime(date_string, "%Y-%m-%d %H:%M:%S").strftime("%Y-%m-%d")
+    except (ValueError, TypeError): return "Unknown"
+
+def rank_results(results):
+    if not results: return []
+    max_seeders = max(r.get('seeders', 0) for r in results) if results else 1
+    for r in results:
+        r["author_info"] = parse_author_info(r.get("author_info", ""))
+        r["narrator_info"] = parse_author_info(r.get("narrator_info", ""))
+        r["added"] = format_date(r.get("added", "Unknown"))
+        filetype_score = {'m4b': 50, 'mp3': 30}.get(r.get('filetype'), 10)
+        seeders_score = (r.get('seeders', 0) / max_seeders * 30) if max_seeders > 0 else 0
+        r['score'] = round(filetype_score + seeders_score, 1)
+    return sorted(results, key=lambda x: x['score'], reverse=True)
 
 @app.route('/mam/search', methods=['GET'])
 def mam_search():
-    """
-    Perform a search on MyAnonamouse (MAM) API with filters.
-    Query parameters:
-      - query: The search term
-      - search_in_title: Search in title (default: off)
-      - search_in_author: Search in author (default: off)
-      - search_in_narrator: Search in narrator (default: off)
-      - media_type: Media type filter (default: 13, Audiobooks)
-      - language: Language filter (default: English)
-      - perpage: Results per page (default: 10)
-      - page: Page number (default: 1)
-    """
-    if not login_mam():
-        return jsonify({'error': 'Failed to connect to MyAnonamouse'}), 401
+    if not login_mam(): return render_template("partials/results.html", error_message="Login to MyAnonamouse failed. Check your MAM_ID and MAM_UID cookies in settings.")
+    query = request.args.get("query", "")
+    if not query: return render_template("partials/results.html", results=[])
 
-    # Retrieve query parameters
-    search_query = request.args.get("query", "")
-    if not search_query:
-        return jsonify({'error': 'Search query is required'}), 400
-
-    search_in_title = request.args.get("search_in_title", "off") == "on"
-    search_in_author = request.args.get("search_in_author", "off") == "on"
-    search_in_narrator = request.args.get("search_in_narrator", "off") == "on"
-    media_type = request.args.get("media_type", "13")  # Default to Audiobooks
-    language = request.args.get("language", "English")
-    per_page = int(request.args.get("perpage", 10))
-    page = int(request.args.get("page", 1))
-    start_number = (page - 1) * per_page
-
-    # Map language to its corresponding ID
-    language_id = language_dict.get(language, 1)  # Default to English
-
-    # Prepare API parameters
     params = {
-        "tor[text]": search_query,
-        "tor[sortType]": "default",
-        "tor[startNumber]": start_number,
-        "perpage": per_page,
-        "thumbnail": "true",
-        "dlLink": "true",
-        "tor[browse_lang][]": language_id,
-        "tor[srchIn][title]": search_in_title,
-        "tor[srchIn][author]": search_in_author,
-        "tor[srchIn][narrator]": search_in_narrator,
+        "tor[text]": query,
+        "tor[sortType]": "default", "perpage": 50, "thumbnail": "true", "dlLink": "true",
+        "tor[browse_lang][]": language_dict.get(request.args.get("language", "English"), 1),
+        "tor[srchIn][title]": "on" if request.args.get("search_in_title") else "off",
+        "tor[srchIn][author]": "on" if request.args.get("search_in_author") else "off",
+        "tor[srchIn][narrator]": "on" if request.args.get("search_in_narrator") else "off",
     }
-
-    if media_type != "all":
+    if (media_type := request.args.get("media_type", "13")) != "all":
         params["tor[main_cat][]"] = media_type
 
-    # Send request to MAM API
-    headers = app.config.get("BASE_HEADERS", {})
-    headers["Cookie"] = "; ".join([f"{k}={v}" for k, v in mam_session_cookies.items()])
-    response = requests.get(f"{app.config['MAM_URL']}/tor/js/loadSearchJSONbasic.php", params=params, headers=headers)
-
-    if response.status_code == 200:
-        results = response.json()
-        return jsonify({
-            "results": results.get("data", []),
-            "total_results": results.get("total", 0),
-            "page": page,
-            "total_pages": -(-results.get("total", 0) // per_page),  # Ceiling division
-        })
-    else:
-        return jsonify({
-            'error': 'Failed to perform search',
-            'status_code': response.status_code,
-            'message': response.text,
-        }), response.status_code
-    
-@app.route("/", methods=["GET", "POST"])
-def search():
-    global QB_SESSION
-    categories = {}
-    # Get search parameters, if present
-    search_query = request.args.get("query", "")
-    search_in_title = request.args.get("search_in_title", "off") == "on"
-    search_in_author = request.args.get("search_in_author", "off") == "on"
-    search_in_narrator = request.args.get("search_in_narrator", "off") == "on"
-    media_type = request.args.get("media_type", "13")  # Default to Audiobooks
-    language = request.args.get("language", "English")  # Default to English
-    per_page = int(request.args.get("perpage", 10))  # number of results
-    page = int(request.args.get("page", 1))
-    start_number = (page - 1) * per_page
-
-    # Map the language to its corresponding integer
-    language_id = language_dict.get(language, 1)  # Default to English (1)
-
-    # Prepare API parameters
-    params = {
-        "tor[text]": search_query,
-        "tor[sortType]": "default",
-        "tor[startNumber]": start_number,
-        "perpage": per_page,
-        "thumbnail": "true",  # Always include thumbnails,
-        "dlLink": "true", # show a torrent link that doesn't require auth
-        "tor[browse_lang][]": language_id, 
-    }
-
-    # Add filters
-    params["tor[srchIn][title]"] = search_in_title
-    params["tor[srchIn][author]"] = search_in_author
-    params["tor[srchIn][narrator]"] = search_in_narrator
-
-    if media_type != "all":
-        params["tor[main_cat][]"] = media_type
-
-    headers = {
-        "Cookie": "; ".join([f"{k}={v}" for k, v in mam_session_cookies.items()])
-    }
-    qbstatus = qb_status()
-    qb_status_response, status_code = qbstatus  # Destructure the tuple
-
-    # Extract JSON from the response
-    qb_status_json = qb_status_response.get_json()  
-
-    # Determine the QB_STATUS based on the HTTP status code or JSON content
-    if status_code != 200 or qb_status_json.get("status") != "success":
-        QB_STATUS = "NOT CONNECTED"
-    else:
-        QB_STATUS = "CONNECTED"
-    #QB_STATUS = json.loads(qbstatus[0].get_data(as_text=True))['status']
-    categories = get_categories()
-    error_message = None
-    if search_query:
-        try:
-            response = requests.get(
-                f"{app.config['MAM_URL']}/tor/js/loadSearchJSONbasic.php",
-                headers=headers,
-                params=params
-            )
-            update_cookies(response)  # Update cookies
-            
-            if response.status_code == 200:
-                results = response.json()
-                total_results = results.get("total", 0)
-                total_pages = math.ceil(total_results / per_page)
-                data = results.get("data", [])
-
-                # Parse author and narrator info
-                for item in data:
-                    item["author_info"] = parse_author_info(item.get("author_info", ""))
-                    item["narrator_info"] = parse_author_info(item.get("narrator_info", ""))
-                    item["added"] = format_date(item.get("added", "Unknown"))
-                ranked_results = rank_results(data)
-                data = ranked_results
-            else:
-                # Extract and include the response content in the error message
-                error_detail = response.text or "Unknown error"
-                error_message = f"Error {response.status_code}: {error_detail}"
-                raise Exception(error_message)
-
-        except Exception as e:
-            error_message = str(e)
-            total_results = 0
-            total_pages = 0
-            data = []
-            mam_session_cookies.clear()
-
-    else:
-        total_results = 0
-        total_pages = 0
-        data = []
-
-    # AJAX request for search query
-    if request.headers.get("X-Requested-With") == "XMLHttpRequest":
-
-        if total_results == 0:
-            # If no results or an error, render a message
-            return render_template("partials/results.html", no_results=True, error_message=error_message)
-
-        ajax_response = make_response(render_template(
-            "partials/results.html",  # Create a partial template for the results
-            results=data,
-            categories=categories,
-            QB_CATEGORY=app.config["QB_CATEGORY"],
-            QB_STATUS=QB_STATUS,
-        ))
-        # Set Cache-Control header for 1 day (86400 seconds)
-        ajax_response.headers["Cache-Control"] = "public, max-age=86400"
-        ajax_response.headers["Vary"] = "Accept-Encoding"
-        return ajax_response
-
-    # response for initial page load
-    response = make_response(render_template(
-        "index.html",
-        query=search_query,
-        search_in_title=search_in_title,
-        search_in_author=search_in_author,
-        search_in_narrator=search_in_narrator,
-        media_type=media_type,
-        language=language,
-        results=data,
-        page=page,
-        total_pages=total_pages,
-        categories=categories,
-        error_message=error_message if total_results == 0 else None,  # Include error message if present
-        QB_URL=app.config["QB_URL"],
-        QB_USERNAME=app.config["QB_USERNAME"],
-        QB_PASSWORD="",
-        QB_STATUS=QB_STATUS,
-        MAM_ID=app.config["MAM_ID"],
-        MAM_UID=app.config["MAM_UID"],
-        QB_CATEGORY=app.config["QB_CATEGORY"],
-    ))
-
-    # Set Cache-Control header for 1 day (86400 seconds)
-    response.headers["Cache-Control"] = "public, max-age=86400"
-    response.headers["Vary"] = "Accept-Encoding"
-    return response
-
-def parse_author_info(info):
-    """Parse JSON fields like author or narrator info."""
+    headers = {"Cookie": "; ".join([f"{k}={v}" for k, v in mam_session_cookies.items()])}
     try:
-        authors = json.loads(info)  # Use the standard `json` module
-        return ", ".join(authors.values())
-    except (json.JSONDecodeError, TypeError):
-        return "Unknown"
-def format_date(date_string):
-    """Convert the API date string to YYYY-MM-DD format."""
-    try:
-        # Assuming the API returns the date in ISO 8601 format or similar
-        date_object = datetime.strptime(date_string, "%Y-%m-%d %H:%M:%S")  # Adjust if needed
-        return date_object.strftime("%Y-%m-%d")
-    except (ValueError, TypeError):
-        return "Unknown"
-    
-def calculate_score(result, max_seeders, max_normalized_downloads, newest_date):
-    from datetime import datetime
+        response = requests.get(f"{app.config['MAM_API_URL']}/tor/js/loadSearchJSONbasic.php", params=params, headers=headers)
+        update_cookies(response)  # Update cookies
+        
+        response.raise_for_status()
+        results = response.json().get("data", [])
 
-    # Filetype scoring (max 50 points)
-    filetype_scores = {'m4b': 50, 'mp3': 30}
-    filetype_score = filetype_scores.get(result['filetype'], 10)
-    
-    # Seeders scoring (max 30 points)
-    seeders_score = (result['seeders'] / max_seeders) * 30 if max_seeders > 0 else 0
-    
-    # Age of torrent in years
-    torrent_date = datetime.strptime(result['added'], '%Y-%m-%d')
-    torrent_age_years = max((newest_date - torrent_date).days / 365.25, 0.1)  # Prevent division by zero
-    
-    # Downloads per year
-    downloads_per_year = result['times_completed'] / torrent_age_years
-    
-    # Normalize downloads per year to a 20-point scale
-    normalized_downloads_score = (downloads_per_year / max_normalized_downloads) * 20 if max_normalized_downloads > 0 else 0
-    
-    # Composite score
-    total_score = filetype_score + seeders_score + normalized_downloads_score
-    
-    return {
-        'filetype_score': filetype_score,
-        'seeders_score': seeders_score,
-        'normalized_downloads_score': normalized_downloads_score,
-        'total_score': total_score
-    }
+        # ─── thumbnail fallback: use category icon if none provided ───
+        for item in results:
+            if not item.get('thumbnail'):
+                cat = item.get('category', '')
+                item['thumbnail'] = f"https://static.myanonamouse.net/pic/cats/3/{cat}.png"
 
-def rank_results(search_results):
-    from datetime import datetime
+        ranked = rank_results(results)
 
-    # Get newest date
-    added_dates = [datetime.strptime(result['added'], '%Y-%m-%d') for result in search_results]
-    newest_date = max(added_dates) if added_dates else datetime.now()
-    
-    # Determine maximum seeders and downloads per year
-    max_seeders = max(result['seeders'] for result in search_results) if search_results else 0
-    
-    # Calculate max downloads per year
-    max_normalized_downloads = 0
-    for result in search_results:
-        torrent_date = datetime.strptime(result['added'], '%Y-%m-%d')
-        torrent_age_years = max((newest_date - torrent_date).days / 365.25, 0.1)
-        downloads_per_year = result['times_completed'] / torrent_age_years
-        if downloads_per_year > max_normalized_downloads:
-            max_normalized_downloads = downloads_per_year
-    
-    # Add scores to results
-    for result in search_results:
-        score_data = calculate_score(result, max_seeders, max_normalized_downloads, newest_date)
-        score_data['total_score'] = round(score_data['total_score'], 1)  # Round total_score to one decimal place
-        result['score'] = score_data
+        
+        qb_status_response, status_code = qb_status()
+        qb_status_json = qb_status_response.get_json()
+        qb_connected = qb_status_json.get("status") == "success"
+        
+        categories = {}
+        if qb_connected:
+            categories_response = qb_categories()
+            if categories_response.status_code == 200:
+                categories = categories_response.get_json()
+        
+        return render_template("partials/results.html", results=ranked, QB_STATUS="CONNECTED" if qb_connected else "NOT CONNECTED", categories=categories, QB_CATEGORY=app.config.get("QB_CATEGORY"))
+    except RequestException as e:
+        return render_template("partials/results.html", error_message=f"Error connecting to MAM API: {e}")
+    except json.JSONDecodeError:
+        return render_template("partials/results.html", error_message="Failed to decode API response. Your session cookie might be invalid.")
 
-    # Sort results by total_score (descending)
-    ranked_results = sorted(search_results, key=lambda x: x['score']['total_score'], reverse=True)
-    return ranked_results
-
-def check_existing_torrents(search_results):
-    """Check if torrents from the API results are already in qBittorrent."""
-    # Authenticate with qBittorrent
-    session = requests.Session()
-    login_response = session.post(f"{app.config['QB_URL']}/api/v2/auth/login", data={
-        "username": app.config["QB_USERNAME"],
-        "password": app.config["QB_PASSWORD"]
-    },headers=app.config['BASE_HEADERS'])
-
-    if login_response.status_code != 200 or login_response.text != "Ok.":
-        raise Exception("Failed to authenticate with qBittorrent")
-
-    # Collect all hashes from the search results
-    hashes = [result.get("hash", "").upper() for result in search_results if result.get("hash")]
-    #if not hashes:
-        #return search_results  # No hashes to check
-
-    # Query qBittorrent for these hashes
-    hash_filter = "|".join(hashes)  # Join hashes with "|" as required by the API
-    torrents_response = session.get(f"{app.config['QB_URL']}/api/v2/torrents/info", params={"hashes": hash_filter})
-
-    if torrents_response.status_code != 200:
-        raise Exception("Failed to fetch filtered torrents from qBittorrent")
-
-    # Extract existing hashes from the qBittorrent response
-    existing_hashes = {torrent["hash"] for torrent in torrents_response.json()}
-
-    # Mark results as inClient based on existing hashes
-    for result in search_results:
-        result_hash = result.get("hash", "").upper()
-        result["inClient"] = result_hash in existing_hashes
-
-    return search_results
+@app.route("/")
+def index():
+    return render_template("index.html", **app.config)
 
 @app.route("/proxy_thumbnail")
 def proxy_thumbnail():
-    """Proxy thumbnails to handle cookies and bypass CORS issues."""
     url = request.args.get("url")
     if not url:
         return "No URL provided", 400
-
-    headers = {"Cookie": "; ".join([f"{k}={v}" for k, v in mam_session_cookies.items()])}
-    response = requests.get(url, headers=headers, stream=True)
-
-    if response.status_code == 200:
-        proxy_response = Response(response.content, content_type=response.headers.get("Content-Type"))
-        # Add Cache-Control headers for the browser
-        proxy_response.headers["Cache-Control"] = "public, max-age=86400"  # Cache for 1 day
-        return proxy_response
-    else:
-        return "Failed to fetch image", 500
     
-    
-@app.route('/get_qb_status', methods=['GET'])
-def get_qb_status():
-    global QB_SESSION
-    if QB_SESSION:
-        qb_status = "CONNECTED"
-    else:
-        qb_status = "NOT CONNECTED"
-    return jsonify({"status": qb_status})
-
-@app.route("/add_to_qbittorrent", methods=["POST"])
-def add_to_qbittorrent():
-    torrent_url = request.form.get("torrent_url")
-    category = request.form.get("category", "").strip()  # Optional category
-
-    if not torrent_url:
-        return {"error": "No torrent URL provided"}, 400
-
-    session = requests.Session()
-    login_response = session.post(f"{app.config['QB_URL']}/api/v2/auth/login", data={
-        "username": app.config["QB_USERNAME"],
-        "password": app.config["QB_PASSWORD"]
-    },
-    headers=app.config['BASE_HEADERS']
-    )
-
-    if login_response.status_code != 200 or login_response.text != "Ok.":
-        return {"error": "Failed to authenticate with qBittorrent"}, 500
-
-    # Send the torrent URL and category to qBittorrent
-    add_data = {
-        "urls": torrent_url,
-        "content_layout": "Subfolder",  # Example layout option
-    }
-    if category:  # Include category if provided
-        add_data["category"] = category
-
-    add_response = session.post(f"{app.config['QB_URL']}/api/v2/torrents/add", data=add_data, headers=app.config['BASE_HEADERS'])
-
-    if add_response.status_code == 200:
-        return jsonify({"status": "success", "message": "Torrent added successfully"}), 200
-    else:
-        return jsonify({"status": "error", "message": "Failed to add torrent to qBittorrent"}), 500
-
-@app.route('/qb/categories', methods=['GET'])
-def get_categories():
-    global QB_SESSION
-    if not QB_SESSION:
-        QB_SESSION = requests.Session()
-
     try:
-        # Login request
-        login_response = QB_SESSION.post(
-            f"{app.config['QB_URL']}/api/v2/auth/login",
-            data={
-                "username": app.config["QB_USERNAME"],
-                "password": app.config["QB_PASSWORD"],
-            },
-            headers=app.config['BASE_HEADERS']
+        response = requests.get(url, cookies=mam_session_cookies, stream=True, timeout=10)
+        response.raise_for_status()
+        
+        return Response(
+            response.iter_content(chunk_size=1024),
+            content_type=response.headers.get("Content-Type"),
+            headers={"Cache-Control": "public, max-age=86400"}
         )
-        # Check login success
-        if login_response.status_code != 200 or login_response.text != "Ok.":
-            print("Authentication failed. Status:", login_response.status_code, "Response:", login_response.text)
-            return {}
-
-        # Fetch categories
-        categories_response = QB_SESSION.get(
-            f"{app.config['QB_URL']}/api/v2/sync/maindata?rid=0",
-            headers=app.config['BASE_HEADERS']
-        )
-        if categories_response.status_code != 200:
-            print("Failed to fetch categories. Status:", categories_response.status_code, "Response:", categories_response.text)
-            return {}
-
-        # Parse response JSON
-        try:
-            categories = categories_response.json().get("categories", {})
-            if not isinstance(categories, dict):
-                print("Invalid categories format received. Resetting to empty dictionary.")
-                return {}
-            return categories
-        except ValueError as ve:
-            print("Error decoding JSON from categories response:", ve)
-            return {}
-
-    except requests.RequestException as req_err:
-        print("HTTP Request failed:", req_err)
-        return {}
-
-    except Exception as e:
-        print("An unexpected error occurred:", e)
-        return {}
+    except RequestException as e:
+        app.logger.error(f"Thumbnail proxy failed for URL {url}. Reason: {e}")
+        return "Failed to fetch image", 500
 
 @app.route("/update_settings", methods=["POST"])
 def update_settings():
-    # Update the settings from the POST request
-    app.config["QB_URL"] = request.form.get("QB_URL", app.config["QB_URL"])
-    app.config["QB_USERNAME"] = request.form.get("QB_USERNAME", app.config["QB_USERNAME"])
+    form = request.form
+    # Create a copy of the current config to modify
+    config_to_update = app.config.copy()
     
-    # Update password only if not blank
-    qb_password = request.form.get("QB_PASSWORD")
-    if qb_password:  # Only update if QB_PASSWORD is not empty or None
-        app.config["QB_PASSWORD"] = qb_password
+    # Update values from the form
+    for key in FALLBACK_CONFIG.keys():
+        if key in form:
+            config_to_update[key] = form[key]
+    if form.get("QB_PASSWORD"):
+        config_to_update["QB_PASSWORD"] = form.get("QB_PASSWORD")
 
-    app.config["MAM_ID"] = request.form.get("MAM_ID", app.config["MAM_ID"])
-    app.config["MAM_UID"] = request.form.get("MAM_UID", app.config["MAM_UID"])
-    app.config["QB_CATEGORY"] = request.form.get("QB_CATEGORY", app.config.get("QB_CATEGORY", ""))  # Add QB_CATEGORY
-
-    mam_session_cookies["mam_id"] = app.config["MAM_ID"]
-    mam_session_cookies["mam_uid"] = app.config["MAM_UID"]
-
-    # Save updated settings to config.json
-    updated_config = {
-        "FLASK_SECRET_KEY": app.secret_key,
-        "MAM_API_URL": app.config["MAM_URL"],
-        "QB_URL": app.config["QB_URL"],
-        "QB_CATEGORY": app.config.get("QB_CATEGORY", ""),  # Include QB_CATEGORY
-        "QB_USERNAME": app.config["QB_USERNAME"],
-        "QB_PASSWORD": app.config["QB_PASSWORD"],
-        "MAM_ID": app.config["MAM_ID"],
-        "MAM_UID": app.config["MAM_UID"],
-        "CF_ACCESS_CLIENT_ID": app.config["BASE_HEADERS"].get("CF-Access-Client-Id"),
-        "CF_ACCESS_CLIENT_SECRET": app.config["BASE_HEADERS"].get("CF-Access-Client-Secret")
-    }
-    save_config(updated_config)
+    # Save the updated configuration
+    save_config(config_to_update)
+    # Reload all settings, which will also trigger the UID fetch if needed
     load_new_app_config()
 
+    # Manually trigger an IP check after saving new credentials
+    job_id = 'ip_check_job_manual'
+    run_time = datetime.now() + timedelta(seconds=2)
+    if scheduler.get_job(job_id):
+        scheduler.reschedule_job(job_id, trigger='date', run_date=run_time)
+    else:
+        scheduler.add_job(id=job_id, func=check_and_update_ip, trigger='date', run_date=run_time)
+    
     return jsonify({"status": "success", "message": "Settings updated successfully!"})
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Run the Flask app with custom address and port.")
-    parser.add_argument("--host", default="127.0.0.1", help="Host address to bind to (default: 127.0.0.1)")
-    parser.add_argument("--port", default=5000, type=int, help="Port number to bind to (default: 5000)")
+    parser = argparse.ArgumentParser(description="Run the Flask app.")
+    parser.add_argument("--host", default="127.0.0.1", help="Host address.")
+    parser.add_argument("--port", default=5000, type=int, help="Port number.")
     args = parser.parse_args()
-
-    # Run the app with specified host and port
     app.run(host=args.host, port=args.port, debug=True)

@@ -1,8 +1,8 @@
 {% if error_message %}
     <div class="alert alert-danger text-center" role="alert">
-        {{ error_message }} (Please check your MyAnonAmouse authentication)
+        {{ error_message }}
     </div>
-{% elif no_results %}
+{% elif not results %}
     <div class="alert alert-warning text-center" role="alert">
         No results found. Please try a different search query.
     </div>
@@ -10,93 +10,42 @@
     {% for result in results %}
     <div class="row my-3 mx-0 py-2 pe-lg-0 rounded-1 border shadow-sm">
         <div class="col-6 col-md-4">
-        <img 
-            class="img-fluid me-2 rounded"
-            src="{{ url_for('proxy_thumbnail', url=result.thumbnail) }}" 
-            alt="Thumbnail" 
-        >
+            <img class="img-fluid me-2 rounded" src="{{ url_for('proxy_thumbnail', url=result.thumbnail) }}" alt="Thumbnail" loading="lazy">
         </div>
         <div class="col-6 col-md-5 pb-3 mb-0 small lh-sm">
             <div class="d-flex justify-content-between">
-                <strong class="text-gray-dark">{{ result.title }}</strong>
-                
+                <strong class="text-gray-dark">{{ result.title | safe }}</strong>
             </div>
             <span class="d-block">Narrator: {{ result.narrator_info or "Unknown" }}</span>
             <span class="d-block">File Type: {{ result.filetype }}</span>
             <span class="d-block">Size: {{ result.size }}</span>
             <span class="d-block">Date Added: {{ result.added }}</span>
             <span class="d-block">Seeders/Leechers: {{ result.seeders }}/{{ result.leechers }}</span>
-            <span class="d-block">Total Score: {{ result.score.total_score }}</span>
+            <span class="d-block">Relevance Score: {{ result.score }}</span>
         </div>
         <div class="col-12 col-md-3 py-2">
-            <form action="/add_to_qbittorrent" method="POST">
-                <div class="d-grid gap-2 d-md-block" style="width:100%" 
-                    {% if QB_STATUS != 'CONNECTED' %}data-bs-toggle="tooltip" title="qBittorrent is not connected. Check your connection settings."{% endif %}>
-                    <button type="button" 
-                            class="btn btn-primary add-to-qbittorrent-button" 
-                            style="width:100%" 
-                            {% if QB_STATUS != 'CONNECTED' %}disabled{% endif %}>
-                        Add to qBittorrent
-                    </button>
-                </div>
-                <input type="hidden" name="torrent_url" value="https://www.myanonamouse.net/tor/download.php/{{ result.dl }}">
-                
-                <select name="category" class="form-select category-dropdown">
-                    <option value="" {% if not QB_CATEGORY %}selected{% endif %}>Category</option>
-                    {% for category_name, category_info in categories.items() %}
-                    <option value="{{ category_name }}" 
-                            {% if QB_CATEGORY == category_name %}selected{% endif %}>
-                        {{ category_name }}
-                    </option>
-                    {% endfor %}
-                </select>
-            </form>
-            <div class="response-message-result"></div>
-        
-            <!-- Show contextual message if qBittorrent is not connected -->
-            {% if QB_STATUS != 'CONNECTED' %}
-            <div class="alert alert-warning mt-2" role="alert">
-                Unable to connect to qBittorrent. Please check your connection settings.
+            <div class="d-grid gap-2 d-md-block" style="width:100%" {% if QB_STATUS != 'CONNECTED' %}data-bs-toggle="tooltip" title="qBittorrent is not connected."{% endif %}>
+                <button type="button" 
+                        class="btn btn-primary add-to-qbittorrent-button" 
+                        style="width:100%"
+                        data-torrent-url="{{ result.download_link | safe }}"
+                        {% if QB_STATUS != 'CONNECTED' %}disabled{% endif %}>
+                    Add to qBittorrent
+                </button>
             </div>
-            {% endif %}
+            
+            <select name="category" class="form-select category-dropdown mt-2">
+                <option value="" {% if not QB_CATEGORY %}selected{% endif %}>Category</option>
+                {% for category_name, category_info in categories.items() %}
+                <option value="{{ category_name }}" 
+                        {% if QB_CATEGORY == category_name %}selected{% endif %}>
+                    {{ category_name }}
+                </option>
+                {% endfor %}
+            </select>
+        
+            <div class="response-message-result mt-2"></div>
         </div>
     </div>
     {% endfor %}
-
-    <script>
-        // Ensure script runs after DOM is fully loaded
-        document.addEventListener('DOMContentLoaded', () => {
-            // Select all buttons with the specific class
-            document.querySelectorAll('.add-to-qbittorrent-button').forEach(button => {
-                button.addEventListener('click', function (event) {
-                    event.preventDefault();
-
-                    // Get the parent form of the clicked button
-                    const form = button.closest('form');
-                    const formData = new FormData(form);
-
-                    // Get the nearest response message container
-                    const messageDiv = form.nextElementSibling;
-
-                    fetch('/add_to_qbittorrent', {
-                        method: 'POST',
-                        body: formData,
-                    })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.status === 'success') {
-                            messageDiv.innerHTML = '<div class="alert alert-success">' + data.message + '</div>';
-                        } else {
-                            messageDiv.innerHTML = '<div class="alert alert-danger">Failed to add torrent. Please try again.</div>';
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Error:', error);
-                        messageDiv.innerHTML = '<div class="alert alert-danger">An error occurred while adding the torrent.</div>';
-                    });
-                });
-            });
-        });
-    </script>
-
 {% endif %}
