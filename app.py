@@ -258,6 +258,30 @@ def qb_categories():
     response = session_obj.get(f"{app.config['QB_URL']}/api/v2/torrents/categories", headers=app.config.get("BASE_HEADERS", {}))
     return jsonify(response.json()) if response.ok else (jsonify({'error': 'Failed to fetch categories'}), response.status_code)
 
+@app.route('/mam/user_data', methods=['GET'])
+def mam_user_data():
+    """Fetches user data from the MAM API."""
+    if not login_mam():
+        return jsonify({'error': 'Not logged into MAM'}), 401
+
+    try:
+        api_url = f"{app.config.get('MAM_API_URL')}/jsonLoad.php"
+        response = requests.get(api_url, cookies=mam_session_cookies, timeout=10)
+        update_cookies(response)
+        response.raise_for_status()
+        
+        user_data = response.json()
+        
+        # Optionally format numbers for better display
+        if seedbonus := user_data.get("seedbonus"):
+            user_data["seedbonus_formatted"] = f"{seedbonus:,}"
+
+        return jsonify(user_data)
+
+    except (RequestException, json.JSONDecodeError) as e:
+        app.logger.error(f"Failed to fetch MAM user data: {e}")
+        return jsonify({'error': 'Failed to fetch data from MAM API'}), 503
+
 @app.route('/qb/add', methods=['POST'])
 def qb_add_torrent():
     if 'qb_session' not in session and not login_qbittorrent():

@@ -5,7 +5,7 @@
 
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="MyAnonamouse Search utility">
+  <meta name="description" content="MyAnonaMouse Search utility">
   <meta name="author" content="sevenlayercookie">
   <meta name="generator" content="Hugo 0.122.0">
   <title>MouseSearch</title>
@@ -201,10 +201,7 @@
   <main class="container">
     <div class="d-flex justify-content-center align-items-center p-3 my-3 text-white bg-purple rounded shadow-sm">
       <div class="lh-1 text-center">
-        <img src="{{ url_for('static', filename='favicon/transparent.png') }}"
-       alt="Logo"
-       height="48"
-       class="me-3">
+        <img src="{{ url_for('static', filename='favicon/transparent.png') }}" alt="Logo" height="48" class="me-3">
         <h1 class="h1 mb-0 text-white lh-1">MouseSearch</h1>
       </div>
     </div>
@@ -252,7 +249,12 @@
           <!-- New language selector -->
           <div class="mb-3 form-floating">
             <select class="form-select" name="language" id="language" aria-label="Language">
-              {% for lang in ['English','Afrikaans','Arabic','Bengali','Bosnian','Bulgarian','Burmese','Cantonese','Catalan','Chinese','Croatian','Czech','Danish','Dutch','Estonian','Farsi','Finnish','French','German','Greek','Greek, Ancient','Gujarati','Hebrew','Hindi','Hungarian','Icelandic','Indonesian','Irish','Italian','Japanese','Javanese','Kannada','Korean','Lithuanian','Latin','Latvian','Malay','Malayalam','Manx','Marathi','Norwegian','Polish','Portuguese','Brazilian Portuguese (BP)','Punjabi','Romanian','Russian','Scottish Gaelic','Sanskrit','Serbian','Slovenian','Spanish','Castilian Spanish','Swedish','Tagalog','Tamil','Telugu','Thai','Turkish','Ukrainian','Urdu','Vietnamese','Other'] %}
+              {% for lang in
+              ['English','Afrikaans','Arabic','Bengali','Bosnian','Bulgarian','Burmese','Cantonese','Catalan','Chinese','Croatian','Czech','Danish','Dutch','Estonian','Farsi','Finnish','French','German','Greek','Greek,
+              Ancient','Gujarati','Hebrew','Hindi','Hungarian','Icelandic','Indonesian','Irish','Italian','Japanese','Javanese','Kannada','Korean','Lithuanian','Latin','Latvian','Malay','Malayalam','Manx','Marathi','Norwegian','Polish','Portuguese','Brazilian
+              Portuguese (BP)','Punjabi','Romanian','Russian','Scottish
+              Gaelic','Sanskrit','Serbian','Slovenian','Spanish','Castilian
+              Spanish','Swedish','Tagalog','Tamil','Telugu','Thai','Turkish','Ukrainian','Urdu','Vietnamese','Other'] %}
               <option value="{{ lang }}" {% if lang=='English' %}selected{% endif %}>{{ lang }}</option>
               {% endfor %}
             </select>
@@ -278,6 +280,36 @@
                 Status: <span class="{{ 'text-success' if QB_STATUS == 'CONNECTED' else 'text-danger' }}">
                   {{ QB_STATUS }}
                 </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="accordion my-3" id="mamAccordion">
+          <div class="accordion-item">
+            <h2 class="accordion-header" id="mamAccordionHeading">
+              <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse"
+                data-bs-target="#mamAccordionCollapse" aria-expanded="false" aria-controls="mamAccordionCollapse">
+                MyAnonaMouse
+              </button>
+            </h2>
+            <div id="mamAccordionCollapse" class="accordion-collapse collapse" aria-labelledby="mamAccordionHeading"
+              data-bs-parent="#mamAccordion">
+              <div class="accordion-body">
+                <div class="row">
+                  <div class="col-md-6">
+                    <strong>Username:</strong> <span id="mam-username">Loading...</span><br>
+                    <strong>Class:</strong> <span id="mam-class">Loading...</span><br>
+                    <strong>Uploaded:</strong> <span id="mam-uploaded">Loading...</span>
+                  </div>
+                  <div class="col-md-6">
+                    <strong>Downloaded:</strong> <span id="mam-downloaded">Loading...</span><br>
+                    <strong>Ratio:</strong> <span id="mam-ratio">Loading...</span><br>
+                    <strong>Bonus Points:</strong> <span id="mam-bonus">Loading...</span>
+                  </div>
+                </div>
+                <hr class="my-2">
+                <strong>Status:</strong> <span id="mam-status" class="text-warning">LOADING</span>
               </div>
             </div>
           </div>
@@ -321,7 +353,7 @@
           <input type="text" class="form-control" id="QB_CATEGORY" name="QB_CATEGORY" value="{{ QB_CATEGORY }}" />
         </div>
 
-        <h5 class="text-center border-bottom pb-2">MyAnonamouse</h5>
+        <h5 class="text-center border-bottom pb-2">MyAnonaMouse</h5>
         <div class="mb-3">
           <label for="MAM_ID" class="form-label">MAM ID</label>
           <input type="text" class="form-control" id="MAM_ID" name="MAM_ID" value="{{ MAM_ID }}" required />

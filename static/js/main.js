@@ -72,6 +72,42 @@ function checkForIpUpdate() {
         .catch(error => console.error('Error checking IP update status:', error));
 }
 
+/**
+ * Fetches MAM user data and populates the accordion.
+ */
+function loadMamUserData() {
+    const statusSpan = document.getElementById('mam-status');
+    fetch('/mam/user_data', { cache: "no-store" })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! Status: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            statusSpan.textContent = 'CONNECTED';
+            statusSpan.className = 'text-success';
+            document.getElementById('mam-username').textContent = data.username || 'N/A';
+            document.getElementById('mam-class').textContent = data.classname || 'N/A';
+            document.getElementById('mam-uploaded').textContent = data.uploaded || 'N/A';
+            document.getElementById('mam-downloaded').textContent = data.downloaded || 'N/A';
+            document.getElementById('mam-ratio').textContent = data.ratio || 'N/A';
+            document.getElementById('mam-bonus').textContent = data.seedbonus_formatted || data.seedbonus || 'N/A';
+        })
+        .catch(error => {
+            console.error("Error fetching MAM user data:", error);
+            statusSpan.textContent = 'NOT CONNECTED';
+            statusSpan.className = 'text-danger';
+            // Clear other fields on error
+            document.getElementById('mam-username').textContent = 'N/A';
+            document.getElementById('mam-class').textContent = 'N/A';
+            document.getElementById('mam-uploaded').textContent = 'N/A';
+            document.getElementById('mam-downloaded').textContent = 'N/A';
+            document.getElementById('mam-ratio').textContent = 'N/A';
+            document.getElementById('mam-bonus').textContent = 'N/A';
+        });
+}
+
 // --- Main Event Listeners ---
 document.addEventListener("DOMContentLoaded", function () {
     const searchForm = document.getElementById("search-form");
@@ -80,6 +116,7 @@ document.addEventListener("DOMContentLoaded", function () {
     const wrapper = document.getElementById('results-container-wrapper');
 
     checkQBStatus();
+    loadMamUserData();
     // setInterval(checkForIpUpdate, 30000);
     // checkForIpUpdate();
 
