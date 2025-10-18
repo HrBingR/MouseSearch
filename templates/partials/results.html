@@ -1,51 +1,59 @@
 {% if error_message %}
-    <div class="alert alert-danger text-center" role="alert">
-        {{ error_message }}
-    </div>
+<div class="alert alert-danger text-center" role="alert">
+    {{ error_message }}
+</div>
 {% elif not results %}
-    <div class="alert alert-warning text-center" role="alert">
-        No results found. Please try a different search query.
-    </div>
+<div class="alert alert-warning text-center" role="alert">
+    No results found. Please try a different search query.
+</div>
 {% else %}
-    {% for result in results %}
-    <div class="row my-3 mx-0 py-2 pe-lg-0 rounded-1 border shadow-sm">
-        <div class="col-6 col-md-4">
-            <img class="img-fluid me-2 rounded" src="{{ url_for('proxy_thumbnail', url=result.thumbnail) }}" alt="Thumbnail" loading="lazy">
-        </div>
-        <div class="col-6 col-md-5 pb-3 mb-0 small lh-sm">
-            <div class="d-flex justify-content-between">
-                <strong class="text-gray-dark">{{ result.title | safe }}</strong>
-            </div>
-            <span class="d-block">Narrator: {{ result.narrator_info or "Unknown" }}</span>
-            <span class="d-block">File Type: {{ result.filetype }}</span>
-            <span class="d-block">Size: {{ result.size }}</span>
-            <span class="d-block">Date Added: {{ result.added }}</span>
-            <span class="d-block">Seeders/Leechers: {{ result.seeders }}/{{ result.leechers }}</span>
-            <span class="d-block">Relevance Score: {{ result.score }}</span>
-        </div>
-        <div class="col-12 col-md-3 py-2">
-            <div class="d-grid gap-2 d-md-block" style="width:100%" {% if QB_STATUS != 'CONNECTED' %}data-bs-toggle="tooltip" title="qBittorrent is not connected."{% endif %}>
-                <button type="button" 
-                        class="btn btn-primary add-to-qbittorrent-button" 
-                        style="width:100%"
-                        data-torrent-url="{{ result.download_link | safe }}"
-                        {% if QB_STATUS != 'CONNECTED' %}disabled{% endif %}>
-                    Add to qBittorrent
-                </button>
-            </div>
-            
-            <select name="category" class="form-select category-dropdown mt-2">
-                <option value="" {% if not QB_CATEGORY %}selected{% endif %}>Category</option>
-                {% for category_name, category_info in categories.items() %}
-                <option value="{{ category_name }}" 
-                        {% if QB_CATEGORY == category_name %}selected{% endif %}>
-                    {{ category_name }}
-                </option>
-                {% endfor %}
-            </select>
-        
-            <div class="response-message-result mt-2"></div>
-        </div>
+{% for result in results %}
+<div class="row my-3 mx-0 py-2 pe-lg-0 rounded-1 border shadow-sm">
+    <div class="col-6 col-md-4">
+        <img class="img-fluid me-2 rounded" src="{{ url_for('proxy_thumbnail', url=result.thumbnail) }}" alt="Thumbnail"
+            loading="lazy">
     </div>
-    {% endfor %}
+    <div class="col-6 col-md-5 pb-3 mb-0 small lh-sm">
+        <div class="d-flex justify-content-between">
+            <strong class="text-gray-dark">{{ result.title | safe }}</strong>
+        </div>
+        <span class="d-block">Narrator: {{ result.narrator_info or "Unknown" }}</span>
+        <span class="d-block">File Type: {{ result.filetype }}</span>
+        <span class="d-block">Size: {{ result.size }}</span>
+        <span class="d-block">Date Added: {{ result.added }}</span>
+        <span class="d-block">Seeders/Leechers: {{ result.seeders }}/{{ result.leechers }}</span>
+        <span class="d-block">Relevance Score: {{ result.score }}</span>
+    </div>
+    <div class="col-12 col-md-3 py-2 d-flex flex-column justify-content-center">
+    {% if result.download_link %}
+        <div class="d-grid gap-2 d-md-block" style="width:100%" {% if QB_STATUS != 'CONNECTED' %}data-bs-toggle="tooltip" title="qBittorrent is not connected."{% endif %}>
+            <button type="button" 
+                    class="btn btn-primary add-to-qbittorrent-button" 
+                    style="width:100%"
+                    data-torrent-url="{{ result.download_link | safe }}"
+                    {% if QB_STATUS != 'CONNECTED' %}disabled{% endif %}>
+                Add to qBittorrent
+            </button>
+        </div>
+        
+        <select name="category" class="form-select category-dropdown mt-2">
+            <option value="" {% if not QB_CATEGORY %}selected{% endif %}>Category</option>
+            {% for category_name, category_info in categories.items() %}
+            <option value="{{ category_name }}" 
+                    {% if QB_CATEGORY == category_name %}selected{% endif %}>
+                {{ category_name }}
+            </option>
+            {% endfor %}
+        </select>
+    
+        <div class="response-message-result mt-2"></div>
+    
+    {% else %}
+        <div class="text-center text-muted small p-2">
+            No torrent file available; check your VIP status.
+        </div>
+    {% endif %}
+</div>
+</div>
+{% endfor %}
 {% endif %}

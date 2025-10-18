@@ -10,6 +10,8 @@ from dotenv import load_dotenv
 from requests.exceptions import RequestException
 from flask_apscheduler import APScheduler
 
+import logging # for gunicorn logging
+
 from language_dict import language_dict
 
 # --- SCHEDULER AND STATE SETUP ---
@@ -17,6 +19,12 @@ class Config:
     SCHEDULER_API_ENABLED = True
 
 app = Flask(__name__)
+
+if __name__ != '__main__':
+    gunicorn_logger = logging.getLogger('gunicorn.error')
+    app.logger.handlers = gunicorn_logger.handlers
+    app.logger.setLevel(gunicorn_logger.level)
+
 app.config.from_object(Config())
 scheduler = APScheduler()
 scheduler.init_app(app)
@@ -356,14 +364,15 @@ def mam_search():
         base_dl_url = f"{app.config['MAM_API_URL']}/tor/download.php/"
         for item in results:
             if dl_hash := item.get('dl'):
+                # This line creates the full URL and adds it to the dictionary
                 item['download_link'] = base_dl_url + dl_hash
             else:
-                item['download_link'] = '' # Ensure key exists even if hash is missing
+                # This is a good practice to prevent errors if 'dl' is missing
+                item['download_link'] = '' 
 
             if not item.get('thumbnail'):
                 cat = item.get('category', '')
-                item['thumbnail'] = f"https://static.myanonamouse.net/pic/cats/3/{cat}.png"
-        # --- END FIX ---
+                item['thumbnail'] = f"https://static.myanonamouse.net/pic/cats/3/{cat}.png"        # --- END FIX ---
 
         ranked = rank_results(results)
         

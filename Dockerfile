@@ -8,13 +8,19 @@ WORKDIR /app
 COPY requirements.txt .
 
 # Install any needed packages specified in requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt gunicorn
 
 # Copy the rest of the application code to the working directory
-COPY . .
+COPY app.py language_dict.py ./
+COPY static ./static
+COPY templates ./templates
 
 # Make port 5000 available to the world outside this container
 EXPOSE 5000
+
+# Production env
+ENV PORT=5000 \
+    FLASK_ENV=production
 
 # You may define environment variables here or elsewhere
 # You should replace these with your actual configuration at runtime
@@ -30,4 +36,4 @@ EXPOSE 5000
 # ENV CF_ACCESS_CLIENT_SECRET=""
 
 # Run app.py when the container launches
-CMD ["python", "app.py", "--host=0.0.0.0"]
+CMD ["sh", "-lc", "exec gunicorn --bind 0.0.0.0:${PORT} --workers 1 --threads 8 --timeout 120 --access-logfile /dev/null --error-logfile - --log-level info app:app"]

@@ -111,6 +111,8 @@ document.addEventListener("DOMContentLoaded", function () {
                 resultsContainer.innerHTML = html;
                 wrapper.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 refreshCategories();
+                const tooltipTriggerList = resultsContainer.querySelectorAll('[data-bs-toggle="tooltip"]');
+                [...tooltipTriggerList].map(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl));
             })
             .catch(error => {
                 resultsContainer.innerHTML = `<div class="alert alert-danger">Search failed. See console for details.</div>`;
