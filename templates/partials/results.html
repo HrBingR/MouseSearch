@@ -20,6 +20,7 @@
             <a href="https://www.myanonamouse.net/t/{{ result.id }}" target="_blank">
                 <strong class="text-gray-dark">{{ result.title | safe }}</strong>
             </a>
+
         </div>
         <span class="d-block">Narrator: {{ result.narrator_info or "Unknown" }}</span>
         <span class="d-block">File Type: {{ result.filetype }}</span>
@@ -27,6 +28,12 @@
         <span class="d-block">Date Added: {{ result.added }}</span>
         <span class="d-block">Seeders/Leechers: {{ result.seeders }}/{{ result.leechers }}</span>
         <span class="d-block">Relevance Score: {{ result.score }}</span>
+            {% if result.my_snatched == 1 %}
+        <span class="badge bg-success ms-2">Previously Downloaded</span>
+            {% endif %}
+            {% if result.vip == 1 %}
+        <span class="badge bg-warning ms-2">VIP</span>
+            {% endif %}
     </div>
     <div class="col-12 col-md-3 py-2 d-flex flex-column justify-content-center">
     {% if result.download_link %}
