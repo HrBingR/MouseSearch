@@ -9,10 +9,10 @@
 {% else %}
 {% for result in results %}
 <div class="row my-3 mx-0 py-2 pe-lg-0 rounded-1 border shadow-sm">
-    <div class="col-6 col-md-4 d-flex justify-content-center">
+    <div class="col-6 col-md-4 d-flex justify-content-center align-items-center">
         <a href="https://www.myanonamouse.net/t/{{ result.id }}" target="_blank">
             <img class="img-fluid me-2 rounded" src="{{ url_for('proxy_thumbnail', url=result.thumbnail) }}" alt="Thumbnail"
-                loading="lazy">
+                loading="lazy" style="object-fit: contain;">
         </a>
     </div>
     <div class="col-6 col-md-5 pb-3 mb-0 small lh-sm">
