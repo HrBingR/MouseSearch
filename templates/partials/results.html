@@ -10,12 +10,16 @@
 {% for result in results %}
 <div class="row my-3 mx-0 py-2 pe-lg-0 rounded-1 border shadow-sm">
     <div class="col-6 col-md-4 d-flex justify-content-center">
-        <img class="img-fluid me-2 rounded" src="{{ url_for('proxy_thumbnail', url=result.thumbnail) }}" alt="Thumbnail"
-            loading="lazy">
+        <a href="https://www.myanonamouse.net/t/{{ result.id }}" target="_blank">
+            <img class="img-fluid me-2 rounded" src="{{ url_for('proxy_thumbnail', url=result.thumbnail) }}" alt="Thumbnail"
+                loading="lazy">
+        </a>
     </div>
     <div class="col-6 col-md-5 pb-3 mb-0 small lh-sm">
         <div class="d-flex justify-content-between">
-            <strong class="text-gray-dark">{{ result.title | safe }}</strong>
+            <a href="https://www.myanonamouse.net/t/{{ result.id }}" target="_blank">
+                <strong class="text-gray-dark">{{ result.title | safe }}</strong>
+            </a>
         </div>
         <span class="d-block">Narrator: {{ result.narrator_info or "Unknown" }}</span>
         <span class="d-block">File Type: {{ result.filetype }}</span>
