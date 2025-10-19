@@ -236,28 +236,6 @@ def login_qbittorrent():
 @app.route('/mam/status', methods=['GET'])
 def mam_status(): return jsonify({'status': 'connected' if login_mam() else 'not connected'})
 
-@app.route('/qb/status', methods=['GET'])
-def qb_status():
-    if 'qb_session' not in session and not login_qbittorrent():
-        return jsonify({"status": "error", "message": "Unable to connect to qBittorrent."}), 503
-    session_obj = requests.Session()
-    session_obj.cookies.update(session['qb_session'])
-    try:
-        response = session_obj.get(f"{app.config['QB_URL']}/api/v2/app/version", headers=app.config.get("BASE_HEADERS", {}))
-        response.raise_for_status()
-        return jsonify({"status": "success", "message": "qBittorrent is connected."}), 200
-    except RequestException as e:
-        return jsonify({"status": "error", "message": f"Failed to connect: {e}"}), 503
-
-@app.route('/qb/categories', methods=['GET'])
-def qb_categories():
-    if 'qb_session' not in session and not login_qbittorrent():
-        return jsonify({'error': 'Not connected to qBittorrent'}), 401
-    session_obj = requests.Session()
-    session_obj.cookies.update(session['qb_session'])
-    response = session_obj.get(f"{app.config['QB_URL']}/api/v2/torrents/categories", headers=app.config.get("BASE_HEADERS", {}))
-    return jsonify(response.json()) if response.ok else (jsonify({'error': 'Failed to fetch categories'}), response.status_code)
-
 @app.route('/mam/user_data', methods=['GET'])
 def mam_user_data():
     """Fetches user data from the MAM API."""
@@ -281,6 +259,31 @@ def mam_user_data():
     except (RequestException, json.JSONDecodeError) as e:
         app.logger.error(f"Failed to fetch MAM user data: {e}")
         return jsonify({'error': 'Failed to fetch data from MAM API'}), 503
+    
+# --- QBITTORRENT ROUTES ---
+@app.route('/qb/status', methods=['GET'])
+def qb_status():
+    if 'qb_session' not in session and not login_qbittorrent():
+        return jsonify({"status": "error", "message": "Unable to connect to qBittorrent."}), 503
+    session_obj = requests.Session()
+    session_obj.cookies.update(session['qb_session'])
+    try:
+        response = session_obj.get(f"{app.config['QB_URL']}/api/v2/app/version", headers=app.config.get("BASE_HEADERS", {}))
+        response.raise_for_status()
+        return jsonify({"status": "success", "message": "qBittorrent is connected."}), 200
+    except RequestException as e:
+        return jsonify({"status": "error", "message": f"Failed to connect: {e}"}), 503
+
+@app.route('/qb/categories', methods=['GET'])
+def qb_categories():
+    if 'qb_session' not in session and not login_qbittorrent():
+        return jsonify({'error': 'Not connected to qBittorrent'}), 401
+    session_obj = requests.Session()
+    session_obj.cookies.update(session['qb_session'])
+    response = session_obj.get(f"{app.config['QB_URL']}/api/v2/torrents/categories", headers=app.config.get("BASE_HEADERS", {}))
+    return jsonify(response.json()) if response.ok else (jsonify({'error': 'Failed to fetch categories'}), response.status_code)
+
+
 
 @app.route('/qb/add', methods=['POST'])
 def qb_add_torrent():
