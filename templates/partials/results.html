@@ -37,33 +37,33 @@
 
         <div class="row g-2 torrent-details">
             {% if result.series_display %}
-            <div class="col-12" data-bs-toggle="tooltip" title="Series">
+            <div class="col-12" title="Series">
                 <i class="bi bi-collection"></i> {{ result.series_display }}
             </div>
             {% endif %}
-            <div class="col-6" data-bs-toggle="tooltip" title="Narrator">
+            <div class="col-6" title="Narrator">
                 <i class="bi bi-mic"></i> {{ result.narrator_info or "N/A" }}
             </div>
-            <div class="col-6" data-bs-toggle="tooltip" title="File Type">
+            <div class="col-6" title="File Type">
                 <i class="bi bi-file-earmark-music"></i> {{ result.filetype }}
             </div>
-            <div class="col-6" data-bs-toggle="tooltip" title="Size">
+            <div class="col-6" title="Size">
                 <i class="bi bi-hdd"></i> {{ result.size }}
             </div>
-            <div class="col-6" data-bs-toggle="tooltip" title="Date Added">
+            <div class="col-6" title="Date Added">
                 <i class="bi bi-calendar3"></i> {{ result.added }}
             </div>
-            <div class="col-6" data-bs-toggle="tooltip" title="Seeders / Leechers">
+            <div class="col-6" title="Seeders / Leechers">
                 <i class="bi bi-people"></i> {{ result.seeders }}/{{ result.leechers }}
             </div>
-            <div class="col-6" data-bs-toggle="tooltip" title="Relevance Score">
+            <div class="col-6" title="Relevance Score">
                 <i class="bi bi-star"></i> {{ result.score }}
             </div>
         </div>
     </div>
     <div class="col-12 col-md-3 py-2 d-flex flex-column justify-content-center">
     {% if result.download_link %}
-        <div class="d-grid gap-2 d-md-block" style="width:100%" {% if QB_STATUS != 'CONNECTED' %}data-bs-toggle="tooltip" title="qBittorrent is not connected."{% endif %}>
+        <div class="d-grid gap-2 d-md-block" style="width:100%" {% if QB_STATUS != 'CONNECTED' %}title="qBittorrent is not connected."{% endif %}>
             <button type="button" 
                     class="btn btn-primary add-to-qbittorrent-button" 
                     style="width:100%"

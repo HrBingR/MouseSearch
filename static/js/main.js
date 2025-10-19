@@ -183,8 +183,6 @@ document.addEventListener("DOMContentLoaded", function () {
                 
                 wrapper.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 refreshCategories();
-                const tooltipTriggerList = resultsContainer.querySelectorAll('[data-bs-toggle="tooltip"]');
-                [...tooltipTriggerList].map(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl));
             })
             .catch(error => {
                 wrapper.style.display = 'block';
