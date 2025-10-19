@@ -22,13 +22,16 @@ const redXIcon = `<img src="/static/icons/x_circle.svg" alt="not connected" styl
 const pollingIntervals = {};
 const torrentHashMap = {};
 
-async function getTorrentHash(torrentUrl) {
-    if (torrentHashMap[torrentUrl]) {
-        console.log(`[CACHE] Found hash for ${torrentUrl}: ${torrentHashMap[torrentUrl]}`);
-        return torrentHashMap[torrentUrl];
+async function getTorrentHash(torrentId, torrentUrl) {
+    // 1. Check the cache using the STABLE torrent ID
+    if (torrentHashMap[torrentId]) {
+        console.log(`[CACHE] Found hash for ID ${torrentId}: ${torrentHashMap[torrentId]}`);
+        return torrentHashMap[torrentId];
     }
+    
+    // 2. If not in cache, fetch it using the DYNAMIC URL
     try {
-        console.log(`[API] Calculating hash for URL: ${torrentUrl}`);
+        console.log(`[API] Calculating hash for ID ${torrentId} using URL: ${torrentUrl}`);
         const response = await fetch('/calculate_hash', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -36,9 +39,11 @@ async function getTorrentHash(torrentUrl) {
         });
         if (!response.ok) throw new Error('Backend failed to calculate hash');
         const data = await response.json();
+        
         if (data.hash) {
             console.log(`[API] Successfully calculated hash: ${data.hash}`);
-            torrentHashMap[torrentUrl] = data.hash;
+            // 3. Store the new hash in the cache with the STABLE ID as the key
+            torrentHashMap[torrentId] = data.hash;
             return data.hash;
         } else {
             console.error(`[API] Hash calculation failed:`, data.error);
@@ -252,9 +257,11 @@ function initializeSnatchedTorrents() {
     console.log("[INIT] Checking for snatched torrents to begin polling.");
     document.querySelectorAll('.result-item[data-snatched="1"]').forEach(async (item) => {
         const torrentUrl = item.dataset.torrentUrl;
+        const torrentId = item.dataset.torrentId; // Get the new ID
         console.log("[INIT] Found snatched item:", item);
-        if (torrentUrl) {
-            const hash = await getTorrentHash(torrentUrl);
+        if (torrentId && torrentUrl) {
+            // Pass both arguments
+            const hash = await getTorrentHash(torrentId, torrentUrl);
             if (hash) {
                 pollTorrentStatus(hash, item);
             }
@@ -340,6 +347,7 @@ document.addEventListener("DOMContentLoaded", function () {
         if (button) {
             event.preventDefault();
             const torrentUrl = button.dataset.torrentUrl;
+            const torrentId = resultItem.dataset.torrentId;
             const author = button.dataset.author;
             const title = button.dataset.title;
             // Find the category dropdown within the same result item
@@ -365,7 +373,7 @@ document.addEventListener("DOMContentLoaded", function () {
                     if (data.message) {
                         console.log("[ADD] Torrent added successfully via API.");
                         button.textContent = 'Added!';
-                        const hash = await getTorrentHash(torrentUrl);
+                        const hash = await getTorrentHash(torrentId, torrentUrl);
                         if (hash) {
                             pollTorrentStatus(hash, resultItem);
                         }
