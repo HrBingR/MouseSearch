@@ -1,26 +1,19 @@
-version: '3.8'
 services:
-  web:
-    build: .
+  mousesearch:
+    image: sevenlayercookie/mousesearch:latest
     container_name: mousesearch
     ports:
       - "5009:5000"
-    environment:
-      - FLASK_SECRET_KEY=${FLASK_SECRET_KEY}
-      - MAM_ID=${MAM_ID}
-      - MAM_UID=${MAM_UID}
-      - QB_URL=${QB_URL}
-      - QB_USERNAME=${QB_USERNAME}
-      - QB_PASSWORD=${QB_PASSWORD}
-      - QB_CATEGORY=${QB_CATEGORY}
-      - CF_ACCESS_CLIENT_ID=${CF_ACCESS_CLIENT_ID}
-      - CF_ACCESS_CLIENT_SECRET=${CF_ACCESS_CLIENT_SECRET}
+    env_file: .env
     volumes:
       - ./data:/app/data
+      - /mnt/sda/audiobooks:/audiobooks/
+      # - /mnt/sda/audiobooks/docker/qbittorrent/downloads/prowlarr:/qbittorrent
+      # - /mnt/sda/organized:/organized
+    restart: unless-stopped
     networks:
       - proxy-network
       - default
-
 networks:
   proxy-network:
     external: true
