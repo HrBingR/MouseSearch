@@ -25,13 +25,13 @@
         
         <div class="my-2">
             {% if result.my_snatched == 1 %}
-            <span class="badge bg-success">Downloaded</span>
+            <span class="badge bg-success m-1">Downloaded</span>
             {% endif %}
             {% if result.vip == 1 %}
-            <span class="badge bg-warning text-dark">VIP</span>
+            <span class="badge bg-warning text-dark m-1">VIP</span>
             {% endif %}
             {% if result.free == 1 or result.personal_freeleech == 1 %}
-            <span class="badge bg-info text-dark">Freeleech</span>
+            <span class="badge bg-info text-dark m-1">Freeleech</span>
             {% endif %}
         </div>
 

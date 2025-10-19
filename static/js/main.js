@@ -111,8 +111,8 @@ function pollTorrentStatus(hash, resultItem) {
                 // --- NEW: Two-line HTML structure ---
                 const statusHtml = `
                     <div class="small lh-sm">
-                        <div>Status: <div class="badge bg-${badgeType}"><b>${simplifiedState}</b></div></div>
-                        <div>Downloaded: <div class="badge bg-${badgeType}"><b>${progress}%</b></div></div>
+                        <div class="d-flex align-items-center">Status: <div class="badge bg-${badgeType} m-1"><b>${simplifiedState}</b></div></div>
+                        <div class="d-flex align-items-center">Downloaded: <div class="badge bg-${badgeType} m-1"><b>${progress}%</b></div></div>
                     </div>
                 `;
                 statusContainer.innerHTML = statusHtml;
