@@ -2,12 +2,13 @@
 
 ## Project Overview
 
-MouseSearch is a Flask web app for searching MyAnonamouse (MAM) torrents and sending them to qBittorrent. It's designed to run in Docker with persistent data storage and automated background tasks.
+MouseSearch is a **Quart (async)** web app for searching MyAnonamouse (MAM) torrents and sending them to qBittorrent. It's designed to run in Docker with persistent data storage and automated background tasks.
 
 **Core Architecture:**
-- Single-file Flask application (`app.py`) with ~750 lines handling all backend logic
+- Single-file Quart application (`app.py`) with ~750 lines handling all backend logic with async/await
+- Async HTTP requests using httpx instead of requests
 - Session-based authentication for both MAM (cookies) and qBittorrent (session tokens)
-- APScheduler for background jobs (IP updates, file organization)
+- AsyncIOScheduler for background jobs (IP updates, file organization)
 - HTMX-style partial templates for dynamic search results
 - Bootstrap 5 frontend with vanilla JavaScript
 
@@ -15,13 +16,15 @@ MouseSearch is a Flask web app for searching MyAnonamouse (MAM) torrents and sen
 
 ```
 myanonamouse-docker/
-├── app.py                  # Main Flask application (all backend logic)
+├── app.py                  # Main Quart application (all async backend logic)
+├── app_flask_backup.py     # Original Flask version (backup)
 ├── language_dict.py        # MAM language ID mappings (60+ languages)
-├── requirements.txt        # Python dependencies
+├── requirements.txt        # Python dependencies (Quart, httpx, APScheduler)
 ├── package.json            # Frontend dependencies (Bootstrap, ESLint)
-├── Dockerfile              # Container build definition
+├── Dockerfile              # Container build definition (uses Hypercorn)
 ├── compose.yaml            # Docker Compose configuration
 ├── buildImage.sh           # Build script with versioning
+├── QUART_MIGRATION.md      # Migration documentation
 ├── .env                    # Environment variables (gitignored, user-created)
 ├── data/                   # Persistent storage (gitignored)
 │   ├── config.json         # User settings from web UI
@@ -42,7 +45,7 @@ myanonamouse-docker/
 ## Development Environment Setup
 
 ### Prerequisites
-- **Python 3.10+** (app uses modern syntax like `str | None`)
+- **Python 3.10+** (app uses modern syntax like `str | None` and async/await)
 - **Docker & Docker Compose** (for containerized deployment)
 
 ### Local Development
@@ -60,9 +63,9 @@ cp .env.example .env  # If example exists, or create manually
 # Run development server
 python app.py --host 0.0.0.0 --port 5000
 
-# Production mode (with Gunicorn)
-pip install gunicorn
-gunicorn --bind 0.0.0.0:5000 --workers 1 --threads 8 app:app
+# Production mode (with Hypercorn - ASGI server for Quart)
+pip install hypercorn
+hypercorn --bind 0.0.0.0:5000 --workers 1 --worker-class asyncio app:app
 ```
 
 **Key Points:**
@@ -70,6 +73,7 @@ gunicorn --bind 0.0.0.0:5000 --workers 1 --threads 8 app:app
 - Virtual environment recommended but not required for Docker builds
 - `data/` directory auto-created on first run if missing
 - `.env` file may be used in bare metal and Docker environments
+- **NEW:** App now uses async/await - all route handlers and HTTP requests are asynchronous
 
 ## Critical Configuration Patterns
 
@@ -118,11 +122,11 @@ gunicorn --bind 0.0.0.0:5000 --workers 1 --threads 8 app:app
 
 ### Running Locally
 ```bash
-# Development with Flask
+# Development with Quart
 python app.py --host 0.0.0.0 --port 5000
 
-# Production with Gunicorn (as in Dockerfile)
-gunicorn --bind 0.0.0.0:5000 --workers 1 --threads 8 app:app
+# Production with Hypercorn (as in Dockerfile)
+hypercorn --bind 0.0.0.0:5000 --workers 1 --worker-class asyncio app:app
 ```
 
 ### Docker Build & Deploy
@@ -160,11 +164,13 @@ The `language_dict.py` maps 60+ language names to MAM API language IDs. When add
 
 ## Common Pitfalls
 
-1. **Forgot to call `login_qbittorrent()`:** QB session expires - always check `qb_session` in Flask session first
-2. **Torrent URL construction:** API returns `dl` hash only - must prepend `{MAM_API_URL}/tor/download.php/`
-3. **Path mismatches:** QB_PATH must be container's view of qBittorrent download location (when containerized), not host path
-4. **Scheduler jobs on reload:** APScheduler persists in memory - use `scheduler.get_job()` to check existence before adding
-5. **File vs Directory handling:** Torrent content can be single file OR directory - check `content_path.is_dir()`
+1. **Forgot to await async operations:** In Quart, many operations require `await` - including `request.get_json()`, `render_template()`, and `response.get_json()`
+2. **Forgot to call `login_qbittorrent()`:** QB session expires - always check `qb_session` in session first and use `await login_qbittorrent()`
+3. **Torrent URL construction:** API returns `dl` hash only - must prepend `{MAM_API_URL}/tor/download.php/`
+4. **Path mismatches:** QB_PATH must be container's view of qBittorrent download location (when containerized), not host path
+5. **Scheduler startup:** AsyncIOScheduler must start in `@app.before_serving` hook, not at module import time
+6. **File vs Directory handling:** Torrent content can be single file OR directory - check `content_path.is_dir()`
+7. **httpx vs requests:** Use `async with httpx.AsyncClient() as client:` pattern, not `requests.Session()`
 
 ## Testing Changes
 

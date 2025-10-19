@@ -8,7 +8,7 @@ WORKDIR /app
 COPY requirements.txt .
 
 # Install any needed packages specified in requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt gunicorn
+RUN pip install --no-cache-dir -r requirements.txt hypercorn
 
 # Copy the rest of the application code to the working directory
 COPY app.py language_dict.py ./
@@ -36,4 +36,4 @@ ENV PORT=5000 \
 # ENV CF_ACCESS_CLIENT_SECRET=""
 
 # Run app.py when the container launches
-CMD ["sh", "-lc", "exec gunicorn --bind 0.0.0.0:${PORT} --workers 1 --threads 8 --timeout 120 --access-logfile /dev/null --error-logfile - --log-level info app:app"]
+CMD ["sh", "-lc", "exec hypercorn --bind 0.0.0.0:${PORT} --workers 1 --worker-class asyncio --access-logfile /dev/null --error-logfile - --log-level info app:app"]

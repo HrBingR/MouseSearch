@@ -346,12 +346,13 @@ document.addEventListener("DOMContentLoaded", function () {
         const button = event.target.closest('.add-to-qbittorrent-button');
         if (button) {
             event.preventDefault();
+            // Find the result item first (needed to get torrentId and category)
+            const resultItem = button.closest('.result-item');
             const torrentUrl = button.dataset.torrentUrl;
             const torrentId = resultItem.dataset.torrentId;
             const author = button.dataset.author;
             const title = button.dataset.title;
             // Find the category dropdown within the same result item
-            const resultItem = button.closest('.result-item');
             const category = resultItem.querySelector('.category-dropdown')?.value || '';
 
             console.log(`[ADD] 'Add to qBittorrent' clicked for URL: ${torrentUrl} with category: '${category}'`);
