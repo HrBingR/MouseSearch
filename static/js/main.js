@@ -24,19 +24,24 @@ const torrentHashMap = {};
 
 async function getTorrentHash(torrentUrl) {
     if (torrentHashMap[torrentUrl]) {
+        console.log(`[CACHE] Found hash for ${torrentUrl}: ${torrentHashMap[torrentUrl]}`);
         return torrentHashMap[torrentUrl];
     }
     try {
+        console.log(`[API] Calculating hash for URL: ${torrentUrl}`);
         const response = await fetch('/calculate_hash', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ url: torrentUrl })
         });
-        if (!response.ok) throw new Error('Failed to calculate hash');
+        if (!response.ok) throw new Error('Backend failed to calculate hash');
         const data = await response.json();
         if (data.hash) {
+            console.log(`[API] Successfully calculated hash: ${data.hash}`);
             torrentHashMap[torrentUrl] = data.hash;
             return data.hash;
+        } else {
+            console.error(`[API] Hash calculation failed:`, data.error);
         }
     } catch (error) {
         console.error("Error getting torrent hash:", error);
@@ -46,47 +51,87 @@ async function getTorrentHash(torrentUrl) {
 
 function pollTorrentStatus(hash, resultItem) {
     const statusContainer = resultItem.querySelector('.torrent-status-container');
-    if (!statusContainer) return;
+    if (!statusContainer) {
+        console.error("Could not find status container for item:", resultItem);
+        return;
+    }
 
     if (pollingIntervals[hash]) {
+        console.log(`[POLL] Polling already active for hash ${hash}. Clearing old interval.`);
         clearInterval(pollingIntervals[hash]);
     }
 
+    console.log(`[POLL] Starting to poll status for hash: ${hash}`);
+
     const intervalId = setInterval(() => {
-        fetch(`/qb/properties/${hash}`)
-            .then(response => response.json())
+        fetch(`/qb/info/${hash}`)
+            .then(response => {
+                if (response.status === 404) {
+                    console.log(`[POLL] Torrent with hash ${hash} not found in qBittorrent (404).`);
+                    return { error: 'Torrent not found in qBittorrent' };
+                }
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
             .then(data => {
-                if (data.error) {
-                    statusContainer.innerHTML = `<span class="text-danger small">${data.error}</span>`;
+                console.log(`[POLL] Received data for hash ${hash}:`, data);
+
+                if (!data || data.error) {
+                    statusContainer.innerHTML = `<span class="badge bg-danger text-wrap">${data.error || 'Torrent not found in qBittorrent'}</span>`;
+                    console.log(`[POLL] Stopping poll for hash ${hash} due to error or missing data.`);
                     clearInterval(intervalId);
+                    delete pollingIntervals[hash];
                     return;
                 }
 
-                const state = (data.state || 'N/A').replace(/_/g, ' ');
-                const progress = ((data.progress || 0) * 100).toFixed(1);
-                const eta = data.eta > 0 && data.eta < 8640000 ? new Date(data.eta * 1000).toISOString().substr(11, 8) : '∞';
-                
-                let statusHtml = `<span class="small"><b>${state}</b>`;
-                if (state.includes('downloading')) {
-                    statusHtml += `: ${progress}% - ETA: ${eta}`;
-                } else if (state.includes('uploading') || state.includes('seeding')) {
-                    statusHtml += `: ${progress}%`;
+                const state = data.state || 'unknown';
+                const progress = ((data.progress || 0) * 100).toFixed(0);
+                let badgeType
+                // --- NEW: Simplified state mapping ---
+                let simplifiedState = 'Unknown';
+                if (['error', 'missingFiles'].includes(state)) {
+                    simplifiedState = 'Error';
+                    badgeType = 'danger';
+                } else if (['uploading', 'stalledUP', 'checkingUP', 'forcedUP', 'pausedUP'].includes(state)) {
+                    simplifiedState = 'Seeding';
+                    badgeType = 'success';
+                } else if (['downloading', 'metaDL', 'stalledDL', 'checkingDL', 'forcedDL', 'allocating', 'moving', 'checkingResumeData'].includes(state)) {
+                    simplifiedState = 'Downloading';
+                    badgeType = 'primary';
+                } else if (['pausedDL'].includes(state)) {
+                    simplifiedState = 'Paused';
+                    badgeType = 'secondary';
+                } else if (['queuedUP', 'queuedDL'].includes(state)) {
+                    simplifiedState = 'Queued';
+                    badgeType = 'info';
                 }
-                 statusHtml += `</span>`;
 
+                // --- NEW: Two-line HTML structure ---
+                const statusHtml = `
+                    <div class="small lh-sm">
+                        <div>Status: <div class="badge bg-${badgeType}"><b>${simplifiedState}</b></div></div>
+                        <div>Downloaded: <div class="badge bg-${badgeType}"><b>${progress}%</b></div></div>
+                    </div>
+                `;
                 statusContainer.innerHTML = statusHtml;
 
-                if (state.includes('seeding') || state.includes('paused') || state.includes('error')) {
+                // Stop polling on terminal states (using original state for accuracy)
+                const terminalStates = ['error', 'missingFiles', 'uploading', 'pausedUP', 'stalledUP', 'forcedUP', 'pausedDL'];
+                if (terminalStates.includes(state)) {
+                    console.log(`[POLL] Stopping poll for hash ${hash} because its state is terminal: ${state}`);
                     clearInterval(intervalId);
                     delete pollingIntervals[hash];
                 }
             })
             .catch(error => {
-                console.error("Polling error:", error);
+                console.error(`[POLL] Polling error for hash ${hash}:`, error);
+                statusContainer.innerHTML = `<span class="text-danger small">Polling error</span>`;
                 clearInterval(intervalId);
                 delete pollingIntervals[hash];
             });
-    }, 1000);
+    }, 2000);
     pollingIntervals[hash] = intervalId;
 }
 
@@ -204,8 +249,10 @@ function loadMamUserData() {
 }
 
 function initializeSnatchedTorrents() {
+    console.log("[INIT] Checking for snatched torrents to begin polling.");
     document.querySelectorAll('.result-item[data-snatched="1"]').forEach(async (item) => {
         const torrentUrl = item.dataset.torrentUrl;
+        console.log("[INIT] Found snatched item:", item);
         if (torrentUrl) {
             const hash = await getTorrentHash(torrentUrl);
             if (hash) {
@@ -251,6 +298,13 @@ document.addEventListener("DOMContentLoaded", function () {
         if (resultsTitle) {
             resultsTitle.textContent = 'Results';
         }
+        
+        // Clear all existing polling intervals before a new search
+        console.log("[SEARCH] New search submitted. Clearing all active polling intervals.");
+        for (const hash in pollingIntervals) {
+            clearInterval(pollingIntervals[hash]);
+            delete pollingIntervals[hash];
+        }
 
         const queryParams = new URLSearchParams(new FormData(searchForm)).toString();
 
@@ -290,6 +344,8 @@ document.addEventListener("DOMContentLoaded", function () {
             const resultItem = button.closest('.result-item');
             const category = resultItem.querySelector('.category-dropdown')?.value || '';
 
+            console.log(`[ADD] 'Add to qBittorrent' clicked for URL: ${torrentUrl} with category: '${category}'`);
+
             button.disabled = true;
             fetch('/qb/add', {
                 method: 'POST',
@@ -300,11 +356,14 @@ document.addEventListener("DOMContentLoaded", function () {
             .then(async data => {
                 showToast(data.message || data.error, data.message ? 'success' : 'danger');
                 if(data.message) {
+                    console.log("[ADD] Torrent added successfully via API.");
                     button.textContent = 'Added!';
                     const hash = await getTorrentHash(torrentUrl);
                     if (hash) {
                         pollTorrentStatus(hash, resultItem);
                     }
+                } else {
+                     console.error("[ADD] Failed to add torrent:", data.error);
                 }
             })
             .catch(error => {

@@ -3,3 +3,4 @@ requests>=2.25.1
 python-dotenv>=0.15.0
 Flask-APScheduler
 bencode.py
+bencodepy

@@ -340,91 +340,94 @@ def qb_add_torrent():
         app.logger.error(f"Failed to send 'add torrent' request to qBittorrent: {e}")
         return jsonify({'error': f'Failed to communicate with qBittorrent: {e}'}), 503
 
-@app.route('/qb/properties/<hash_val>', methods=['GET'])
-def qb_torrent_properties(hash_val):
+@app.route('/qb/info/<hash_val>', methods=['GET'])
+def qb_torrent_info(hash_val):
+    app.logger.info(f"Request received for torrent info with hash: {hash_val}")
     if 'qb_session' not in session and not login_qbittorrent():
+        app.logger.error("Failed to get torrent info: Not connected to qBittorrent.")
         return jsonify({'error': 'Not connected to qBittorrent'}), 401
     
     session_obj = requests.Session()
     session_obj.cookies.update(session['qb_session'])
     
     try:
+        # --- FIX: Call the /info endpoint, not /properties ---
+        # Note the parameter is 'hashes' (plural)
         response = session_obj.get(
-            f"{app.config['QB_URL']}/api/v2/torrents/properties",
-            params={'hash': hash_val},
+            f"{app.config['QB_URL']}/api/v2/torrents/info",
+            params={'hashes': hash_val},
             headers=app.config.get("BASE_HEADERS", {})
         )
         response.raise_for_status()
-        return jsonify(response.json())
+        
+        # The /info endpoint returns a LIST of torrents.
+        torrent_list = response.json()
+        app.logger.debug(f"Received info for hash {hash_val}: {json.dumps(torrent_list)}")
+        
+        # If the list is empty, the torrent doesn't exist in the client.
+        if not torrent_list:
+             app.logger.warning(f"qBittorrent returned no info for hash {hash_val}. Torrent may not exist in client.")
+             return jsonify({'error': 'Torrent not found in qBittorrent'}), 404
+
+        # Return the first (and only) object from the list.
+        return jsonify(torrent_list[0])
+        
     except RequestException as e:
-        return jsonify({'error': f'Failed to fetch torrent properties: {e}'}), 503
+        app.logger.error(f"Failed to fetch torrent info for hash {hash_val}: {e}")
+        return jsonify({'error': f'Failed to fetch torrent info: {e}'}), 503
+    except json.JSONDecodeError as e:
+        app.logger.error(f"Failed to decode qBittorrent info response for hash {hash_val}: {e}. Response text: {response.text}")
+        return jsonify({'error': 'Failed to decode response from qBittorrent'}), 500
 
 @app.route('/calculate_hash', methods=['POST'])
 def get_torrent_hash():
     data = request.get_json()
     url = data.get('url')
+    app.logger.info(f"Received request to calculate hash for URL: {url}")
     if not url:
+        app.logger.error("Hash calculation failed: No URL provided.")
         return jsonify({'error': 'URL is required'}), 400
     
     hash_val = calculate_torrent_hash_from_url(url)
     
     if hash_val:
+        app.logger.info(f"Successfully calculated hash for {url}: {hash_val}")
         return jsonify({'hash': hash_val})
     else:
+        app.logger.error(f"Failed to calculate hash for URL: {url}")
         return jsonify({'error': 'Failed to calculate hash'}), 500
 
 # torrent hash calculation utility
 def calculate_torrent_hash_from_url(url: str) -> str | None:
     """
     Downloads a .torrent file from a URL and calculates its info hash.
-
-    The info hash is the SHA-1 hash of the bencoded 'info' dictionary
-    from the torrent file.
-
-    Args:
-        url: The URL of the .torrent file.
-
-    Returns:
-        The calculated info hash as a 40-character hexadecimal string,
-        or None if an error occurs.
     """
     try:
-        # 1. Fetch the .torrent file from the URL
-        print(f"Fetching torrent file from: {url}")
+        app.logger.debug(f"Fetching .torrent file from: {url}")
         response = requests.get(url, timeout=10)
-        response.raise_for_status()  # Raise an exception for bad status codes (4xx or 5xx)
+        response.raise_for_status()
         
-        # The content of the torrent file in bytes
         torrent_content = response.content
-        
-        # 2. Decode the bencoded torrent content
-        # The result is a dictionary with byte-string keys
         torrent_data = bencodepy.decode(torrent_content)
         
-        # 3. Get the 'info' dictionary from the torrent data
-        # The 'info' key is a byte string b'info'
         if b'info' not in torrent_data:
-            print("Error: 'info' dictionary not found in torrent file.")
+            app.logger.error("'info' dictionary not found in torrent file.")
             return None
             
         info_dict = torrent_data[b'info']
-        
-        # 4. Bencode the 'info' dictionary back into bytes
         bencoded_info = bencodepy.encode(info_dict)
-        
-        # 5. Calculate the SHA-1 hash of the bencoded info dictionary
         sha1_hash = hashlib.sha1(bencoded_info).hexdigest()
         
         return sha1_hash
 
     except requests.exceptions.RequestException as e:
-        print(f"Error fetching the URL: {e}")
+        app.logger.error(f"Error fetching the URL for hash calculation: {e}")
         return None
     except bencodepy.BencodeDecodeError as e:
-        print(f"Error decoding the torrent file: {e}")
+        app.logger.error(f"Error decoding the torrent file for hash calculation: {e}")
         return None
     except Exception as e:
-        print(f"An unexpected error occurred: {e}")
+        app.logger.error(f"An unexpected error occurred during hash calculation: {e}")
         return None
 
 def parse_author_info(info):
