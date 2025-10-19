@@ -352,9 +352,12 @@ async def qb_add_torrent():
     author = incoming_data.get('author', 'Unknown Author')
     title = incoming_data.get('title', 'Unknown Title')
     
+    auto_organize_warning = None  # Track if hash calculation failed
+    
     if app.config.get("AUTO_ORGANIZE"):
         hash_val = await calculate_torrent_hash_from_url(torrent_url)
         if not hash_val:
+            auto_organize_warning = "Unable to calculate torrent hash - auto-organization will not work for this torrent."
             app.logger.warning(f"AUTO_ORGANIZE is enabled, but could not calculate hash for {torrent_url}.")
         else:
             metadata = load_metadata()
@@ -383,7 +386,10 @@ async def qb_add_torrent():
 
             if "Ok." in response.text:
                 app.logger.info("SUCCESS: Torrent added to qBittorrent.")
-                return jsonify({'message': 'Torrent added successfully'})
+                response_data = {'message': 'Torrent added successfully'}
+                if auto_organize_warning:
+                    response_data['warning'] = auto_organize_warning
+                return jsonify(response_data)
             else:
                 error_message = f"qBittorrent rejected the torrent. Response: {response.text or '[No Response Body]'}"
                 app.logger.error(error_message)
@@ -704,15 +710,22 @@ if app.config.get("AUTO_ORGANIZE"):
                 s_title = sanitize_filename(torrent_meta['title'])
                 dest_path = organized_path / s_author / s_title
 
+                # Check if source exists
                 if not content_path.exists():
+                    # Don't increment retry counter - this might be a timing issue
                     return False, f"Source path does not exist: {content_path}"
                 
-                dest_path.mkdir(parents=True, exist_ok=True)
+                # Handle destination creation errors
+                try:
+                    dest_path.mkdir(parents=True, exist_ok=True)
+                except (OSError, PermissionError) as e:
+                    return False, f"Cannot create destination directory '{dest_path}': {e}"
                 
                 files_linked = 0
+                files_already_exist = 0
                 audio_extensions = ['.m4b', '.mp3', '.flac', '.ogg', '.opus', '.m4a']
 
-                # ✅ FIXED: handle directory vs file correctly
+                # Handle directory vs file correctly
                 if content_path.is_dir():
                     source_files = content_path.rglob('*')
                 else:
@@ -721,27 +734,56 @@ if app.config.get("AUTO_ORGANIZE"):
                 for source_file in source_files:
                     if source_file.is_file() and source_file.suffix.lower() in audio_extensions:
                         dest_file = dest_path / source_file.name
-                        if not dest_file.exists():
-                            os.link(source_file, dest_file)
-                            files_linked += 1
-                            app.logger.info(f"[ORGANIZE] Linked: {source_file} -> {dest_file}")
-                        else:
+                        
+                        if dest_file.exists():
+                            # Count existing files separately
+                            files_already_exist += 1
                             app.logger.debug(f"[ORGANIZE] Skipped (already exists): {dest_file}")
+                        else:
+                            try:
+                                os.link(source_file, dest_file)
+                                files_linked += 1
+                                app.logger.info(f"[ORGANIZE] Linked: {source_file} -> {dest_file}")
+                            except (OSError, PermissionError) as e:
+                                # Handle individual file link errors
+                                app.logger.error(f"[ORGANIZE] Failed to link {source_file} -> {dest_file}: {e}")
+                                # Continue processing other files
 
-                # 4. Update metadata to mark as organized only if files were actually linked
-                if files_linked > 0:
+                # 4. Update metadata based on results
+                total_audio_files = files_linked + files_already_exist
+                
+                if total_audio_files == 0:
+                    # No audio files found at all - increment retry
+                    metadata[hash_val]['retry_count'] = retry_count + 1
+                    save_metadata(metadata)
+                    return False, f"No compatible audio files found for '{s_title}' (attempt {retry_count + 1}/3)."
+                
+                # Success if files were linked OR already existed
+                if files_linked > 0 or files_already_exist > 0:
                     metadata[hash_val]['organized'] = True
                     save_metadata(metadata)
-                    app.logger.info(f"[ORGANIZE] SUCCESS: '{s_title}' by {s_author} - {files_linked} files linked from '{content_path}' to '{dest_path}'")
-                    return True, f"SUCCESS: '{s_title}' ({files_linked} files linked from '{content_path}' to '{dest_path}')."
-                else:
-                    # Increment retry counter for failed attempts
-                    metadata[hash_val]['retry_count'] = metadata[hash_val].get('retry_count', 0) + 1
-                    save_metadata(metadata)
-                    return False, f"No compatible audio files found to link for '{s_title}' (attempt {metadata[hash_val]['retry_count']}/3)."
+                    
+                    if files_linked > 0 and files_already_exist > 0:
+                        msg = f"SUCCESS: '{s_title}' by {s_author} - {files_linked} new files linked, {files_already_exist} already existed (total: {total_audio_files} files in '{dest_path}')."
+                    elif files_linked > 0:
+                        msg = f"SUCCESS: '{s_title}' by {s_author} - {files_linked} files linked to '{dest_path}'."
+                    else:
+                        msg = f"SUCCESS: '{s_title}' by {s_author} - All {files_already_exist} files already organized in '{dest_path}'."
+                    
+                    app.logger.info(f"[ORGANIZE] {msg}")
+                    return True, msg
+                
+                # This should never happen given the logic above, but as a safety net:
+                return False, "Unexpected error: No files processed."
 
         except RequestError as e:
-            return False, f"An API error occurred during organization: {e}"
+            return False, f"API error during organization: {e}"
+        except json.JSONDecodeError as e:
+            return False, f"Failed to parse qBittorrent response: {e}"
+        except Exception as e:
+            # Catch-all for unexpected errors
+            app.logger.exception(f"Unexpected error organizing {hash_val}")
+            return False, f"Unexpected error: {e}"
 
     @app.route('/organize', methods=['POST'])
     @app.route('/organize/<hash_val>', methods=['POST'])
