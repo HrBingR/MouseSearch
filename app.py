@@ -120,8 +120,8 @@ FALLBACK_CONFIG = {
     "METADATA_FILE": "/app/data/metadata.json",
     "IP_STATE_FILE": "/app/data/ip_state.json", 
     "CONFIG_FILE": "/app/data/config.json",
-    "ORGANIZED_PATH": "/app/data/organized",
-    "QB_PATH": "/app/data/organized",
+    "ORGANIZED_PATH": "/downloads/organized",
+    "QB_PATH": "/downloads/torrents/organize-these/audiobooks",
     "AUTO_ORGANIZE": False,
 }
 
@@ -132,8 +132,8 @@ QB_PATH = os.getenv("QB_PATH", FALLBACK_CONFIG["QB_PATH"])
 IP_STATE_FILE = os.getenv("IP_STATE_FILE", FALLBACK_CONFIG["IP_STATE_FILE"])
 CONFIG_FILE = os.getenv("CONFIG_FILE", FALLBACK_CONFIG["CONFIG_FILE"])
 
-ORGANIZED_PATH = Path(os.getenv("ORGANIZED_PATH", "./data/organized")).resolve()
-QB_PATH = Path(os.getenv("QB_PATH", "./data/organized")).resolve()
+ORGANIZED_PATH = Path(os.getenv("ORGANIZED_PATH", "/downloads/organized")).resolve()
+QB_PATH = Path(os.getenv("QB_PATH", "/downloads/torrents/organize-these/audiobooks")).resolve()
 
 def load_config():
     config = FALLBACK_CONFIG.copy()
@@ -508,7 +508,52 @@ async def qb_torrent_info(hash_val):
         app.logger.error(f"Failed to fetch torrent info for hash {hash_val}: {e}")
         return jsonify({'error': f'Failed to fetch torrent info: {e}'}), 503
     except json.JSONDecodeError as e:
-        app.logger.error(f"Failed to decode qBittorrent info response for hash {hash_val}: {e}. Response text: {response.text}")
+        app.logger.error(f"Failed to decode qBittorrent info response for hash {hash_val}: {e}")
+        return jsonify({'error': 'Failed to decode response from qBittorrent'}), 500
+
+@app.route('/qb/info/batch', methods=['POST'])
+async def qb_torrent_info_batch():
+    """
+    Batch endpoint for getting torrent info for multiple hashes at once.
+    Accepts: {"hashes": ["hash1", "hash2", ...]}
+    Returns: {"torrents": [{torrent1_data}, {torrent2_data}, ...]}
+    """
+    data = await request.get_json()
+    hash_list = data.get('hashes', [])
+    
+    if not hash_list:
+        return jsonify({'torrents': []})
+    
+    app.logger.info(f"Batch request received for {len(hash_list)} torrent(s)")
+    
+    if 'qb_session' not in session and not await login_qbittorrent():
+        app.logger.error("Failed to get batch torrent info: Not connected to qBittorrent.")
+        return jsonify({'error': 'Not connected to qBittorrent'}), 401
+    
+    try:
+        # Join hashes with pipe separator as per qBittorrent API spec
+        hashes_param = '|'.join(hash_list)
+        
+        async with httpx.AsyncClient(cookies=session['qb_session']) as client:
+            response = await client.get(
+                f"{app.config['QB_URL']}/api/v2/torrents/info",
+                params={'hashes': hashes_param},
+                headers=app.config.get("BASE_HEADERS", {})
+            )
+            response.raise_for_status()
+            
+            torrent_list = response.json()
+            app.logger.debug(f"Received batch info for {len(torrent_list)} torrent(s)")
+            
+            # Return the list of torrents indexed by hash for easy lookup
+            torrents_by_hash = {t['hash']: t for t in torrent_list}
+            return jsonify({'torrents': torrents_by_hash})
+        
+    except RequestError as e:
+        app.logger.error(f"Failed to fetch batch torrent info: {e}")
+        return jsonify({'error': f'Failed to fetch batch torrent info: {e}'}), 503
+    except json.JSONDecodeError as e:
+        app.logger.error(f"Failed to decode qBittorrent batch info response: {e}")
         return jsonify({'error': 'Failed to decode response from qBittorrent'}), 500
 
 @app.route('/calculate_hash', methods=['POST'])

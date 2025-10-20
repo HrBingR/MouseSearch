@@ -19,8 +19,14 @@ function showToast(message, type = 'primary') {
 const greenCheckIcon = `<img src="/static/icons/check_circle.svg" alt="connected" style="height: 16px; width: 16px;">`;
 const redXIcon = `<img src="/static/icons/x_circle.svg" alt="not connected" style="height: 16px; width: 16px;">`;
 
+// Legacy: kept for backward compatibility if needed
 const pollingIntervals = {};
 const torrentHashMap = {};
+
+// New batch polling system
+const activeHashes = new Set();
+const hashToElementMap = new Map(); // Maps hash -> resultItem element
+let batchPollingInterval = null;
 
 async function getTorrentHash(torrentId, torrentUrl) {
     // 1. Check the cache using the STABLE torrent ID
@@ -54,6 +60,173 @@ async function getTorrentHash(torrentId, torrentUrl) {
     return null;
 }
 
+/**
+ * Performs a single batch poll of all active torrents.
+ */
+async function performBatchPoll() {
+    if (activeHashes.size === 0) {
+        console.log('[BATCH-POLL] No active hashes, stopping batch polling');
+        stopBatchPolling();
+        return;
+    }
+    
+    const hashArray = Array.from(activeHashes);
+    console.log(`[BATCH-POLL] Polling ${hashArray.length} torrent(s)`);
+    
+    try {
+        const response = await fetch('/qb/info/batch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ hashes: hashArray })
+        });
+        
+        if (!response.ok) {
+            console.error(`[BATCH-POLL] HTTP error! status: ${response.status}`);
+            return;
+        }
+        
+        const data = await response.json();
+        
+        if (data.error) {
+            console.error('[BATCH-POLL] Error from server:', data.error);
+            return;
+        }
+        
+        const torrents = data.torrents || {};
+        
+        // Update UI for each active hash
+        for (const hash of hashArray) {
+            const resultItem = hashToElementMap.get(hash);
+            if (!resultItem) {
+                console.warn(`[BATCH-POLL] No result item found for hash ${hash}`);
+                continue;
+            }
+            
+            const torrentData = torrents[hash];
+            if (!torrentData) {
+                // Torrent not found in qBittorrent
+                const statusContainer = resultItem.querySelector('.torrent-status-container');
+                if (statusContainer) {
+                    statusContainer.innerHTML = `<span class="badge bg-danger text-wrap">Torrent not found in qBittorrent</span>`;
+                }
+                removeHashFromPolling(hash);
+                continue;
+            }
+            
+            updateTorrentUI(hash, torrentData, resultItem);
+        }
+        
+    } catch (error) {
+        console.error('[BATCH-POLL] Polling error:', error);
+    }
+}
+
+/**
+ * Starts the global batch polling interval if not already running.
+ * Makes an immediate poll before starting the interval.
+ */
+function startBatchPolling() {
+    if (batchPollingInterval !== null) {
+        console.log('[BATCH-POLL] Batch polling already running');
+        return;
+    }
+    
+    console.log('[BATCH-POLL] Starting batch polling interval');
+    
+    // Make immediate poll before starting interval
+    performBatchPoll();
+    
+    // Then start the interval
+    batchPollingInterval = setInterval(performBatchPoll, 2000);
+}
+
+/**
+ * Stops the global batch polling interval.
+ */
+function stopBatchPolling() {
+    if (batchPollingInterval !== null) {
+        console.log('[BATCH-POLL] Stopping batch polling interval');
+        clearInterval(batchPollingInterval);
+        batchPollingInterval = null;
+    }
+}
+
+/**
+ * Adds a hash to the active polling list.
+ */
+function addHashToPolling(hash, resultItem) {
+    console.log(`[BATCH-POLL] Adding hash ${hash} to active polling`);
+    activeHashes.add(hash);
+    hashToElementMap.set(hash, resultItem);
+    startBatchPolling();
+}
+
+/**
+ * Removes a hash from the active polling list.
+ */
+function removeHashFromPolling(hash) {
+    console.log(`[BATCH-POLL] Removing hash ${hash} from active polling`);
+    activeHashes.delete(hash);
+    hashToElementMap.delete(hash);
+    if (activeHashes.size === 0) {
+        stopBatchPolling();
+    }
+}
+
+/**
+ * Updates the UI for a specific torrent based on its data.
+ */
+function updateTorrentUI(hash, data, resultItem) {
+    const statusContainer = resultItem.querySelector('.torrent-status-container');
+    if (!statusContainer) {
+        console.error(`[BATCH-POLL] Could not find status container for hash ${hash}`);
+        return;
+    }
+    
+    const state = data.state || 'unknown';
+    const progress = ((data.progress || 0) * 100).toFixed(0);
+    let badgeType;
+    let simplifiedState = 'Unknown';
+    
+    // Simplified state mapping
+    if (['error', 'missingFiles'].includes(state)) {
+        simplifiedState = 'Error';
+        badgeType = 'danger';
+    } else if (['uploading', 'stalledUP', 'checkingUP', 'forcedUP', 'pausedUP'].includes(state)) {
+        simplifiedState = 'Seeding';
+        badgeType = 'success';
+    } else if (['downloading', 'metaDL', 'stalledDL', 'checkingDL', 'forcedDL', 'allocating', 'moving', 'checkingResumeData'].includes(state)) {
+        simplifiedState = 'Downloading';
+        badgeType = 'primary';
+    } else if (['pausedDL'].includes(state)) {
+        simplifiedState = 'Paused';
+        badgeType = 'secondary';
+    } else if (['queuedUP', 'queuedDL'].includes(state)) {
+        simplifiedState = 'Queued';
+        badgeType = 'info';
+    }
+    
+    const statusHtml = `
+        <div class="small lh-sm">
+            <div class="d-flex align-items-center">Status: <div class="badge bg-${badgeType} m-1"><b>${simplifiedState}</b></div></div>
+            <div class="d-flex align-items-center">Downloaded: <div class="badge bg-${badgeType} m-1"><b>${progress}%</b></div></div>
+        </div>
+    `;
+    statusContainer.innerHTML = statusHtml;
+    
+    // Stop polling on terminal states
+    const terminalStates = ['error', 'missingFiles', 'uploading', 'pausedUP', 'stalledUP', 'forcedUP', 'pausedDL'];
+    if (terminalStates.includes(state)) {
+        console.log(`[BATCH-POLL] Stopping poll for hash ${hash} because its state is terminal: ${state}`);
+        removeHashFromPolling(hash);
+    }
+}
+
+/**
+ * Initiates polling for a torrent by adding it to the batch polling system.
+ * @param {string} hash - The torrent hash
+ * @param {HTMLElement} resultItem - The DOM element for this result item
+ */
 function pollTorrentStatus(hash, resultItem) {
     const statusContainer = resultItem.querySelector('.torrent-status-container');
     if (!statusContainer) {
@@ -61,83 +234,10 @@ function pollTorrentStatus(hash, resultItem) {
         return;
     }
 
-    if (pollingIntervals[hash]) {
-        console.log(`[POLL] Polling already active for hash ${hash}. Clearing old interval.`);
-        clearInterval(pollingIntervals[hash]);
-    }
-
     console.log(`[POLL] Starting to poll status for hash: ${hash}`);
-
-    const intervalId = setInterval(() => {
-        fetch(`/qb/info/${hash}`)
-            .then(response => {
-                if (response.status === 404) {
-                    console.log(`[POLL] Torrent with hash ${hash} not found in qBittorrent (404).`);
-                    return { error: 'Torrent not found in qBittorrent' };
-                }
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-                return response.json();
-            })
-            .then(data => {
-                console.log(`[POLL] Received data for hash ${hash}:`, data);
-
-                if (!data || data.error) {
-                    statusContainer.innerHTML = `<span class="badge bg-danger text-wrap">${data.error || 'Torrent not found in qBittorrent'}</span>`;
-                    console.log(`[POLL] Stopping poll for hash ${hash} due to error or missing data.`);
-                    clearInterval(intervalId);
-                    delete pollingIntervals[hash];
-                    return;
-                }
-
-                const state = data.state || 'unknown';
-                const progress = ((data.progress || 0) * 100).toFixed(0);
-                let badgeType
-                // --- NEW: Simplified state mapping ---
-                let simplifiedState = 'Unknown';
-                if (['error', 'missingFiles'].includes(state)) {
-                    simplifiedState = 'Error';
-                    badgeType = 'danger';
-                } else if (['uploading', 'stalledUP', 'checkingUP', 'forcedUP', 'pausedUP'].includes(state)) {
-                    simplifiedState = 'Seeding';
-                    badgeType = 'success';
-                } else if (['downloading', 'metaDL', 'stalledDL', 'checkingDL', 'forcedDL', 'allocating', 'moving', 'checkingResumeData'].includes(state)) {
-                    simplifiedState = 'Downloading';
-                    badgeType = 'primary';
-                } else if (['pausedDL'].includes(state)) {
-                    simplifiedState = 'Paused';
-                    badgeType = 'secondary';
-                } else if (['queuedUP', 'queuedDL'].includes(state)) {
-                    simplifiedState = 'Queued';
-                    badgeType = 'info';
-                }
-
-                // --- NEW: Two-line HTML structure ---
-                const statusHtml = `
-                    <div class="small lh-sm">
-                        <div class="d-flex align-items-center">Status: <div class="badge bg-${badgeType} m-1"><b>${simplifiedState}</b></div></div>
-                        <div class="d-flex align-items-center">Downloaded: <div class="badge bg-${badgeType} m-1"><b>${progress}%</b></div></div>
-                    </div>
-                `;
-                statusContainer.innerHTML = statusHtml;
-
-                // Stop polling on terminal states (using original state for accuracy)
-                const terminalStates = ['error', 'missingFiles', 'uploading', 'pausedUP', 'stalledUP', 'forcedUP', 'pausedDL'];
-                if (terminalStates.includes(state)) {
-                    console.log(`[POLL] Stopping poll for hash ${hash} because its state is terminal: ${state}`);
-                    clearInterval(intervalId);
-                    delete pollingIntervals[hash];
-                }
-            })
-            .catch(error => {
-                console.error(`[POLL] Polling error for hash ${hash}:`, error);
-                statusContainer.innerHTML = `<span class="text-danger small">Polling error</span>`;
-                clearInterval(intervalId);
-                delete pollingIntervals[hash];
-            });
-    }, 2000);
-    pollingIntervals[hash] = intervalId;
+    
+    // Add to batch polling system
+    addHashToPolling(hash, resultItem);
 }
 
 /**
@@ -307,11 +407,10 @@ document.addEventListener("DOMContentLoaded", function () {
         }
 
         // Clear all existing polling intervals before a new search
-        console.log("[SEARCH] New search submitted. Clearing all active polling intervals.");
-        for (const hash in pollingIntervals) {
-            clearInterval(pollingIntervals[hash]);
-            delete pollingIntervals[hash];
-        }
+        console.log("[SEARCH] New search submitted. Clearing all active polling.");
+        stopBatchPolling();
+        activeHashes.clear();
+        hashToElementMap.clear();
 
         const queryParams = new URLSearchParams(new FormData(searchForm)).toString();
 
