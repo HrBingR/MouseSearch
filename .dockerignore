@@ -8,3 +8,4 @@ pip-selfcheck.json
 .pytest_cache/
 .env
 config.json
+data/
