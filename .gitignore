@@ -2,6 +2,8 @@
 .DS_Store
 reloadService.sh
 
+# GitHub directory
+.github/
 
 # Custom
 buildImage.sh
