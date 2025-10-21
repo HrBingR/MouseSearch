@@ -154,6 +154,16 @@ def save_config(config):
     with open(CONFIG_FILE, "w") as f:
         json.dump(config_to_save, f, indent=4)
 
+def initialize_config():
+    """Initialize config.json if it doesn't exist by merging env vars with fallback config."""
+    if not CONFIG_FILE.exists():
+        initial_config = load_config()
+        save_config(initial_config)
+        print(f"Initialized {CONFIG_FILE} with default configuration.")
+
+# Initialize config.json on startup
+initialize_config()
+
 async def load_new_app_config():
     """Reload config from files and environment."""
     new_config = load_config()
