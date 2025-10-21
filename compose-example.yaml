@@ -11,15 +11,13 @@ services:
 
  # Recommended File Structure (if using auto-organize)
 
- #                       downloads
- #                       ├── organized
- #                       │   ├── audiobooks
- #                       │   └── ebooks
- #                       └── torrents
- #                           ├── dont-organize-these
- #                           └── organize-these
- #                               ├── audiobooks
- #                               └── ebooks
+#       downloads
+#       ├── organized
+#       │   ├── audiobooks
+#       │   └── ebooks
+#       └── torrents
+#           ├── audiobooks
+#           └── ebooks
 
 
 

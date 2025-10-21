@@ -103,7 +103,7 @@ load_dotenv()
 
 # Define fallback values
 FALLBACK_CONFIG = {
-    "FLASK_SECRET_KEY": os.urandom(24).hex(),
+    "QUART_SECRET_KEY": os.urandom(24).hex(),
     "MAM_API_URL": "https://www.myanonamouse.net",
     "QB_URL": "http://localhost:8080",
     "QB_CATEGORY": "",
@@ -169,7 +169,7 @@ async def load_new_app_config():
     new_config = load_config()
 
     # Continue loading config into the app
-    app.secret_key = new_config["FLASK_SECRET_KEY"]
+    app.secret_key = new_config["QUART_SECRET_KEY"]
     app.config.update(new_config)
     
     app.config["BASE_HEADERS"] = {
@@ -183,7 +183,7 @@ async def load_new_app_config():
 
 # Load initial config synchronously
 initial_config = load_config()
-app.secret_key = initial_config["FLASK_SECRET_KEY"]
+app.secret_key = initial_config["QUART_SECRET_KEY"]
 app.config.update(initial_config)
 app.config["BASE_HEADERS"] = {
     "CF-Access-Client-Id": initial_config.get("CF_ACCESS_CLIENT_ID"),
