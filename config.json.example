@@ -1,0 +1,16 @@
+{
+    "FLASK_SECRET_KEY": "a-very-secret-key",
+    "MAM_API_URL": "https://www.myanonamouse.net",
+    "QB_URL": "http://qbittorrent:6767",
+    "QB_CATEGORY": "your-default-qb-category",
+    "QB_USERNAME": "your-qb-username",
+    "QB_PASSWORD": "your-qb-password",
+    "MAM_ID": "your-mam-cookie-uid",
+    "MAM_UID": "your-mam-user-id",
+    "METADATA_FILE": "./data/metadata.json",
+    "IP_STATE_FILE": "./data/ip_state.json",
+    "CONFIG_FILE": "./data/config.json",
+    "ORGANIZED_PATH": "/downloads/organized",
+    "QB_PATH": "/downloads/torrents/",
+    "AUTO_ORGANIZE": false
+}
