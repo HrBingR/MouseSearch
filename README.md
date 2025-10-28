@@ -51,11 +51,6 @@ Open the `.env` file you just created and fill in the details.
 | Variable | Required | Description |
 | :--- | :--- | :--- |
 | `FLASK_SECRET_KEY` | **Yes** | A long, random string for session security. You can generate one with `openssl rand -hex 32` (or just smash on the keyboard a bit) |
-
-
-
-asdfkasefasdfs
-
 | `MAM_ID` | **Yes** | Your `mam_id` cookie value from [MyAnonamouse](https://www.myanonamouse.net/preferences/index.php?view=security). |
 | `QB_URL` | **Yes** | The full URL to your qBittorrent WebUI (e.g., `http://192.168.1.10:8080` or `http://qbittorrent:6767` if on the same Docker network). |
 | `QB_USERNAME` | **Yes** | Your qBittorrent username. |
@@ -79,7 +74,7 @@ Your `compose.yaml` file tells Docker how to run the app and, most importantly, 
 
 Here is a recommended `compose.yaml`:
 
-'''yaml
+```yaml
 services:
   mousesearch:
     build: .
@@ -109,15 +104,15 @@ services:
     # Optional: Set the container's timezone to match your host
     environment:
       - TZ=America/New_York
-'''
+```
 
 ### 5. Run the Application
 
 With your `.env` and `compose.yaml` files configured, start the application:
 
-'''bash
+```bash
 docker compose up -d
-'''
+```
 
 The application will be available at `http://<your-server-ip>:5000`.
 
