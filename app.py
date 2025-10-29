@@ -848,7 +848,10 @@ if app.config.get("AUTO_ORGANIZE_ON_ADD") or app.config.get("AUTO_ORGANIZE_ON_SC
 
                 for source_file in source_files:
                     if source_file.is_file() and source_file.suffix.lower() in audio_extensions:
-                        dest_file = dest_path / source_file.name
+                        # Preserve the original torrent folder structure
+                        relative_path = source_file.relative_to(content_path)
+                        dest_file = dest_path / relative_path
+                        dest_file.parent.mkdir(parents=True, exist_ok=True)
                         
                         if dest_file.exists():
                             # Count existing files separately
