@@ -57,6 +57,8 @@ Open the `.env` file you just created and fill in the details.
 | `QB_PASSWORD` | **Yes** | Your qBittorrent password. |
 | `QB_CATEGORY` | No | (Optional) A default category to assign to downloads (e.g., `audiobooks`). |
 | `DATA_PATH` | No | Directory path for storing app data files (config.json, metadata.json, ip_state.json). Defaults to `./data`. |
+| `ENABLE_DYNAMIC_IP_UPDATE` | No | Set to `true` to enable automatic IP checking and updating of MAM's "Dynamic Seedbox IP" setting. Defaults to `false`. |
+| `DYNAMIC_IP_UPDATE_INTERVAL_HOURS` | No | Number of hours between automatic IP checks (only applies if `ENABLE_DYNAMIC_IP_UPDATE` is `true`). Defaults to `3`. |
 | `AUTO_ORGANIZE_ON_ADD` | No | Set to `true` to enable auto-organization when torrents are added. Defaults to `false`. |
 | `AUTO_ORGANIZE_ON_SCHEDULE` | No | Set to `true` to enable scheduled auto-organization (runs every hour). Defaults to `false`. |
 | `ORGANIZED_PATH` | If auto-organization is enabled | The *container* path for your organized library (e.g., `/downloads/organized/audiobooks`). |

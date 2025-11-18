@@ -117,6 +117,8 @@ FALLBACK_CONFIG = {
     "QB_PATH": "/downloads/torrents/organize-these/audiobooks",
     "AUTO_ORGANIZE_ON_ADD": False,
     "AUTO_ORGANIZE_ON_SCHEDULE": False,
+    "ENABLE_DYNAMIC_IP_UPDATE": False,
+    "DYNAMIC_IP_UPDATE_INTERVAL_HOURS": 3
 }
 
 # Set up data directory and paths
@@ -278,10 +280,15 @@ async def check_and_update_ip():
         app.logger.info(f"IP address has changed from {last_ip} to {current_ip}. Updating dynamic seedbox IP.")
         await force_update_ip()
 
-# Schedule the IP check to run every 3 hours and 5 seconds after startup
-scheduler.add_job(check_and_update_ip, 'interval', hours=3, id='ip_check_job', replace_existing=True)
-scheduler.add_job(check_and_update_ip, 'date', run_date=datetime.now() + timedelta(seconds=5), id='initial_ip_check_job')
-
+if app.config.get("ENABLE_DYNAMIC_IP_UPDATE"):
+    interval_hours = app.config.get("DYNAMIC_IP_UPDATE_INTERVAL_HOURS", 3)
+    # Schedule the IP check to run at the configured interval and 5 seconds after startup
+    scheduler.add_job(check_and_update_ip, 'interval', hours=interval_hours, id='ip_check_job', replace_existing=True)
+    scheduler.add_job(check_and_update_ip, 'date', run_date=datetime.now() + timedelta(seconds=5), id='initial_ip_check_job')
+    app.logger.info(f"Dynamic IP Update enabled with interval of {interval_hours} hours")
+else:
+    app.logger.info("Dynamic IP Update disabled by config.")
+    
 # --- SESSION AND API HELPERS ---
 QB_SESSION = None
 
@@ -769,15 +776,17 @@ async def update_settings():
     save_config(config_to_update)
     await load_new_app_config()
 
-    # Manually trigger a forced IP update after saving new credentials.
-    job_id = 'manual_ip_update_job'
-    run_time = datetime.now() + timedelta(seconds=2) # Run 2 seconds after the request finishes
-    if scheduler.get_job(job_id):
-        scheduler.reschedule_job(job_id, trigger='date', run_date=run_time)
+    if app.config.get("ENABLE_DYNAMIC_IP_UPDATE"):
+        # Manually trigger a forced IP update after saving new credentials.
+        job_id = 'manual_ip_update_job'
+        run_time = datetime.now() + timedelta(seconds=2) # Run 2 seconds after the request finishes
+        if scheduler.get_job(job_id):
+            scheduler.reschedule_job(job_id, trigger='date', run_date=run_time)
+        else:
+            scheduler.add_job(id=job_id, func=force_update_ip, trigger='date', run_date=run_time)
     else:
-        scheduler.add_job(id=job_id, func=force_update_ip, trigger='date', run_date=run_time)
-    
-    return jsonify({"status": "success", "message": "Settings updated! A manual IP update has been triggered."})
+        app.logger.info("Dynamic IP Update disabled by config.")
+    return jsonify({"status": "success", "message": "Settings updated!"})
 
 if app.config.get("AUTO_ORGANIZE_ON_ADD") or app.config.get("AUTO_ORGANIZE_ON_SCHEDULE"):
     app.logger.info("Auto-organization is enabled. Registering webhook and/or scheduled job.")
