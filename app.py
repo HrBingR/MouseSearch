@@ -135,24 +135,23 @@ METADATA_FILE = DATA_PATH / "metadata.json"
 IP_STATE_FILE = DATA_PATH / "ip_state.json"
 
 def load_config():
+    # 1. Start with hardcoded defaults
     config = FALLBACK_CONFIG.copy()
-    env_config = {key: os.getenv(key) for key in config.keys()}
-    env_config_filtered = {k: v for k, v in env_config.items() if v is not None}
-    config.update(env_config_filtered)
     
-    # Handle new configuration options
-    auto_organize_on_add_str = str(config.get("AUTO_ORGANIZE_ON_ADD", "false")).lower()
-    config["AUTO_ORGANIZE_ON_ADD"] = auto_organize_on_add_str in ['true', '1', 'yes', 'on']
-    
-    auto_organize_on_schedule_str = str(config.get("AUTO_ORGANIZE_ON_SCHEDULE", "false")).lower()
-    config["AUTO_ORGANIZE_ON_SCHEDULE"] = auto_organize_on_schedule_str in ['true', '1', 'yes', 'on']
-    
+    # 2. Load config.json (User GUI settings) - HIGHEST PRIORITY for runtime changes
+    json_config = {}
     if os.path.exists(CONFIG_FILE):
         with open(CONFIG_FILE, "r") as f:
-            try:
-                config.update(json.load(f))
-            except json.JSONDecodeError:
-                app.logger.warning(f"Could not decode {CONFIG_FILE}.")
+             json_config = json.load(f)
+
+    # 3. Load Env Vars (Docker/System) - Only use if NOT in json_config
+    # This allows Env vars to set initial values, but GUI changes (json) to persist
+    env_config = {key: os.getenv(key) for key in config.keys() if os.getenv(key) is not None}
+    
+    # Merge: Defaults <- Env <- JSON
+    config.update(env_config) 
+    config.update(json_config) 
+    
     return config
 
 def save_config(config):

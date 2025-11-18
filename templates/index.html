@@ -390,7 +390,7 @@
             required />
         </div>
         <div class="mb-3">
-          <label for="QB_CATEGORY class=" form-label">Default category</label>
+          <label for="QB_CATEGORY" class="form-label">Default category</label>
           <input type="text" class="form-control" id="QB_CATEGORY" name="QB_CATEGORY" value="{{ QB_CATEGORY }}" />
         </div>
 
@@ -398,6 +398,48 @@
         <div class="mb-3">
           <label for="MAM_ID" class="form-label">MAM ID</label>
           <input type="text" class="form-control" id="MAM_ID" name="MAM_ID" value="{{ MAM_ID }}" required />
+        </div>
+
+        <h5 class="text-center border-bottom pb-2 mt-3">Automation</h5>
+
+        <div class="form-check form-switch mb-2">
+          <input class="form-check-input" type="checkbox" id="ENABLE_DYNAMIC_IP_UPDATE" name="ENABLE_DYNAMIC_IP_UPDATE" 
+          {% if ENABLE_DYNAMIC_IP_UPDATE %}checked{% endif %}>
+          <label class="form-check-label" for="ENABLE_DYNAMIC_IP_UPDATE">Update MAM Dynamic Seedbox IP</label>
+        </div>
+
+        <div class="mb-3">
+          <label for="DYNAMIC_IP_UPDATE_INTERVAL_HOURS" class="form-label small">
+            IP Update Interval (hours)
+          </label>
+          <input
+            type="number"
+            class="form-control form-control-sm"
+            id="DYNAMIC_IP_UPDATE_INTERVAL_HOURS"
+            name="DYNAMIC_IP_UPDATE_INTERVAL_HOURS"
+            min="1"
+            value="{{ DYNAMIC_IP_UPDATE_INTERVAL_HOURS }}"
+          >
+          <div class="form-text small">
+            How often to check for public IP changes when dynamic update is enabled.
+          </div>
+        </div>
+
+        <div class="form-check form-switch">
+          <input class="form-check-input" type="checkbox" id="AUTO_ORGANIZE_ON_ADD" name="AUTO_ORGANIZE_ON_ADD" 
+          {% if AUTO_ORGANIZE_ON_ADD %}checked{% endif %}>
+          <label class="form-check-label" for="AUTO_ORGANIZE_ON_ADD">Auto-Organize on Download</label>
+        </div>
+
+        <div class="form-check form-switch mb-3">
+          <input class="form-check-input" type="checkbox" id="AUTO_ORGANIZE_ON_SCHEDULE" name="AUTO_ORGANIZE_ON_SCHEDULE" 
+          {% if AUTO_ORGANIZE_ON_SCHEDULE %}checked{% endif %}>
+          <label class="form-check-label" for="AUTO_ORGANIZE_ON_SCHEDULE">Scheduled Re-Scan (Every Hour)</label>
+        </div>
+
+        <div class="mb-3">
+          <label for="ORGANIZED_PATH" class="form-label small">Organization Dest Path (Container)</label>
+          <input type="text" class="form-control form-control-sm" id="ORGANIZED_PATH" name="ORGANIZED_PATH" value="{{ ORGANIZED_PATH }}">
         </div>
 
         <button type="button" class="btn btn-primary" id="save-settings-button">Save Settings</button>
