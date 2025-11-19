@@ -160,6 +160,14 @@ def initialize_config():
         initial_config = load_config()
         save_config(initial_config)
         print(f"Initialized {CONFIG_FILE} with default configuration.")
+    else:
+        # Check if QUART_SECRET_KEY is missing and needs to be generated
+        existing_config = load_config()
+        if not existing_config.get("QUART_SECRET_KEY") or existing_config.get("QUART_SECRET_KEY") == "":
+            # Generate a new secret key and save it
+            existing_config["QUART_SECRET_KEY"] = os.urandom(24).hex()
+            save_config(existing_config)
+            print(f"Generated and saved new QUART_SECRET_KEY to {CONFIG_FILE}.")
 
 initialize_config()
 

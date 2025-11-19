@@ -465,7 +465,13 @@
           <input type="text" class="form-control form-control-sm" id="ORGANIZED_PATH" name="ORGANIZED_PATH" value="{{ ORGANIZED_PATH }}">
         </div>
 
+        <div class="mb-3">
+          <label for="TORRENT_DOWNLOAD_PATH" class="form-label small">Torrent Download Path</label>
+          <input type="text" class="form-control form-control-sm" id="TORRENT_DOWNLOAD_PATH" name="TORRENT_DOWNLOAD_PATH" value="{{ TORRENT_DOWNLOAD_PATH }}">
+        </div>
+
         <button type="button" class="btn btn-primary" id="save-settings-button">Save Settings</button>
+        <p class="form-text text-muted small mt-2">Note: GUI settings override Docker Environment variables.</p>
       </form>
       <div id="response-message-settings" class="mt-3"></div>
     </div>
