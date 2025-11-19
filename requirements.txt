@@ -1,6 +1,6 @@
-Quart>=0.19.0
-httpx>=0.27.0
-python-dotenv>=0.15.0
-APScheduler>=3.10.0
-bencodepy
-hypercorn
+APScheduler==3.11.0
+bencodepy==0.9.5
+httpx==0.28.1
+Hypercorn==0.17.3
+python-dotenv==1.2.1
+Quart==0.20.0
