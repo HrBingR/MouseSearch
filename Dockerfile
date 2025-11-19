@@ -22,6 +22,9 @@ EXPOSE 5000
 ENV ADDRESS=0.0.0.0
 ENV PORT=5000
 
+# Force Docker to use root /data instead of relative ./data
+ENV DATA_PATH=/data
+
 CMD exec hypercorn --bind ${ADDRESS}:${PORT} \
      --workers 1 \
      --worker-class asyncio \
