@@ -4,6 +4,7 @@ import httpx
 import json
 import argparse
 import os
+import time
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from httpx import RequestError, Limits, Timeout, AsyncHTTPTransport
@@ -24,29 +25,41 @@ import asyncio
 
 from clients import get_torrent_client
 
-
-        
-
 # --- SCHEDULER AND STATE SETUP ---
 app = Quart(__name__)
 
 UPSTREAM_CLIENT: httpx.AsyncClient | None = None
 
+# --- Monitoring & Caching Globals ---
+monitoring_state = {} 
+monitor_task = None
+torrent_status_cache = {}
+CACHE_TTL = 2.0 
+
 @app.before_serving
 async def startup():
     await load_new_app_config()
-    # Start scheduler...
     if not scheduler.running:
         scheduler.start()
         app.logger.info("AsyncIOScheduler started")
 
-    # ---- Create a single shared httpx client ----
     global UPSTREAM_CLIENT
     transport = AsyncHTTPTransport(http2=True, retries=2)
     limits = Limits(max_connections=200, max_keepalive_connections=50, keepalive_expiry=120.0)
     timeout = Timeout(connect=5.0, read=15.0, write=15.0, pool=None)
     UPSTREAM_CLIENT = httpx.AsyncClient(transport=transport, limits=limits, timeout=timeout)
     app.logger.info("Shared httpx AsyncClient initialized")
+    
+    # --- Initialize Active Monitoring on Startup ---
+    metadata = load_metadata()
+    unorganized = [h for h, m in metadata.items() if not m.get('organized', False)]
+    if unorganized:
+        app.logger.info(f"Startup: Found {len(unorganized)} unorganized torrents. Starting active monitoring.")
+        current_time = time.time()
+        for h in unorganized:
+            monitoring_state[h] = {"added_at": current_time - 20} 
+        start_monitoring_loop()
+
 
 @app.after_serving
 async def shutdown():
@@ -54,52 +67,41 @@ async def shutdown():
         scheduler.shutdown()
         app.logger.info("AsyncIOScheduler shutdown")
 
-    # ---- Close the shared client ----
     global UPSTREAM_CLIENT
     if UPSTREAM_CLIENT is not None:
         await UPSTREAM_CLIENT.aclose()
         UPSTREAM_CLIENT = None
         app.logger.info("Shared httpx AsyncClient closed")
-        
-        
-        
-# Configure logging to stderr so it shows up in Hypercorn output
+    
+    global monitor_task
+    if monitor_task:
+        monitor_task.cancel()
+
+
+# --- LOGGING CONFIGURATION (NOISY LIBS SILENCED) ---
+# Configure root logger
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,
     format='[%(asctime)s] [%(name)s] [%(levelname)s] %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S',
     stream=sys.stderr
 )
 
+# Silence noisy libraries
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("hpack").setLevel(logging.WARNING)
+logging.getLogger("apscheduler").setLevel(logging.WARNING)
+logging.getLogger("tzlocal").setLevel(logging.WARNING)
+
 if __name__ != '__main__':
-    # Hypercorn logging setup (similar to gunicorn)
     logger = logging.getLogger('hypercorn.error')
     app.logger.handlers = logger.handlers
-    app.logger.setLevel(logging.INFO)
+    app.logger.setLevel(logging.DEBUG)
 else:
-    # When running directly, also log to stderr
-    app.logger.setLevel(logging.INFO)
+    app.logger.setLevel(logging.DEBUG)
 
-# Initialize AsyncIO scheduler for Quart (but don't start it yet)
 scheduler = AsyncIOScheduler()
-
-@app.before_serving
-async def startup():
-    """Start the scheduler and load config when the app starts serving requests."""
-    # Load config
-    await load_new_app_config()
-    
-    # Start the scheduler
-    if not scheduler.running:
-        scheduler.start()
-        app.logger.info("AsyncIOScheduler started")
-
-@app.after_serving
-async def shutdown():
-    """Shutdown the scheduler when the app stops serving."""
-    if scheduler.running:
-        scheduler.shutdown()
-        app.logger.info("AsyncIOScheduler shutdown")
 
 load_dotenv()
 
@@ -107,7 +109,6 @@ load_dotenv()
 FALLBACK_CONFIG = {
     "QUART_SECRET_KEY": os.urandom(24).hex(),
     "MAM_API_URL": "https://www.myanonamouse.net",
-    # New generic torrent client settings
     "TORRENT_CLIENT_TYPE": "qbittorrent",
     "TORRENT_CLIENT_URL": "http://localhost:8080",
     "TORRENT_CLIENT_USERNAME": "admin",
@@ -131,55 +132,39 @@ DATA_PATH = Path(os.getenv("DATA_PATH", FALLBACK_CONFIG["DATA_PATH"])).resolve()
 ORGANIZED_PATH = Path(os.getenv("ORGANIZED_PATH", FALLBACK_CONFIG["ORGANIZED_PATH"])).resolve()
 TORRENT_DOWNLOAD_PATH = Path(os.getenv("TORRENT_DOWNLOAD_PATH", FALLBACK_CONFIG["TORRENT_DOWNLOAD_PATH"])).resolve()
 
-# Create data directory if it doesn't exist
 DATA_PATH.mkdir(parents=True, exist_ok=True)
 
-# Define JSON file paths within DATA_PATH
 CONFIG_FILE = DATA_PATH / "config.json"
 METADATA_FILE = DATA_PATH / "metadata.json"
 IP_STATE_FILE = DATA_PATH / "ip_state.json"
 
 def load_config():
-    # 1. Start with hardcoded defaults
     config = FALLBACK_CONFIG.copy()
-    
-    # 2. Load config.json (User GUI settings) - HIGHEST PRIORITY for runtime changes
     json_config = {}
     if os.path.exists(CONFIG_FILE):
         with open(CONFIG_FILE, "r") as f:
              json_config = json.load(f)
 
-    # 3. Load Env Vars (Docker/System) - Only use if NOT in json_config
-    # This allows Env vars to set initial values, but GUI changes (json) to persist
     env_config = {key: os.getenv(key) for key in config.keys() if os.getenv(key) is not None}
-    
-    # Merge: Defaults <- Env <- JSON
     config.update(env_config) 
     config.update(json_config) 
-    
     return config
 
 def save_config(config):
-    # Ensure only known keys are saved to prevent complex objects from being written
     config_to_save = {key: config.get(key) for key in FALLBACK_CONFIG.keys()}
     with open(CONFIG_FILE, "w") as f:
         json.dump(config_to_save, f, indent=4)
 
 def initialize_config():
-    """Initialize config.json if it doesn't exist by merging env vars with fallback config."""
     if not CONFIG_FILE.exists():
         initial_config = load_config()
         save_config(initial_config)
         print(f"Initialized {CONFIG_FILE} with default configuration.")
 
-# Initialize config.json on startup
 initialize_config()
 
 async def load_new_app_config():
-    """Reload config from files and environment."""
     new_config = load_config()
-
-    # Continue loading config into the app
     app.secret_key = new_config["QUART_SECRET_KEY"]
     app.config.update(new_config)
     
@@ -192,7 +177,6 @@ async def load_new_app_config():
     global mam_session_cookies
     mam_session_cookies = {"mam_id": app.config.get("MAM_ID")}
 
-    # Initialize the Torrent Client using factory pattern
     global torrent_client
     try:
         torrent_client = get_torrent_client(app.config)
@@ -201,7 +185,6 @@ async def load_new_app_config():
         app.logger.error(f"Failed to initialize torrent client: {e}")
         torrent_client = None
 
-# Load initial config synchronously
 initial_config = load_config()
 app.secret_key = initial_config["QUART_SECRET_KEY"]
 app.config.update(initial_config)
@@ -210,104 +193,203 @@ app.config["BASE_HEADERS"] = {
     "CF-Access-Client-Secret": initial_config.get("CF_ACCESS_CLIENT_SECRET"),
 }
 mam_session_cookies = {"mam_id": initial_config.get("MAM_ID")}
-
-# Initialize torrent client variable (will be set in load_new_app_config)
 torrent_client = None
 
-# --- IP STATE MANAGEMENT AND DYNAMIC IP UPDATER ---
+# --- ACTIVE MONITORING & CACHING LOGIC ---
+
+def start_monitoring_loop():
+    global monitor_task
+    if monitor_task is None or monitor_task.done():
+        monitor_task = asyncio.create_task(monitor_downloads_loop())
+        app.logger.info("Active download monitoring loop started.")
+
+async def monitor_downloads_loop():
+    app.logger.info("Entered monitoring loop.")
+    client_session_active = False
+    
+    while True:
+        if not monitoring_state:
+            if client_session_active:
+                app.logger.debug("[MONITOR] Queue empty. Going idle.")
+            client_session_active = False 
+            await asyncio.sleep(5)
+            continue
+
+        try:
+            if not torrent_client:
+                app.logger.warning("Monitor loop: Client not ready.")
+                await asyncio.sleep(5)
+                continue
+
+            # OPTIMIZED LOGIN
+            if not client_session_active:
+                try:
+                    await torrent_client.login()
+                    client_session_active = True
+                    app.logger.debug("[MONITOR] Session established with torrent client.")
+                except Exception as e:
+                    app.logger.error(f"[MONITOR] Login failed: {e}")
+                    await asyncio.sleep(5)
+                    continue
+
+            active_hashes = list(monitoring_state.keys())
+            torrents_info = {}
+            
+# FETCH DATA
+            try:
+                if hasattr(torrent_client, 'get_torrent_info_batch'):
+                    batch_res = await torrent_client.get_torrent_info_batch(active_hashes)
+                    if 'torrents' in batch_res:
+                        torrents_info = batch_res['torrents']
+                else:
+                    for h in active_hashes:
+                        info = await torrent_client.get_torrent_info(h)
+                        if info: torrents_info[h] = info
+                
+                # --- LOGGING PATCH START ---
+                if torrents_info:
+                    status_summary = []
+                    for h, info in torrents_info.items():
+                        p = info.get('progress', 0) * 100
+                        eta = info.get('eta', 8640000)
+                        # qBit uses 8640000 for "Infinity/Unknown"
+                        eta_str = f"{eta}s" if eta < 8640000 else "Unknown"
+                        status_summary.append(f"{h[:6]}..: {p:.1f}% (ETA: {eta_str})")
+                    
+                    app.logger.debug(f"[MONITOR] Polled {len(torrents_info)} item(s): {', '.join(status_summary)}")
+                # --- LOGGING PATCH END ---
+
+            except Exception as e:
+                app.logger.warning(f"[MONITOR] Fetch failed (session expired?): {e}")
+                client_session_active = False # Force re-login next loop
+                await asyncio.sleep(1)
+                continue
+
+            finished_hashes = []
+            lowest_eta = None
+            current_time = time.time()
+            high_freq_needed = False
+
+            for h, info in torrents_info.items():
+                # UPDATE CACHE
+                torrent_status_cache[h] = {
+                    "data": info,
+                    "timestamp": current_time
+                }
+
+                state = info.get('state', 'unknown')
+                progress = info.get('progress', 0)
+                
+                is_complete = state in ['uploading', 'stalledUP', 'forcedUP', 'pausedUP', 'checkingUP']
+                if progress >= 1 and state not in ['error', 'missingFiles']:
+                    is_complete = True
+
+                if is_complete:
+                    finished_hashes.append(h)
+                else:
+                    added_at = monitoring_state.get(h, {}).get('added_at', 0)
+                    if current_time - added_at < 15:
+                        high_freq_needed = True
+                    
+                    eta = info.get('eta', 8640000)
+                    if eta < 8640000: 
+                        if lowest_eta is None or eta < lowest_eta:
+                            lowest_eta = eta
+
+            for h in finished_hashes:
+                app.logger.info(f"[MONITOR] Torrent {h} finished. Triggering Auto-Organize.")
+                await _perform_organization(h)
+                if h in monitoring_state:
+                    del monitoring_state[h]
+
+            for h in active_hashes:
+                if h not in torrents_info and h not in finished_hashes:
+                    added_at = monitoring_state.get(h, {}).get('added_at', 0)
+                    if current_time - added_at > 10:
+                        app.logger.warning(f"[MONITOR] Torrent {h} disappeared. Stopping monitor.")
+                        del monitoring_state[h]
+
+            if not monitoring_state:
+                app.logger.info("[MONITOR] All tracked downloads finished.")
+                await asyncio.sleep(2) 
+                continue
+
+            if high_freq_needed:
+                sleep_time = 1
+            elif lowest_eta is not None:
+                sleep_time = max(2, int(lowest_eta / 2))
+                sleep_time = min(sleep_time, 30)
+            else:
+                sleep_time = 5
+            
+            # --- PATCH START: Log the planned sleep time ---
+            app.logger.debug(f"[MONITOR] Sleeping {sleep_time}s (ETA logic applied)")
+            # --- PATCH END ---
+            
+            await asyncio.sleep(sleep_time)
+
+        except Exception as e:
+            app.logger.error(f"[MONITOR] Error in loop: {e}")
+            client_session_active = False
+            await asyncio.sleep(5)
+
+
+# --- IP STATE MANAGEMENT ---
 
 def load_ip_state():
-    """Loads the last known IP from the state file."""
     if os.path.exists(IP_STATE_FILE):
         try:
             with open(IP_STATE_FILE, "r") as f:
                 return json.load(f).get("last_ip")
         except (json.JSONDecodeError, FileNotFoundError):
-            app.logger.warning(f"Could not read or parse {IP_STATE_FILE}.")
+            pass
     return None
 
 def save_ip_state(ip):
-    """Saves the current IP to the state file."""
     with open(IP_STATE_FILE, "w") as f:
         json.dump({"last_ip": ip}, f, indent=4)
 
 async def force_update_ip():
-    """Directly calls the MAM dynamic seedbox API to update the IP, bypassing change checks."""
     async with app.app_context():
         app.logger.info("Forcing manual IP update for dynamic seedbox.")
-
-        if not app.config.get("MAM_ID"):
-            app.logger.warning("MAM_ID not set in config. Skipping manual IP update.")
-            return
-
+        if not app.config.get("MAM_ID"): return
         api_cookies = {"mam_id": app.config.get("MAM_ID")}
-
         try:
             update_url = "https://t.myanonamouse.net/json/dynamicSeedbox.php"
             async with httpx.AsyncClient() as client:
                 update_response = await client.get(update_url, cookies=api_cookies, timeout=15)
                 update_response.raise_for_status()
                 update_data = update_response.json()
-
-                msg = update_data.get("msg")
-                success = update_data.get("Success")
-
-                if success and msg and msg.lower() in ["completed", "no change"]:
-                    app.logger.info(f"Successfully triggered dynamic seedbox IP update. API Message: '{msg}'")
-                    if new_ip := update_data.get("ip"):
-                        save_ip_state(new_ip)  # Keep state file in sync
-                else:
-                    app.logger.error(f"Failed to trigger dynamic seedbox IP update. API Message: '{msg}' (Success: {success})")
-
-        except (RequestError, json.JSONDecodeError) as e:
-            app.logger.error(f"Error calling dynamic seedbox update API during manual trigger: {e}")
+                if new_ip := update_data.get("ip"):
+                    save_ip_state(new_ip)
+        except Exception as e:
+            app.logger.error(f"Error calling dynamic seedbox update: {e}")
 
 async def check_and_update_ip():
-    """Periodically checks public IP and updates MAM's dynamic seedbox IP if it has changed."""
     async with app.app_context():
-        app.logger.info("Running scheduled job: Check and Update IP.")
-        
-        if not app.config.get("MAM_ID"):
-            app.logger.warning("MAM_ID not set in config. Skipping dynamic IP update.")
-            return
-
+        if not app.config.get("MAM_ID"): return
         api_cookies = {"mam_id": app.config.get("MAM_ID")}
-        
         try:
             ip_check_url = f"{app.config.get('MAM_API_URL')}/json/jsonIp.php"
             async with httpx.AsyncClient() as client:
                 response = await client.get(ip_check_url, cookies=api_cookies, timeout=10)
                 response.raise_for_status()
                 current_ip = response.json().get("ip")
-                if not current_ip:
-                    app.logger.error("IP check API did not return an IP address.")
-                    return
-        except (RequestError, json.JSONDecodeError) as e:
-            app.logger.error(f"Failed to get current IP from MAM API: {e}")
+                if not current_ip: return
+        except Exception:
             return
             
         last_ip = load_ip_state()
-        app.logger.info(f"Current IP: {current_ip}, Last known IP: {last_ip}")
-
-        if current_ip == last_ip:
-            app.logger.info("IP address has not changed. No update needed.")
-            return
-
-        app.logger.info(f"IP address has changed from {last_ip} to {current_ip}. Updating dynamic seedbox IP.")
-        await force_update_ip()
+        if current_ip != last_ip:
+            await force_update_ip()
 
 if app.config.get("ENABLE_DYNAMIC_IP_UPDATE"):
     interval_hours = int(app.config.get("DYNAMIC_IP_UPDATE_INTERVAL_HOURS", 3))
-    # Schedule the IP check to run at the configured interval and 5 seconds after startup
     scheduler.add_job(check_and_update_ip, 'interval', hours=interval_hours, id='ip_check_job', replace_existing=True)
     scheduler.add_job(check_and_update_ip, 'date', run_date=datetime.now() + timedelta(seconds=5), id='initial_ip_check_job')
-    app.logger.info(f"Dynamic IP Update enabled with interval of {interval_hours} hours")
-else:
-    app.logger.info("Dynamic IP Update disabled by config.")
-    
+
 # --- SESSION AND API HELPERS ---
 def update_cookies(response):
-    """Extract and update cookies from the API response."""
     global mam_session_cookies
     if "set-cookie" in response.headers:
         cookies = dict(response.cookies)
@@ -315,15 +397,15 @@ def update_cookies(response):
 
 async def login_mam():
     url = app.config.get("MAM_API_URL")
-    if not url: return False
-    if not mam_session_cookies.get("mam_id"):
-        return False
+    if not url or not mam_session_cookies.get("mam_id"): return False
     async with httpx.AsyncClient() as client:
-        response = await client.get(f"{url}/jsonLoad.php", cookies=mam_session_cookies)
-        if response.status_code == 200:
-            if new_cookies := dict(response.cookies):
-                mam_session_cookies.update(new_cookies)
-            return True
+        try:
+            response = await client.get(f"{url}/jsonLoad.php", cookies=mam_session_cookies, timeout=5)
+            if response.status_code == 200:
+                if new_cookies := dict(response.cookies): mam_session_cookies.update(new_cookies)
+                return True
+        except Exception:
+            pass
     return False
 
 # --- QUART ROUTES ---
@@ -333,251 +415,204 @@ async def mam_status():
 
 @app.route('/mam/user_data', methods=['GET'])
 async def mam_user_data():
-    """Fetches user data from the MAM API."""
-    if not await login_mam():
-        return jsonify({'error': 'Not logged into MAM'}), 401
-
+    if not await login_mam(): return jsonify({'error': 'Not logged into MAM'}), 401
     try:
         api_url = f"{app.config.get('MAM_API_URL')}/jsonLoad.php"
         async with httpx.AsyncClient() as client:
             response = await client.get(api_url, cookies=mam_session_cookies, timeout=10)
             update_cookies(response)
             response.raise_for_status()
-            
             user_data = response.json()
-            
-            # Optionally format numbers for better display
             if seedbonus := user_data.get("seedbonus"):
                 user_data["seedbonus_formatted"] = f"{seedbonus:,}"
-
             return jsonify(user_data)
-
-    except (RequestError, json.JSONDecodeError) as e:
-        app.logger.error(f"Failed to fetch MAM user data: {e}")
-        return jsonify({'error': 'Failed to fetch data from MAM API'}), 503
+    except Exception:
+        return jsonify({'error': 'Failed to fetch data'}), 503
     
 # --- GENERIC TORRENT CLIENT ROUTES ---
 @app.route('/client/status', methods=['GET'])
 async def client_status():
-    """Generic status check for the configured torrent client."""
-    if not torrent_client:
-        return jsonify({"status": "error", "message": "Client not initialized"}), 500
-    
-    # Ensure logged in (client impl handles caching cookies if needed)
-    await torrent_client.login()
-    return jsonify(await torrent_client.get_status())
+    if not torrent_client: return jsonify({"status": "error", "message": "Client not initialized"}), 500
+    # Only login if needed (handled by client usually, but we force login in other places)
+    try:
+        return jsonify(await torrent_client.get_status())
+    except:
+        await torrent_client.login()
+        return jsonify(await torrent_client.get_status())
 
 @app.route('/client/categories', methods=['GET'])
 async def client_categories():
-    """Get categories from the torrent client."""
-    if not torrent_client:
-        return jsonify({'error': 'Not connected to torrent client'}), 401
-    
-    await torrent_client.login()
-    categories = await torrent_client.get_categories()
-    return jsonify(categories) if categories else (jsonify({'error': 'Failed to fetch categories'}), 500)
+    if not torrent_client: return jsonify({'error': 'Not connected'}), 401
+    # Try fetch, if fail login
+    try:
+        categories = await torrent_client.get_categories()
+    except:
+        await torrent_client.login()
+        categories = await torrent_client.get_categories()
+    return jsonify(categories) if categories else (jsonify({'error': 'Failed'}), 500)
 
 @app.route('/client/add', methods=['POST'])
 async def client_add_torrent():
-    """Add a torrent to the configured client."""
+    """Add a torrent to the configured client and REGISTER FOR MONITORING."""
     if not torrent_client:
         return jsonify({'error': 'Client not initialized'}), 500
     
     await torrent_client.login()
-
     incoming_data = await request.get_json()
-    if not incoming_data:
-        app.logger.error("Received empty or non-JSON payload for /client/add")
-        return jsonify({'error': 'Invalid request: No JSON body found'}), 400
-
-    app.logger.info(f"Received /client/add request with payload: {incoming_data}")
-
+    
     torrent_url = incoming_data.get('torrent_url') or incoming_data.get('url')
-    author = incoming_data.get('author', 'Unknown Author')
-    title = incoming_data.get('title', 'Unknown Title')
+    author = incoming_data.get('author', 'Unknown')
+    title = incoming_data.get('title', 'Unknown')
     id = incoming_data.get('id', '0')
     
-    auto_organize_warning = None  # Track if hash calculation failed
+    auto_organize_warning = None
+    hash_val = await calculate_torrent_hash_from_url(torrent_url)
     
     if app.config.get("AUTO_ORGANIZE_ON_ADD"):
-        hash_val = await calculate_torrent_hash_from_url(torrent_url)
         if not hash_val:
-            auto_organize_warning = "Unable to calculate torrent hash - auto-organization on add will not work for this torrent."
-            app.logger.warning(f"AUTO_ORGANIZE_ON_ADD is enabled, but could not calculate hash for {torrent_url}.")
+            auto_organize_warning = "Unable to calculate hash - auto-organization will not work."
         else:
             metadata = load_metadata()
             metadata[hash_val] = {
-                "id": id,
-                "author": author,
-                "title": title,
+                "id": id, "author": author, "title": title,
                 "added_on": datetime.now().isoformat(),
-                "organized": False,
-                "retry_count": 0
+                "organized": False, "retry_count": 0
             }
             save_metadata(metadata)
             app.logger.info(f"Saved metadata for torrent hash: {hash_val}")
     
-    # Add torrent to client
     category = incoming_data.get('category', app.config.get("TORRENT_CLIENT_CATEGORY", ""))
-    
     result = await torrent_client.add_torrent(torrent_url, category)
     
     if result['status'] == 'success':
-        app.logger.info("SUCCESS: Torrent added to client.")
+        # Start Monitoring
+        if hash_val and app.config.get("AUTO_ORGANIZE_ON_ADD"):
+            monitoring_state[hash_val] = {
+                "added_at": time.time()
+            }
+            start_monitoring_loop()
+            app.logger.info(f"Registered {hash_val} for active monitoring.")
+
         response_data = {'message': result['message']}
-        if auto_organize_warning:
-            response_data['warning'] = auto_organize_warning
+        if auto_organize_warning: response_data['warning'] = auto_organize_warning
         return jsonify(response_data)
     else:
-        error_message = result.get('message', 'Unknown error')
-        app.logger.error(f"Client rejected the torrent: {error_message}")
-        return jsonify({'error': error_message}), 400
+        return jsonify({'error': result.get('message', 'Unknown error')}), 400
 
 @app.route('/client/info/<hash_val>', methods=['GET'])
 async def client_torrent_info(hash_val):
-    """Get torrent info by hash from the torrent client."""
-    app.logger.info(f"Request received for torrent info with hash: {hash_val}")
-    if not torrent_client:
-        app.logger.error("Failed to get torrent info: Client not initialized.")
-        return jsonify({'error': 'Client not initialized'}), 500
+    if hash_val in torrent_status_cache:
+        entry = torrent_status_cache[hash_val]
+        if time.time() - entry['timestamp'] < CACHE_TTL:
+            return jsonify(entry['data'])
+
+    if not torrent_client: return jsonify({'error': 'Client not initialized'}), 500
     
-    await torrent_client.login()
-    
+    # Optimistic fetch, fallback to login
     try:
         info = await torrent_client.get_torrent_info(hash_val)
-        
-        if not info:
-            app.logger.warning(f"Client returned no info for hash {hash_val}. Torrent may not exist in client.")
-            return jsonify({'error': 'Torrent not found in client'}), 404
+    except:
+        await torrent_client.login()
+        info = await torrent_client.get_torrent_info(hash_val)
 
+    if info:
+        torrent_status_cache[hash_val] = {"data": info, "timestamp": time.time()}
         return jsonify(info)
-        
-    except Exception as e:
-        app.logger.error(f"Failed to fetch torrent info for hash {hash_val}: {e}")
-        return jsonify({'error': f'Failed to fetch torrent info: {e}'}), 503
+    return jsonify({'error': 'Not found'}), 404
 
 @app.route('/client/info/batch', methods=['POST'])
 async def client_torrent_info_batch():
-    """
-    Batch endpoint for getting torrent info for multiple hashes at once.
-    Accepts: {"hashes": ["hash1", "hash2", ...]}
-    Returns: {"torrents": {hash1: {data}, hash2: {data}, ...}}
-    """
     data = await request.get_json()
     hash_list = data.get('hashes', [])
+    if not hash_list: return jsonify({'torrents': []})
     
-    if not hash_list:
-        return jsonify({'torrents': []})
+    cached_response = {}
+    hashes_to_fetch = []
+    current_time = time.time()
     
-    app.logger.info(f"Batch request received for {len(hash_list)} torrent(s)")
+    for h in hash_list:
+        if h in torrent_status_cache and (current_time - torrent_status_cache[h]['timestamp'] < CACHE_TTL):
+            cached_response[h] = torrent_status_cache[h]['data']
+        else:
+            hashes_to_fetch.append(h)
     
-    if not torrent_client:
-        app.logger.error("Failed to get batch torrent info: Client not initialized.")
-        return jsonify({'error': 'Client not initialized'}), 500
-    
-    await torrent_client.login()
+    if not hashes_to_fetch:
+        return jsonify({'torrents': cached_response})
+
+    if not torrent_client: return jsonify({'error': 'Client not initialized'}), 500
     
     try:
-        # Check if client supports batch operations
+        fetched_results = {}
         if hasattr(torrent_client, 'get_torrent_info_batch'):
-            result = await torrent_client.get_torrent_info_batch(hash_list)
-            if 'error' in result:
-                return jsonify(result), 503
-            return jsonify(result)
+            result = await torrent_client.get_torrent_info_batch(hashes_to_fetch)
+            fetched_results = result.get('torrents', {})
         else:
-            # Fallback: fetch individually
-            torrents_by_hash = {}
-            for hash_val in hash_list:
+            for hash_val in hashes_to_fetch:
                 info = await torrent_client.get_torrent_info(hash_val)
-                if info:
-                    torrents_by_hash[hash_val] = info
-            return jsonify({'torrents': torrents_by_hash})
+                if info: fetched_results[hash_val] = info
         
+        for h, info in fetched_results.items():
+            torrent_status_cache[h] = {"data": info, "timestamp": current_time}
+            cached_response[h] = info
+            
+        return jsonify({'torrents': cached_response})
     except Exception as e:
-        app.logger.error(f"Failed to fetch batch torrent info: {e}")
-        return jsonify({'error': f'Failed to fetch batch torrent info: {e}'}), 503
+        # Retry once with login
+        try:
+            await torrent_client.login()
+            if hasattr(torrent_client, 'get_torrent_info_batch'):
+                result = await torrent_client.get_torrent_info_batch(hashes_to_fetch)
+                fetched_results = result.get('torrents', {})
+            else:
+                for hash_val in hashes_to_fetch:
+                    info = await torrent_client.get_torrent_info(hash_val)
+                    if info: fetched_results[hash_val] = info
+            return jsonify({'torrents': fetched_results})
+        except Exception as e2:
+            return jsonify({'error': str(e2)}), 503
     
 def load_metadata():
-    """Loads the torrent metadata store."""
-    if not os.path.exists(METADATA_FILE):
-        return {}
+    if not os.path.exists(METADATA_FILE): return {}
     try:
-        with open(METADATA_FILE, "r") as f:
-            return json.load(f)
-    except (json.JSONDecodeError, FileNotFoundError):
-        return {}
+        with open(METADATA_FILE, "r") as f: return json.load(f)
+    except: return {}
 
 def save_metadata(data):
-    """Saves the torrent metadata store."""
-    with open(METADATA_FILE, "w") as f:
-        json.dump(data, f, indent=4)
+    with open(METADATA_FILE, "w") as f: json.dump(data, f, indent=4)
 
 def sanitize_filename(name: str) -> str:
-    """Removes characters that are invalid for directory or file names."""
     sanitized = re.sub(r'[<>:"/\\|?*]', '', name)
-    sanitized = sanitized.strip('. ')
-    return sanitized if sanitized else "Untitled"
-
+    return sanitized.strip('. ') if sanitized else "Untitled"
     
 @app.route('/calculate_hash', methods=['POST'])
 async def get_torrent_hash():
     data = await request.get_json()
     url = data.get('url')
-    app.logger.info(f"Received request to calculate hash for URL: {url}")
-    if not url:
-        app.logger.error("Hash calculation failed: No URL provided.")
-        return jsonify({'error': 'URL is required'}), 400
-    
+    if not url: return jsonify({'error': 'URL required'}), 400
     hash_val = await calculate_torrent_hash_from_url(url)
-    
-    if hash_val:
-        app.logger.info(f"Successfully calculated hash for {url}: {hash_val}")
-        return jsonify({'hash': hash_val})
-    else:
-        app.logger.error(f"Failed to calculate hash for URL: {url}")
-        return jsonify({'error': 'Failed to calculate hash'}), 500
+    return jsonify({'hash': hash_val}) if hash_val else (jsonify({'error': 'Failed'}), 500)
 
-# torrent hash calculation utility
 async def calculate_torrent_hash_from_url(url: str) -> str | None:
-    """
-    Downloads a .torrent file from a URL and calculates its info hash.
-    """
     try:
-        app.logger.debug(f"Fetching .torrent file from: {url}")
         async with httpx.AsyncClient() as client:
             response = await client.get(url, timeout=10)
             response.raise_for_status()
-            
-            torrent_content = response.content
-            torrent_data = bencodepy.decode(torrent_content)
-            
-            if b'info' not in torrent_data:
-                app.logger.error("'info' dictionary not found in torrent file.")
-                return None
-                
-            info_dict = torrent_data[b'info']
-            bencoded_info = bencodepy.encode(info_dict)
-            sha1_hash = hashlib.sha1(bencoded_info).hexdigest()
-            
-            return sha1_hash
-
-    except RequestError as e:
-        app.logger.error(f"Error fetching the URL for hash calculation: {e}")
-        return None
-    except bencodepy.BencodeDecodeError as e:
-        app.logger.error(f"Error decoding the torrent file for hash calculation: {e}")
-        return None
+            torrent_data = bencodepy.decode(response.content)
+            if b'info' not in torrent_data: return None
+            bencoded_info = bencodepy.encode(torrent_data[b'info'])
+            return hashlib.sha1(bencoded_info).hexdigest()
     except Exception as e:
-        app.logger.error(f"An unexpected error occurred during hash calculation: {e}")
+        app.logger.error(f"Hash calc error: {e}")
         return None
 
+# --- SEARCH ROUTES & HELPERS ---
 def parse_author_info(info):
     try: return ", ".join(json.loads(info).values())
-    except (json.JSONDecodeError, TypeError): return "Unknown"
+    except: return "Unknown"
 
 def format_date(date_string):
     try: return datetime.strptime(date_string, "%Y-%m-%d %H:%M:%S").strftime("%Y-%m-%d")
-    except (ValueError, TypeError): return "Unknown"
+    except: return "Unknown"
 
 def rank_results(results):
     if not results: return []
@@ -585,16 +620,12 @@ def rank_results(results):
     for r in results:
         r["author_info"] = parse_author_info(r.get("author_info", ""))
         r["narrator_info"] = parse_author_info(r.get("narrator_info", ""))
-        
-        series_data = r.get("series_info", "")
         try:
-            series_json = json.loads(series_data)
-            # Example: {"2887": ["The Inheritance Cycle", "5"]} -> "The Inheritance Cycle, Book 5"
+            series_json = json.loads(r.get("series_info", ""))
             series_name, book_number = next(iter(series_json.values()))
             r["series_display"] = f"{series_name}, Book {book_number}" if book_number else series_name
-        except (json.JSONDecodeError, TypeError, StopIteration):
+        except:
             r["series_display"] = ""
-            
         r["added"] = format_date(r.get("added", "Unknown"))
         filetype_score = {'m4b': 50, 'mp3': 30}.get(r.get('filetype'), 10)
         seeders_score = (r.get('seeders', 0) / max_seeders * 30) if max_seeders > 0 else 0
@@ -604,7 +635,7 @@ def rank_results(results):
 @app.route('/mam/search', methods=['GET'])
 async def mam_search():
     if not await login_mam(): 
-        return await render_template("partials/results.html", error_message="Login to MyAnonamouse failed. Check your MAM_ID cookie in settings.")
+        return await render_template("partials/results.html", error_message="Login failed")
     query = request.args.get("query", "")
     if not query: 
         return await render_template("partials/results.html", results=[])
@@ -624,378 +655,166 @@ async def mam_search():
     headers = {"Cookie": "; ".join([f"{k}={v}" for k, v in mam_session_cookies.items()])}
     try:
         async with httpx.AsyncClient() as client:
-            response = await client.get(
-                f"{app.config['MAM_API_URL']}/tor/js/loadSearchJSONbasic.php", 
-                params=params, 
-                headers=headers
-            )
+            response = await client.get(f"{app.config['MAM_API_URL']}/tor/js/loadSearchJSONbasic.php", params=params, headers=headers)
             update_cookies(response)
-            
             response.raise_for_status()
             json_data = response.json()
             results = json_data.get("data", [])
-
-            # The API returns a 'dl' hash. We must construct the full download_link for the template.
             base_dl_url = f"{app.config['MAM_API_URL']}/tor/download.php/"
             for item in results:
-                if dl_hash := item.get('dl'):
-                    # This line creates the full URL and adds it to the dictionary
-                    item['download_link'] = base_dl_url + dl_hash
-                else:
-                    # This is a good practice to prevent errors if 'dl' is missing
-                    item['download_link'] = '' 
-
+                if dl_hash := item.get('dl'): item['download_link'] = base_dl_url + dl_hash
+                else: item['download_link'] = '' 
                 if not item.get('thumbnail'):
                     cat = item.get('category', '')
-                    item['thumbnail'] = f"https://static.myanonamouse.net/pic/cats/3/{cat}.png"        # --- END FIX ---
+                    item['thumbnail'] = f"https://static.myanonamouse.net/pic/cats/3/{cat}.png"
 
             ranked = rank_results(results)
-            
-            # Check torrent client status
             client_status_data = await torrent_client.get_status() if torrent_client else {"status": "error"}
             client_connected = client_status_data.get("status") == "success"
+            categories = await torrent_client.get_categories() if client_connected else {}
             
-            categories = {}
-            if client_connected:
-                categories = await torrent_client.get_categories()
-            
-            return await render_template("partials/results.html", 
-                                       results=ranked, 
-                                       CLIENT_STATUS="CONNECTED" if client_connected else "NOT CONNECTED", 
-                                       categories=categories, 
-                                       TORRENT_CLIENT_CATEGORY=app.config.get("TORRENT_CLIENT_CATEGORY", ""))
-    except RequestError as e:
-        return await render_template("partials/results.html", error_message=f"Error connecting to MAM API: {e}")
-    except json.JSONDecodeError:
-        return await render_template("partials/results.html", error_message="Failed to decode API response. Your session cookie might be invalid.")
-
-
+            return await render_template("partials/results.html", results=ranked, CLIENT_STATUS="CONNECTED" if client_connected else "NOT CONNECTED", categories=categories, TORRENT_CLIENT_CATEGORY=app.config.get("TORRENT_CLIENT_CATEGORY", ""))
+    except Exception as e:
+        return await render_template("partials/results.html", error_message=f"Error: {e}")
 
 @app.route("/")
 async def index():
     return await render_template("index.html", **app.config)
 
-FETCH_SEMAPHORE = asyncio.Semaphore(200)  # tune if needed
+FETCH_SEMAPHORE = asyncio.Semaphore(200)
 
 @app.route("/proxy_thumbnail")
 async def proxy_thumbnail():
     url = request.args.get("url")
-    if not url:
-        return "No URL provided", 400
-    if UPSTREAM_CLIENT is None:
-        return "Upstream client not ready", 503
-
-    # Forward only headers useful for conditional/partial requests
-    fwd_headers = {}
-    for h in ("If-None-Match", "If-Modified-Since", "Range"):
-        v = request.headers.get(h)
-        if v:
-            fwd_headers[h] = v
-
-    # If the CDN images are PUBLIC, set cookies=None to maximize CDN cache hits
-    upstream_cookies = mam_session_cookies  # or: None
-
+    if not url or UPSTREAM_CLIENT is None: return "Error", 400
+    fwd_headers = {h: request.headers.get(h) for h in ("If-None-Match", "If-Modified-Since", "Range") if request.headers.get(h)}
     async with FETCH_SEMAPHORE:
-        # Build request and keep the response OPEN until we finish streaming it.
-        req = UPSTREAM_CLIENT.build_request("GET", url, headers=fwd_headers, cookies=upstream_cookies)
+        req = UPSTREAM_CLIENT.build_request("GET", url, headers=fwd_headers, cookies=mam_session_cookies)
         r = await UPSTREAM_CLIENT.send(req, stream=True)
-
-        # Prepare downstream headers
-        passthrough = {}
-        for h in (
-            "Content-Type", "Content-Length", "Cache-Control",
-            "ETag", "Last-Modified", "Accept-Ranges", "Content-Range"
-        ):
-            hv = r.headers.get(h)
-            if hv:
-                passthrough[h] = hv
+        passthrough = {h: r.headers.get(h) for h in ("Content-Type", "Content-Length", "Cache-Control", "ETag", "Last-Modified", "Accept-Ranges", "Content-Range") if r.headers.get(h)}
         passthrough.setdefault("Cache-Control", "public, max-age=31536000, immutable")
-
-        # 304 passthrough (no body)
         if r.status_code == 304:
             await r.aclose()
             return Response(status=304, headers=passthrough)
-
         async def body():
             try:
-                async for chunk in r.aiter_bytes():
-                    yield chunk
-            finally:
-                # CRITICAL: close upstream stream no matter what (client disconnects, errors, etc.)
-                await r.aclose()
-
+                async for chunk in r.aiter_bytes(): yield chunk
+            finally: await r.aclose()
         return Response(body(), status=r.status_code, headers=passthrough)
-
 
 @app.route("/update_settings", methods=["POST"])
 async def update_settings():
     form = await request.form
     config_to_update = app.config.copy()
-    
-    # List of boolean checkbox fields
-    boolean_fields = {
-        "AUTO_ORGANIZE_ON_ADD",
-        "AUTO_ORGANIZE_ON_SCHEDULE", 
-        "ENABLE_DYNAMIC_IP_UPDATE"
-    }
-    
-    # Process all config keys
+    boolean_fields = {"AUTO_ORGANIZE_ON_ADD", "AUTO_ORGANIZE_ON_SCHEDULE", "ENABLE_DYNAMIC_IP_UPDATE"}
     for key in FALLBACK_CONFIG.keys():
-        if key in boolean_fields:
-            # Checkboxes: present in form = True, absent = False
-            config_to_update[key] = key in form
-        elif key in form:
-            # Regular fields: use form value if present
-            config_to_update[key] = form[key]
-    
-    # Special handling for password (only update if provided)
-    if form.get("TORRENT_CLIENT_PASSWORD"):
-        config_to_update["TORRENT_CLIENT_PASSWORD"] = form.get("TORRENT_CLIENT_PASSWORD")
-
+        if key in boolean_fields: config_to_update[key] = key in form
+        elif key in form: config_to_update[key] = form[key]
+    if form.get("TORRENT_CLIENT_PASSWORD"): config_to_update["TORRENT_CLIENT_PASSWORD"] = form.get("TORRENT_CLIENT_PASSWORD")
     save_config(config_to_update)
     await load_new_app_config()
-
     if app.config.get("ENABLE_DYNAMIC_IP_UPDATE"):
-        # Manually trigger a forced IP update after saving new credentials.
-        job_id = 'manual_ip_update_job'
-        run_time = datetime.now() + timedelta(seconds=2) # Run 2 seconds after the request finishes
-        if scheduler.get_job(job_id):
-            scheduler.reschedule_job(job_id, trigger='date', run_date=run_time)
-        else:
-            scheduler.add_job(id=job_id, func=force_update_ip, trigger='date', run_date=run_time)
-    else:
-        app.logger.info("Dynamic IP Update disabled by config.")
+        scheduler.add_job(id='manual_ip_update_job', func=force_update_ip, trigger='date', run_date=datetime.now() + timedelta(seconds=2))
     return jsonify({"status": "success", "message": "Settings updated!"})
 
-if app.config.get("AUTO_ORGANIZE_ON_ADD") or app.config.get("AUTO_ORGANIZE_ON_SCHEDULE"):
-    app.logger.info("Auto-organization is enabled. Registering webhook and/or scheduled job.")
 
-    async def _perform_organization(hash_val: str) -> tuple[bool, str]:
-        """
-        Performs the file organization for a given torrent hash.
-        Returns a tuple of (success_boolean, message_string).
-        """
-        # 1. Load metadata and perform checks
-        metadata = load_metadata()
-        if hash_val not in metadata:
-            return False, f"Cannot organize: No metadata found for hash {hash_val}."
-        
-        if metadata[hash_val].get('organized', False):
-            return True, f"Skipping: Torrent {hash_val} is already marked as organized."
+# --- ORGANIZE LOGIC ---
 
-        # Check retry count to avoid infinite retries
-        retry_count = metadata[hash_val].get('retry_count', 0)
-        if retry_count >= 3:
-            return True, f"Skipping: Torrent {hash_val} has exceeded maximum retry attempts ({retry_count})."
-
-        # 2. Get torrent info from client to find its content path
-        if not torrent_client:
-            return False, "Torrent client not initialized."
-        
+async def _perform_organization(hash_val: str) -> tuple[bool, str]:
+    """Performs the file organization for a given torrent hash."""
+    metadata = load_metadata()
+    if hash_val not in metadata: return False, f"No metadata for hash {hash_val}."
+    if metadata[hash_val].get('organized', False): return True, f"Already organized: {hash_val}."
+    if metadata[hash_val].get('retry_count', 0) >= 3: return True, "Max retries exceeded."
+    
+    if not torrent_client: return False, "Client not initialized."
+    # Try to rely on session, fall back to explicit login
+    try:
+        info = await torrent_client.get_torrent_info(hash_val)
+    except:
         await torrent_client.login()
-        
         try:
             info = await torrent_client.get_torrent_info(hash_val)
-            if not info:
-                return False, f"Torrent {hash_val} not found in client."
-            
-            # Get the download path configured for the torrent client
-            # Construct the content path using the client's download path and torrent name
-            content_path = Path(TORRENT_DOWNLOAD_PATH) / info.get('name')
-            
-            # 3. Define paths and perform the linking
-            organized_path = Path(ORGANIZED_PATH)
-            
-            torrent_meta = metadata[hash_val]
-            s_author = sanitize_filename(torrent_meta['author'])
-            s_title = sanitize_filename(torrent_meta['title'])
-            dest_path = organized_path / s_author / s_title
-
-            # Check if source exists
-            if not content_path.exists():
-                # Don't increment retry counter - this might be a timing issue
-                return False, f"Source path does not exist: {content_path}"
-            
-            # Handle destination creation errors
-            try:
-                dest_path.mkdir(parents=True, exist_ok=True)
-            except (OSError, PermissionError) as e:
-                return False, f"Cannot create destination directory '{dest_path}': {e}"
-            
-            files_linked = 0
-            files_already_exist = 0
-            audio_extensions = ['.m4b', '.mp3', '.flac', '.ogg', '.opus', '.m4a']
-
-            # Handle directory vs file correctly
-            if content_path.is_dir():
-                source_files = content_path.rglob('*')
-            else:
-                source_files = [content_path]
-
-            for source_file in source_files:
-                if source_file.is_file() and source_file.suffix.lower() in audio_extensions:
-                    # Preserve the original torrent folder structure
-                    relative_path = source_file.relative_to(content_path)
-                    dest_file = dest_path / relative_path
-                    dest_file.parent.mkdir(parents=True, exist_ok=True)
-                    
-                    if dest_file.exists():
-                        # Count existing files separately
-                        files_already_exist += 1
-                        app.logger.debug(f"[ORGANIZE] Skipped (already exists): {dest_file}")
-                    else:
-                        try:
-                            os.link(source_file, dest_file)
-                            files_linked += 1
-                            app.logger.info(f"[ORGANIZE] Linked: {source_file} -> {dest_file}")
-                        except (OSError, PermissionError) as e:
-                            # Handle individual file link errors
-                            app.logger.error(f"[ORGANIZE] Failed to link {source_file} -> {dest_file}: {e}")
-                            # Continue processing other files
-
-            # 4. Update metadata based on results
-            total_audio_files = files_linked + files_already_exist
-            
-            if total_audio_files == 0:
-                # No audio files found at all - increment retry
-                metadata[hash_val]['retry_count'] = retry_count + 1
-                save_metadata(metadata)
-                return False, f"No compatible audio files found for '{s_title}' (attempt {retry_count + 1}/3)."
-            
-            # Success if files were linked OR already existed
-            if files_linked > 0 or files_already_exist > 0:
-                metadata[hash_val]['organized'] = True
-                save_metadata(metadata)
-                
-                if files_linked > 0 and files_already_exist > 0:
-                    msg = f"SUCCESS: '{s_title}' by {s_author} - {files_linked} new files linked, {files_already_exist} already existed (total: {total_audio_files} files in '{dest_path}')."
-                elif files_linked > 0:
-                    msg = f"SUCCESS: '{s_title}' by {s_author} - {files_linked} files linked to '{dest_path}'."
-                else:
-                    msg = f"SUCCESS: '{s_title}' by {s_author} - All {files_already_exist} files already organized in '{dest_path}'."
-                
-                app.logger.info(f"[ORGANIZE] {msg}")
-                return True, msg
-            
-            # This should never happen given the logic above, but as a safety net:
-            return False, "Unexpected error: No files processed."
-
         except Exception as e:
-            return False, f"API error during organization: {e}"
-        except json.JSONDecodeError as e:
-            return False, f"Failed to parse qBittorrent response: {e}"
-        except Exception as e:
-            # Catch-all for unexpected errors
-            app.logger.exception(f"Unexpected error organizing {hash_val}")
-            return False, f"Unexpected error: {e}"
+            return False, f"Client fetch error: {e}"
 
-    @app.route('/organize', methods=['POST'])
-    @app.route('/organize/<hash_val>', methods=['POST'])
-    async def organize_torrent_webhook(hash_val=None):
-        """
-        Webhook endpoint for torrent organization.
-        - If hash_val is provided: organizes that specific torrent
-        - If no hash_val: iterates through all unorganized torrents in metadata.json
-        """
-        async with app.app_context():
-            if hash_val:
-                # Single torrent organization
-                app.logger.info(f"Received webhook organization request for hash: {hash_val}")
-                success, message = await _perform_organization(hash_val)
-                
-                if success:
-                    app.logger.info(message)
-                    return jsonify({'status': 'success', 'message': message}), 200
-                else:
-                    app.logger.error(message)
-                    return jsonify({'status': 'error', 'message': message}), 500
+    if not info: return False, f"Torrent {hash_val} not found in client."
+    
+    content_path = Path(TORRENT_DOWNLOAD_PATH) / info.get('name')
+    organized_path = Path(ORGANIZED_PATH)
+    torrent_meta = metadata[hash_val]
+    dest_path = organized_path / sanitize_filename(torrent_meta['author']) / sanitize_filename(torrent_meta['title'])
+    
+    if not content_path.exists(): 
+        app.logger.debug(f"[ORGANIZE] Source path missing: {content_path}")
+        return False, f"Source missing: {content_path}"
+    
+    try: dest_path.mkdir(parents=True, exist_ok=True)
+    except Exception as e: return False, f"Dest create failed: {e}"
+    
+    files_linked, files_exist = 0, 0
+    source_files = content_path.rglob('*') if content_path.is_dir() else [content_path]
+    
+    for source_file in source_files:
+        if source_file.is_file():
+            # NO FILTERING: Link everything found in the torrent
+            rel_path = source_file.relative_to(content_path)
+            dest_file = dest_path / rel_path
+            dest_file.parent.mkdir(parents=True, exist_ok=True)
+            if dest_file.exists(): 
+                files_exist += 1
+                app.logger.debug(f"[ORGANIZE] Exists: {dest_file}")
             else:
-                # Batch organization of all unorganized torrents
-                app.logger.info("Received batch organization request (no hash provided)")
-                metadata = load_metadata()
-                unorganized_hashes = [h for h, m in metadata.items() if not m.get('organized', False)]
-                
-                if not unorganized_hashes:
-                    message = "No unorganized torrents found in metadata."
-                    app.logger.info(message)
-                    return jsonify({'status': 'success', 'message': message, 'processed': 0}), 200
-                
-                app.logger.info(f"Found {len(unorganized_hashes)} unorganized torrent(s). Processing...")
-                
-                results = {
-                    'total': len(unorganized_hashes),
-                    'succeeded': 0,
-                    'failed': 0,
-                    'skipped': 0,
-                    'details': []
-                }
-                
-                for hash_val in unorganized_hashes:
-                    success, message = await _perform_organization(hash_val)
-                    
-                    if success:
-                        if "Skipping" in message:
-                            results['skipped'] += 1
-                            app.logger.info(f"Batch organize - Skipped: {hash_val} - {message}")
-                        else:
-                            results['succeeded'] += 1
-                            app.logger.info(f"Batch organize - Success: {hash_val} - {message}")
-                    else:
-                        results['failed'] += 1
-                        # Check if it's a "source path does not exist" error
-                        if "Source path does not exist" in message:
-                            app.logger.warning(f"Batch organize - Source missing: {hash_val} - {message}")
-                        else:
-                            app.logger.error(f"Batch organize - Failed: {hash_val} - {message}")
-                    
-                    results['details'].append({
-                        'hash': hash_val,
-                        'success': success,
-                        'message': message
-                    })
-                
-                summary = f"Batch organization complete: {results['succeeded']} succeeded, {results['failed']} failed, {results['skipped']} skipped (out of {results['total']} total)"
-                app.logger.info(summary)
-                
-                return jsonify({
-                    'status': 'success',
-                    'message': summary,
-                    'results': results
-                }), 200
+                try: 
+                    os.link(source_file, dest_file)
+                    files_linked += 1
+                    app.logger.debug(f"[ORGANIZE] Linked: {source_file} -> {dest_file}")
+                except Exception as e:
+                    app.logger.error(f"[ORGANIZE] Link error {source_file}: {e}")
 
-    async def check_for_unorganized_torrents():
-        """Periodically checks for any torrents that were missed by the webhook."""
-        async with app.app_context():
-            app.logger.info("Running scheduled job: Safety net for unorganized torrents.")
+    total = files_linked + files_exist
+    if total == 0:
+        metadata[hash_val]['retry_count'] += 1
+        save_metadata(metadata)
+        return False, "No files found."
+    
+    metadata[hash_val]['organized'] = True
+    save_metadata(metadata)
+    return True, f"Success: {files_linked} linked, {files_exist} existed."
+
+@app.route('/organize', methods=['POST'])
+@app.route('/organize/<hash_val>', methods=['POST'])
+async def organize_torrent_webhook(hash_val=None):
+    async with app.app_context():
+        if hash_val:
+            success, msg = await _perform_organization(hash_val)
+            return jsonify({'status': 'success' if success else 'error', 'message': msg}), 200 if success else 500
+        else:
             metadata = load_metadata()
-            unorganized_hashes = [h for h, m in metadata.items() if not m.get('organized', False)]
+            unorganized = [h for h, m in metadata.items() if not m.get('organized', False)]
+            results = {'succeeded': 0, 'failed': 0}
+            for h in unorganized:
+                s, m = await _perform_organization(h)
+                if s: results['succeeded'] += 1
+                else: results['failed'] += 1
+            return jsonify({'status': 'success', 'results': results}), 200
 
-            if not unorganized_hashes:
-                app.logger.info("Safety net job: No unorganized torrents found.")
-                return
+async def check_for_unorganized_torrents():
+    """Safety net job."""
+    async with app.app_context():
+        app.logger.info("Running safety net organization job.")
+        metadata = load_metadata()
+        unorganized = [h for h, m in metadata.items() if not m.get('organized', False)]
+        for h in unorganized:
+            await _perform_organization(h)
 
-            app.logger.info(f"Safety net job: Found {len(unorganized_hashes)} unorganized torrent(s). Processing now.")
-            for hash_val in unorganized_hashes:
-                success, message = await _perform_organization(hash_val)
-                if success:
-                    app.logger.info(f"Safety net: {message}")
-                else:
-                    app.logger.error(f"Safety net failed for {hash_val}: {message}")
-    
-    # Only schedule the periodic job if AUTO_ORGANIZE_ON_SCHEDULE is enabled
-    if app.config.get("AUTO_ORGANIZE_ON_SCHEDULE"):
-        organize_interval_hours = int(app.config.get("AUTO_ORGANIZE_INTERVAL_HOURS", 1))
-        scheduler.add_job(check_for_unorganized_torrents, 'interval', hours=organize_interval_hours, id='organize_safety_net_job', replace_existing=True)
-        app.logger.info(f"Scheduled auto-organization job registered (runs every {organize_interval_hours} hour(s)).")
-    else:
-        app.logger.info("AUTO_ORGANIZE_ON_SCHEDULE is disabled. No scheduled organization job will run.")
-else:
-    app.logger.info("Auto-organization is disabled. Skipping organization feature setup.")
+if app.config.get("AUTO_ORGANIZE_ON_SCHEDULE"):
+    hours = int(app.config.get("AUTO_ORGANIZE_INTERVAL_HOURS", 1))
+    scheduler.add_job(check_for_unorganized_torrents, 'interval', hours=hours, id='organize_safety_net_job', replace_existing=True)
 
-    
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Run the Quart app.")
-    parser.add_argument("--host", default="0.0.0.0", help="Host address.")
-    parser.add_argument("--port", default=5000, type=int, help="Port number.")
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--host", default="0.0.0.0")
+    parser.add_argument("--port", default=5000, type=int)
     args = parser.parse_args()
     app.run(host=args.host, port=args.port, debug=True, use_reloader=False)
