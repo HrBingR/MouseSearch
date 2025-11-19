@@ -1,5 +1,7 @@
 #!/bin/bash
 
+# launch.sh - Script to launch the web server in a bare-metal environment (non-Docker)
+
 # Default values
 VENV_PATH=".venv"
 PORT="5000"

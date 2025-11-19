@@ -25,32 +25,99 @@ MouseSearch is a self-hosted web application that provides a clean, fast search 
 
 ## Installation & Configuration
 
-The recommended setup is using Docker Compose.
+MouseSearch can be deployed in two ways:
+1. **Docker (Recommended)** - Use the pre-built image from Docker Hub
+2. **Bare Metal** - Run directly on your system using the provided launch script
 
-### 1. Prerequisites
+---
 
-* Docker
+## Installation Method 1: Docker (Recommended)
 
-### 2. Prepare the Project
+### Prerequisites
+
+* Docker and Docker Compose
+
+### Setup Steps
+
+1.  Create a project directory:
+    ```bash
+    mkdir mousesearch && cd mousesearch
+    ```
+
+2.  Download the example environment file:
+    ```bash
+    curl -o .env https://raw.githubusercontent.com/sevenlayercookie/MouseSearch/main/.env.example
+    ```
+
+3.  Create a `compose.yaml` file (see configuration below)
+
+4.  Edit `.env` with your settings
+
+5.  Start the application:
+    ```bash
+    docker compose up -d
+    ```
+
+The application will be available at `http://<your-server-ip>:5000`.
+
+---
+
+## Installation Method 2: Bare Metal
+
+### Prerequisites
+
+* Python 3.12 or higher
+* pip
+
+### Setup Steps
 
 1.  Clone this repository:
-    '''bash
+    ```bash
     git clone https://github.com/sevenlayercookie/MouseSearch.git
     cd MouseSearch
-    '''
+    ```
 
-2.  Create your environment file from the example:
-    '''bash
+2.  Create a virtual environment:
+    ```bash
+    python3 -m venv .venv
+    source .venv/bin/activate
+    ```
+
+3.  Install dependencies:
+    ```bash
+    pip install -r requirements.txt
+    ```
+
+4.  Create your environment file:
+    ```bash
     cp .env.example .env
-    '''
+    ```
 
-### 3. Configure Your Environment (`.env`)
+5.  Edit `.env` with your settings
 
-Open the `.env` file you just created and fill in the details.
+6.  Launch the application:
+    ```bash
+    ./launch.sh
+    ```
+    
+    Or specify a custom port:
+    ```bash
+    ./launch.sh --port 8080
+    ```
+
+The application will be available at `http://<your-server-ip>:5000` (or your custom port).
+
+---
+
+## Configuration
+
+### Environment Variables (`.env`)
+
+Open the `.env` file and configure the following settings.
 
 | Variable | Required | Description |
 | :--- | :--- | :--- |
-| `FLASK_SECRET_KEY` | **Yes** | A long, random string for session security. You can generate one with `openssl rand -hex 32` (or just smash on the keyboard a bit) |
+| `QUART_SECRET_KEY` | **Yes** | A long, random string for session security. You can generate one with `openssl rand -hex 32` (or just smash on the keyboard a bit) |
 | `MAM_ID` | **Yes** | Your `mam_id` cookie value from [MyAnonamouse](https://www.myanonamouse.net/preferences/index.php?view=security). |
 
 ### Torrent Client Configuration
@@ -68,21 +135,24 @@ MouseSearch supports modular torrent clients. Currently supported: **qBittorrent
 ### Additional Configuration
 
 | Variable | Required | Description |
-| `DATA_PATH` | No | Directory path for storing app data files (config.json, metadata.json, ip_state.json). Defaults to `./data`. |
+| :--- | :--- | :--- |
+| `DATA_PATH` | No | Directory path for storing app data files (config.json, database.json, ip_state.json). Defaults to `./data`. |
 | `ENABLE_DYNAMIC_IP_UPDATE` | No | Set to `true` to enable automatic IP checking and updating of MAM's "Dynamic Seedbox IP" setting. Defaults to `false`. |
 | `DYNAMIC_IP_UPDATE_INTERVAL_HOURS` | No | Number of hours between automatic IP checks (only applies if `ENABLE_DYNAMIC_IP_UPDATE` is `true`). Defaults to `3`. |
 | `AUTO_ORGANIZE_ON_ADD` | No | Set to `true` to enable auto-organization when torrents are added. Defaults to `false`. |
 | `AUTO_ORGANIZE_ON_SCHEDULE` | No | Set to `true` to enable scheduled auto-organization. Defaults to `false`. |
 | `AUTO_ORGANIZE_INTERVAL_HOURS` | No | Number of hours between scheduled organization scans (only applies if `AUTO_ORGANIZE_ON_SCHEDULE` is `true`). Defaults to `1`. |
 | `ORGANIZED_PATH` | If auto-organization is enabled | The *container* path for your organized library (e.g., `/downloads/organized/audiobooks`). |
-| `TORRENT_DOWNLOAD_PATH` | If auto-organization is enabled | The *container* path where your torrent client saves completed files for this category (e.g., `/downloads/torrents/organize-these/audiobooks`). |
+| `TORRENT_DOWNLOAD_PATH` | If auto-organization is enabled | The *container* path where your torrent client saves completed files for this category (e.g., `/downloads/torrents/audiobooks`). |
 
 **How to find your `MAM_ID`:**
-1.  Log in to MyAnonamouse in your browser.
-2.  Open your browser's developer tools (F12).
-3.  Go to the "Application" (Chrome/Edge) or "Storage" (Firefox) tab.
-4.  Select "Cookies" -> `https://www.myanonamouse.net`.
-5.  Find the cookie named `mam_id` and copy its "Value".
+1.  In any web browser, navigate to [Security](https://www.myanonamouse.net/preferences/index.php?view=security) on Myanonamouse
+2.  Create a new session
+    - IP address: run `curl ifconfig.me` from the server that will be hosting MouseSearch, and put output here
+    - IP or ASN: `ASN` (ASN is more forgiving)
+    - Dynamic Seedbox: choose `Yes` to allow MouseSearch to keep IP updated
+    - Session Label: `MouseSearch`
+3.  **IMPORTANT**: copy the `mam_id` value for configuring MouseSearch
 
 ### 4. Configure `compose.yaml`
 
@@ -93,34 +163,32 @@ Here is a recommended `compose.yaml`:
 ```yaml
 services:
   mousesearch:
-    build: .
+    image: sevenlayercookie/mousesearch:latest
     container_name: mousesearch
     restart: unless-stopped
     ports:
-      # Maps port 5000 on your host to port 5000 in the container
       - "5000:5000"
     env_file: .env
     volumes:
-      # Persists the app's internal config, metadata, and IP state
-      - ./data:/app/data
+      - ./data:/data  # location that config and state files will be stored
+      # - /downloads:/downloads # if using auto-organize
 
-      # --- CRITICAL for Auto-Organize ---
-      # Map your *entire* downloads directory to /downloads in the container.
-      # This single mount point ensures hard links will work.
-      #
-      # Example: If your downloads are in /mnt/storage/downloads on the host:
-      - /mnt/storage/downloads:/downloads
-      
-      #
-      # If your paths are separate, you MUST ensure they are on the 
-      # same physical device and mount them accordingly.
-      # The single-mount method above is strongly preferred.
-      # ---
-    
+# Recommended File Structure (if using auto-organize)
+
+#       downloads
+#       ├── organized
+#       │   ├── audiobooks
+#       │   └── ebooks
+#       └── torrents
+#           ├── audiobooks
+#           └── ebooks
+
     # Optional: Set the container's timezone to match your host
     environment:
       - TZ=America/New_York
 ```
+
+**Note:** To build from source instead of using the pre-built image, replace `image: sevenlayercookie/mousesearch:latest` with `build: .` and ensure you've cloned the repository.
 
 ### 5. Run the Application
 
@@ -145,18 +213,18 @@ The application will be available at `http://<your-server-ip>:5000`.
 
 ## [BETA] Auto-Organization Feature
 
-**Note:** This feature is in beta. Please back up your `metadata.json` file and test with a few torrents first.
+**Note:** This feature is in beta. Please back up your `database.json` file and test with a few torrents first.
 
 This feature is designed to automate your media library. When enabled, it hard-links completed audio files from your "messy" download directory into a "clean" library directory, sorted by `Author/Title`.
 
-It **uses hard links**, not copies. This means it takes up **no additional disk space**.
+It **uses hard links**, not copies. This means it takes up **no additional disk space**, and **it will not interfere with torrent seeding** (does not modify or restructure the original torrent files)
 
 ### Configuration Options
 
-You can now control two separate aspects of auto-organization:
+You can control two separate aspects of auto-organization:
 
-- **`AUTO_ORGANIZE_ON_ADD`**: Automatically organize files when torrents are added to your torrent client
-- **`AUTO_ORGANIZE_ON_SCHEDULE`**: Periodically check for unorganized files at a configurable interval
+- **`AUTO_ORGANIZE_ON_ADD`**: Automatically organize files when torrents are added to your torrent client via the MouseSearch interface
+- **`AUTO_ORGANIZE_ON_SCHEDULE`**: Periodically check for unorganized files at a configurable interval (mainly used as a backup to the ON_ADD functionality)
 - **`AUTO_ORGANIZE_INTERVAL_HOURS`**: How often (in hours) to run the scheduled organization scan (defaults to 1 hour)
 
 These can be enabled independently of each other:
@@ -167,15 +235,15 @@ These can be enabled independently of each other:
 
 ### How It Works
 
-1.  When `AUTO_ORGANIZE_ON_ADD` is enabled and you add a torrent, MouseSearch calculates its infohash and saves the Author/Title metadata to `/app/data/metadata.json`.
+1.  When `AUTO_ORGANIZE_ON_ADD` is enabled and you add a torrent, MouseSearch calculates its infohash and saves the Author/Title metadata from Myanonamouse to `./data/database.json`.
 2.  When `AUTO_ORGANIZE_ON_SCHEDULE` is enabled, the app includes a scheduler that runs at the configured interval (default: every hour, configurable via `AUTO_ORGANIZE_INTERVAL_HOURS`) to check for unorganized files.
-3.  Both methods check `metadata.json` for any torrents marked as `organized: false`.
+3.  Both methods check `database.json` for any torrents marked as `organized: false`.
 4.  For each unorganized torrent, it:
-    a.  Asks your torrent client for its file path (e.g., `/downloads/torrents/organize-these/audiobooks/Some.Book.by.Some.Author`).
-    b.  Sanitizes the Author ("Some Author") and Title ("Some Book").
+    a.  Asks your torrent client for its file path (e.g., `/downloads/torrents/audiobooks/Some.Book.by.Some.Author`).
+    b.  Sanitizes the Author ("Some Author") and Title ("Some Book") using metadata from Myanonamouse.
     c.  Creates the destination path: `/downloads/organized/audiobooks/Some Author/Some Book`.
-    d.  Scans the source directory for audio files (`.m4b`, `.mp3`, etc.) and hard-links each one to the destination.
-    e.  Marks the torrent as `organized: true` in `metadata.json`.
+    d.  Scans the source directory for all files and hard-links each one to the destination, maintaining the original torrent folder structure
+    e.  Marks the torrent as `organized: true` in `database.json` (to prevent re-organizing later)
 
 ### Critical Setup Requirement
 
@@ -183,11 +251,24 @@ For hard links to work, your source (`TORRENT_DOWNLOAD_PATH`) and destination (`
 
 The easiest way to ensure this is to have a single parent directory (e.g., `/mnt/storage/downloads`) on your host machine that contains *both* your torrents and your organized media. You then pass this single parent directory as a volume in your `compose.yaml`, as shown in the example.
 
+#### Recommended File Structure (if using auto-organize)
+
+       downloads
+       ├── organized <- where your organized files will appear (point Audiobookshelf here)
+       │   ├── audiobooks
+       │   └── ebooks
+       └── torrents <- where your torrent client downloads files to
+           ├── audiobooks
+           └── ebooks
+
+
 **Correct `.env` and Host Path Example:**
 
 * **Host Path:** `/mnt/storage/downloads`
-* **Volume Mount:** `- /mnt/storage/downloads:/downloads`
-* **.env `TORRENT_DOWNLOAD_PATH`:** `/downloads/torrents/organize-these/audiobooks`
+* **Volume Mount (Docker):** `- /mnt/storage/downloads:/downloads`
+* **.env `TORRENT_DOWNLOAD_PATH`:** `/downloads/torrents/audiobooks`
 * **.env `ORGANIZED_PATH`:** `/downloads/organized/audiobooks`
 
-This setup guarantees that both container paths point to the same underlying device, allowing hard links to be created.
+**For Bare Metal installations:** Simply use absolute paths on your host system, again ensuring they are both on the same fileysystem/disk (e.g., `/mnt/storage/downloads/torrents/audiobooks` and `/mnt/storage/downloads/organized/audiobooks`).
+
+This setup guarantees that both paths point to the same underlying device, allowing hard links to be created.

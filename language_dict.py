@@ -1,4 +1,5 @@
 # language_dict.py
+# contains mapping of language names to their respective IDs (for Myanonamouse search)
 
 language_dict = {
     "English": 1,

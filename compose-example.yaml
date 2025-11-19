@@ -2,6 +2,7 @@ services:
   mousesearch:
     image: sevenlayercookie/mousesearch:latest
     container_name: mousesearch
+    restart: unless-stopped
     ports:
       - "5000:5000"
     env_file: .env
@@ -9,7 +10,7 @@ services:
       - ./data:/data  # location that config and state files will be stored
       # - /downloads:/downloads # if using auto-organize
 
- # Recommended File Structure (if using auto-organize)
+# Recommended File Structure (if using auto-organize)
 
 #       downloads
 #       ├── organized
@@ -19,5 +20,7 @@ services:
 #           ├── audiobooks
 #           └── ebooks
 
-
+    # Optional: Set the container's timezone to match your host
+    environment:
+      - TZ=America/New_York
 
