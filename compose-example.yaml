@@ -5,22 +5,13 @@ services:
     restart: unless-stopped
     ports:
       - "5000:5000"
-    env_file: .env
     volumes:
       - ./data:/data  # location that config and state files will be stored
       # - /downloads:/downloads # if using auto-organize
 
-# Recommended File Structure (if using auto-organize)
+    # env_file: .env # optional: load environment variables from a file
 
-#       downloads
-#       ├── organized
-#       │   ├── audiobooks
-#       │   └── ebooks
-#       └── torrents
-#           ├── audiobooks
-#           └── ebooks
-
-    # Optional: Set the container's timezone to match your host
+    # Optional: Set the container's timezone to match your host (useful for logs and scheduled tasks)
     environment:
-      - TZ=America/New_York
+      - TZ=America/Chicago
 
