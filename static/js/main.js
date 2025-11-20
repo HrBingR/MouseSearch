@@ -421,6 +421,7 @@ document.addEventListener("DOMContentLoaded", function () {
         const autoOrganizeOnAdd = document.getElementById('AUTO_ORGANIZE_ON_ADD').checked;
         const autoOrganizeOnSchedule = document.getElementById('AUTO_ORGANIZE_ON_SCHEDULE').checked;
         const organizedPathInput = document.getElementById('ORGANIZED_PATH');
+        const downloadPathInput = document.getElementById('TORRENT_DOWNLOAD_PATH');
         const organizeIntervalInput = document.getElementById('AUTO_ORGANIZE_INTERVAL_HOURS');
         
         if (organizedPathInput) {
@@ -430,6 +431,16 @@ document.addEventListener("DOMContentLoaded", function () {
                 organizedPathInput.classList.add('text-muted');
             } else {
                 organizedPathInput.classList.remove('text-muted');
+            }
+        }
+
+        if (downloadPathInput) {
+            const shouldEnable = autoOrganizeOnAdd || autoOrganizeOnSchedule;
+            downloadPathInput.disabled = !shouldEnable;
+            if (!shouldEnable) {
+                downloadPathInput.classList.add('text-muted');
+            } else {
+                downloadPathInput.classList.remove('text-muted');
             }
         }
 
