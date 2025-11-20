@@ -650,7 +650,7 @@ async def broadcast_toast(message: str, category: str = "primary"):
     """Broadcast a toast notification to all connected SSE clients."""
     payload = json.dumps({"message": message, "type": category})
     disconnected = set()
-    for queue in connected_websockets:
+    for queue in list(connected_websockets):
         try:
             await queue.put(payload)
         except Exception as e:
@@ -899,6 +899,7 @@ async def events():
     async def event_stream():
         try:
             while True:
+                yield ": connected\n\n"
                 # Wait for new data, but timeout every 15 seconds to send a heartbeat
                 try:
                     # Wait for a real message
