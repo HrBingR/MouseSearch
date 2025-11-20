@@ -100,6 +100,17 @@ function initializeEventStream() {
                     }
                     break;
                     
+                case 'vip_purchase':
+                    // Handle automatic VIP purchase notifications
+                    if (data.success) {
+                        const amount = data.amount || 0;
+                        const message = `Auto VIP top-up: Added ${amount.toFixed(2)} weeks. Remaining bonus: ${data.seedbonus ? data.seedbonus.toFixed(2) : 'N/A'}`;
+                        showToast(message, 'success');
+                        // Refresh MAM stats to show updated bonus
+                        loadMamUserData();
+                    }
+                    break;
+                    
                 default:
                     console.warn('[SSE] Unknown event type:', data.event);
             }
@@ -478,6 +489,19 @@ document.addEventListener("DOMContentLoaded", function () {
             }
         }
 
+        // VIP auto-buy interval is only enabled when auto-buy is enabled
+        const autoBuyVipEnabled = document.getElementById('AUTO_BUY_VIP').checked;
+        const vipIntervalInput = document.getElementById('AUTO_BUY_VIP_INTERVAL_HOURS');
+        
+        if (vipIntervalInput) {
+            vipIntervalInput.disabled = !autoBuyVipEnabled;
+            if (!autoBuyVipEnabled) {
+                vipIntervalInput.classList.add('text-muted');
+            } else {
+                vipIntervalInput.classList.remove('text-muted');
+            }
+        }
+
         // Organization path is only enabled if at least one auto-organize option is enabled
         const autoOrganizeOnAdd = document.getElementById('AUTO_ORGANIZE_ON_ADD').checked;
         const autoOrganizeOnSchedule = document.getElementById('AUTO_ORGANIZE_ON_SCHEDULE').checked;
@@ -522,6 +546,11 @@ document.addEventListener("DOMContentLoaded", function () {
         dynamicIpToggle.addEventListener('change', updateDependentFields);
     }
 
+    const autoBuyVipToggle = document.getElementById('AUTO_BUY_VIP');
+    if (autoBuyVipToggle) {
+        autoBuyVipToggle.addEventListener('change', updateDependentFields);
+    }
+
     const autoOrganizeOnAddToggle = document.getElementById('AUTO_ORGANIZE_ON_ADD');
     if (autoOrganizeOnAddToggle) {
         autoOrganizeOnAddToggle.addEventListener('change', updateDependentFields);
@@ -557,6 +586,40 @@ document.addEventListener("DOMContentLoaded", function () {
             })
             .catch(error => showToast("An error occurred while saving settings.", 'danger'));
     });
+
+    // VIP Top-Up Button Handler
+    const buyVipButton = document.getElementById('buy-vip-button');
+    if (buyVipButton) {
+        buyVipButton.addEventListener('click', function () {
+            // Disable button and show loading state
+            buyVipButton.disabled = true;
+            const originalText = buyVipButton.innerHTML;
+            buyVipButton.innerHTML = '<span class="spinner-border spinner-border-sm" aria-hidden="true"></span> Buying...';
+            
+            fetch('/mam/buy_vip', { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        const amount = data.amount || 0;
+                        const message = `VIP topped up! Added ${amount.toFixed(2)} weeks. Remaining bonus: ${data.seedbonus ? data.seedbonus.toFixed(2) : 'N/A'}`;
+                        showToast(message, 'success');
+                        // Refresh MAM user data to show updated bonus points
+                        loadMamUserData();
+                    } else {
+                        showToast(data.error || 'Failed to purchase VIP credit', 'danger');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error buying VIP:', error);
+                    showToast('An error occurred while purchasing VIP credit', 'danger');
+                })
+                .finally(() => {
+                    // Re-enable button and restore text
+                    buyVipButton.disabled = false;
+                    buyVipButton.innerHTML = originalText;
+                });
+        });
+    }
 
     searchForm.addEventListener("submit", function (e) {
         e.preventDefault();

@@ -126,7 +126,9 @@ FALLBACK_CONFIG = {
     "AUTO_ORGANIZE_ON_SCHEDULE": False,
     "AUTO_ORGANIZE_INTERVAL_HOURS": 1,
     "ENABLE_DYNAMIC_IP_UPDATE": False,
-    "DYNAMIC_IP_UPDATE_INTERVAL_HOURS": 3
+    "DYNAMIC_IP_UPDATE_INTERVAL_HOURS": 3,
+    "AUTO_BUY_VIP": False,
+    "AUTO_BUY_VIP_INTERVAL_HOURS": 24
 }
 
 # Set up data directory and paths
@@ -523,6 +525,51 @@ if app.config.get("ENABLE_DYNAMIC_IP_UPDATE"):
     scheduler.add_job(check_and_update_ip, 'interval', hours=interval_hours, id='ip_check_job', replace_existing=True)
     scheduler.add_job(check_and_update_ip, 'date', run_date=datetime.now() + timedelta(seconds=5), id='initial_ip_check_job')
 
+# --- VIP AUTO-BUY SCHEDULER ---
+async def auto_buy_vip():
+    """Automatically purchase VIP credit to keep it topped up."""
+    async with app.app_context():
+        if not app.config.get("MAM_ID"):
+            app.logger.warning("VIP auto-buy scheduled but MAM_ID not configured")
+            return
+        
+        if not await login_mam():
+            app.logger.warning("VIP auto-buy failed: Could not log into MAM")
+            return
+        
+        try:
+            epoch_ms = int(time.time() * 1000)
+            api_url = f"{app.config.get('MAM_API_URL')}/json/bonusBuy.php/"
+            params = {
+                'spendtype': 'VIP',
+                'duration': 'max',
+                '_': epoch_ms
+            }
+            
+            async with httpx.AsyncClient() as client:
+                response = await client.get(api_url, params=params, cookies=mam_session_cookies, timeout=10)
+                update_cookies(response)
+                response.raise_for_status()
+                result = response.json()
+                
+                if result.get('success'):
+                    app.logger.info(f"[AUTO-VIP] Purchase successful - {result.get('amount')} weeks added, Remaining bonus: {result.get('seedbonus')}")
+                    await broadcast_payload({
+                        'event': 'vip_purchase',
+                        'success': True,
+                        'amount': result.get('amount'),
+                        'seedbonus': result.get('seedbonus')
+                    })
+                else:
+                    app.logger.warning(f"[AUTO-VIP] Purchase failed: {result}")
+        except Exception as e:
+            app.logger.error(f"[AUTO-VIP] Error during scheduled VIP purchase: {e}")
+
+if app.config.get("AUTO_BUY_VIP"):
+    interval_hours = int(app.config.get("AUTO_BUY_VIP_INTERVAL_HOURS", 24))
+    scheduler.add_job(auto_buy_vip, 'interval', hours=interval_hours, id='vip_buy_job', replace_existing=True)
+    scheduler.add_job(auto_buy_vip, 'date', run_date=datetime.now() + timedelta(seconds=10), id='initial_vip_buy_job')
+
 # --- SESSION AND API HELPERS ---
 def update_cookies(response):
     global mam_session_cookies
@@ -587,6 +634,39 @@ async def mam_user_data():
             return jsonify(user_data)
     except Exception:
         return jsonify({'error': 'Failed to fetch data'}), 503
+
+@app.route('/mam/buy_vip', methods=['POST'])
+async def mam_buy_vip():
+    """Buy VIP credit using bonus points. Uses duration=max to top up to maximum."""
+    if not await login_mam(): 
+        return jsonify({'success': False, 'error': 'Not logged into MAM'}), 401
+    
+    try:
+        # Get current epoch time in milliseconds for the request
+        epoch_ms = int(time.time() * 1000)
+        api_url = f"{app.config.get('MAM_API_URL')}/json/bonusBuy.php/"
+        params = {
+            'spendtype': 'VIP',
+            'duration': 'max',
+            '_': epoch_ms
+        }
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.get(api_url, params=params, cookies=mam_session_cookies, timeout=10)
+            update_cookies(response)
+            response.raise_for_status()
+            result = response.json()
+            
+            # Log the result
+            if result.get('success'):
+                app.logger.info(f"VIP purchase successful - Amount: {result.get('amount')} weeks, Remaining bonus: {result.get('seedbonus')}")
+            else:
+                app.logger.warning(f"VIP purchase failed: {result}")
+            
+            return jsonify(result)
+    except Exception as e:
+        app.logger.error(f"Error buying VIP credit: {e}")
+        return jsonify({'success': False, 'error': 'Failed to purchase VIP'}), 503
     
 # --- GENERIC TORRENT CLIENT ROUTES ---
 @app.route('/client/status', methods=['GET'])
@@ -968,7 +1048,7 @@ async def proxy_thumbnail():
 async def update_settings():
     form = await request.form
     config_to_update = app.config.copy()
-    boolean_fields = {"AUTO_ORGANIZE_ON_ADD", "AUTO_ORGANIZE_ON_SCHEDULE", "ENABLE_DYNAMIC_IP_UPDATE"}
+    boolean_fields = {"AUTO_ORGANIZE_ON_ADD", "AUTO_ORGANIZE_ON_SCHEDULE", "ENABLE_DYNAMIC_IP_UPDATE", "AUTO_BUY_VIP"}
     for key in FALLBACK_CONFIG.keys():
         if key in boolean_fields: config_to_update[key] = key in form
         elif key in form: config_to_update[key] = form[key]
@@ -977,6 +1057,17 @@ async def update_settings():
     await load_new_app_config()
     if app.config.get("ENABLE_DYNAMIC_IP_UPDATE"):
         scheduler.add_job(id='manual_ip_update_job', func=force_update_ip, trigger='date', run_date=datetime.now() + timedelta(seconds=2))
+    
+    # Update VIP auto-buy scheduler based on new settings
+    if app.config.get("AUTO_BUY_VIP"):
+        interval_hours = int(app.config.get("AUTO_BUY_VIP_INTERVAL_HOURS", 24))
+        scheduler.add_job(auto_buy_vip, 'interval', hours=interval_hours, id='vip_buy_job', replace_existing=True)
+    else:
+        # Remove the job if disabled
+        try:
+            scheduler.remove_job('vip_buy_job')
+        except:
+            pass
     
     # Get the new display name from the source of truth
     new_type = config_to_update.get("TORRENT_CLIENT_TYPE")

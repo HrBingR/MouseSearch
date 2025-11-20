@@ -359,7 +359,14 @@
                   </div>
                 </div>
                 <hr class="my-2">
-                <strong>Status:</strong> <span id="mam-status" class="text-warning">LOADING</span>
+                <div class="d-flex justify-content-between align-items-center">
+                  <div>
+                    <strong>Status:</strong> <span id="mam-status" class="text-warning">LOADING</span>
+                  </div>
+                  <button type="button" class="btn btn-sm btn-outline-primary" id="buy-vip-button">
+                    <i class="bi bi-star-fill"></i> Top Up VIP
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -437,6 +444,29 @@
           >
           <div class="form-text small">
             How often to check for public IP changes when dynamic update is enabled.
+          </div>
+        </div>
+
+        <div class="form-check form-switch mb-2">
+          <input class="form-check-input" type="checkbox" id="AUTO_BUY_VIP" name="AUTO_BUY_VIP" 
+          {% if AUTO_BUY_VIP %}checked{% endif %}>
+          <label class="form-check-label" for="AUTO_BUY_VIP">Auto-Buy VIP Credit</label>
+        </div>
+
+        <div class="mb-3">
+          <label for="AUTO_BUY_VIP_INTERVAL_HOURS" class="form-label small">
+            VIP Top-Up Interval (hours)
+          </label>
+          <input
+            type="number"
+            class="form-control form-control-sm"
+            id="AUTO_BUY_VIP_INTERVAL_HOURS"
+            name="AUTO_BUY_VIP_INTERVAL_HOURS"
+            min="1"
+            value="{{ AUTO_BUY_VIP_INTERVAL_HOURS }}"
+          >
+          <div class="form-text small">
+            How often to automatically top up VIP credit using bonus points.
           </div>
         </div>
 
