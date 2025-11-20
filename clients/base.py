@@ -41,3 +41,8 @@ class TorrentClient(ABC):
     async def get_api_version(self) -> str:
         """Returns version string of the client."""
         pass
+
+    @abstractmethod
+    async def get_torrents_with_metadata(self) -> list:
+        """Returns list of all torrents with metadata including comment field."""
+        pass

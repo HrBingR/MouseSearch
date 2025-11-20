@@ -127,3 +127,17 @@ class QBittorrentClient(TorrentClient):
     async def get_api_version(self) -> str:
         """Returns API version string."""
         return "v2"
+
+    async def get_torrents_with_metadata(self) -> list:
+        """Returns list of all torrents with metadata including comment field."""
+        try:
+            async with httpx.AsyncClient(cookies=self.session_cookies) as client:
+                response = await client.get(
+                    f"{self.base_url}/api/v2/torrents/info",
+                    headers=self.headers
+                )
+                response.raise_for_status()
+                torrent_list = response.json()
+                return torrent_list
+        except RequestError as e:
+            return []

@@ -10,9 +10,6 @@ from dotenv import load_dotenv
 from httpx import RequestError, Limits, Timeout, AsyncHTTPTransport
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-import hashlib
-import bencodepy
-
 import re
 from pathlib import Path
 
@@ -24,6 +21,7 @@ from language_dict import language_dict
 import asyncio
 
 from clients import get_torrent_client, get_client_display_name
+from hashing import calculate_torrent_hash_from_url
 
 # --- SCHEDULER AND STATE SETUP ---
 app = Quart(__name__)
@@ -35,6 +33,7 @@ monitoring_state = {}
 monitor_task = None
 torrent_status_cache = {}
 CACHE_TTL = 2.0
+pending_mid_resolutions = {}  # Maps MID -> {"added_at": timestamp, "metadata": {...}}
 
 # --- SSE Globals ---
 connected_websockets = set() 
@@ -230,6 +229,49 @@ async def monitor_downloads_loop():
     client_session_active = False
     
     while True:
+        # First, check and process pending MID resolutions
+        if pending_mid_resolutions and torrent_client:
+            try:
+                all_torrents = await torrent_client.get_torrents_with_metadata()
+                mids_to_remove = []
+                
+                for mid, pending_data in pending_mid_resolutions.items():
+                    # Look for this MID in the torrents list
+                    for torrent in all_torrents:
+                        comment = torrent.get('comment', '')
+                        mid_match = re.search(r'MID=(\d+)', comment)
+                        
+                        if mid_match and mid_match.group(1) == mid:
+                            # Found the torrent! Extract hash and move to monitoring_state
+                            torrent_hash = torrent.get('hash', '')
+                            if torrent_hash:
+                                app.logger.info(f"Resolved MID {mid} to hash {torrent_hash}")
+                                
+                                # Save metadata with hash
+                                metadata = load_metadata()
+                                metadata[torrent_hash] = pending_data["metadata"]
+                                save_metadata(metadata)
+                                
+                                # Add to monitoring state
+                                monitoring_state[torrent_hash] = {
+                                    "added_at": pending_data["added_at"]
+                                }
+                                
+                                mids_to_remove.append(mid)
+                                break
+                    
+                    # Check timeout (e.g., 60 seconds)
+                    if time.time() - pending_data["added_at"] > 60:
+                        app.logger.warning(f"MID {mid} resolution timed out after 60s")
+                        mids_to_remove.append(mid)
+                
+                # Clean up resolved/timed-out MIDs
+                for mid in mids_to_remove:
+                    del pending_mid_resolutions[mid]
+                    
+            except Exception as e:
+                app.logger.warning(f"[MONITOR] Failed to resolve pending MIDs: {e}")
+        
         if not monitoring_state:
             if client_session_active:
                 app.logger.debug("[MONITOR] Queue empty. Going idle.")
@@ -366,6 +408,16 @@ async def monitor_downloads_loop():
 
             for h in finished_hashes:
                 app.logger.info(f"[MONITOR] Torrent {h} finished. Triggering Auto-Organize.")
+                
+                # Broadcast final status update before removing from monitoring
+                if h in torrents_info:
+                    final_status = {h: torrents_info[h]}
+                    await broadcast_payload({
+                        "event": "torrent-progress",
+                        "torrents": final_status
+                    })
+                    app.logger.debug(f"[MONITOR] Broadcasted final status for completed torrent {h[:8]}...")
+                
                 try:
                     success, msg = await _perform_organization(h)
                     if not success:
@@ -571,8 +623,40 @@ async def client_add_torrent():
     author = incoming_data.get('author', 'Unknown')
     title = incoming_data.get('title', 'Unknown')
     id = incoming_data.get('id', '0')
+    category = incoming_data.get('category', app.config.get("TORRENT_CLIENT_CATEGORY", ""))
     
     auto_organize_warning = None
+    hash_val = None
+    
+    # Check if MID is present - if so, skip hash calculation
+    if id and id != '0' and app.config.get("AUTO_ORGANIZE_ON_ADD"):
+        app.logger.info(f"MID {id} detected - adding torrent without hash calculation")
+        
+        # Add torrent immediately
+        result = await torrent_client.add_torrent(torrent_url, category)
+        
+        if result['status'] == 'success':
+            # Store in pending_mid_resolutions for later hash resolution
+            pending_mid_resolutions[id] = {
+                "added_at": time.time(),
+                "metadata": {
+                    "mid": id,
+                    "author": author,
+                    "title": title,
+                    "added_on": datetime.now().isoformat(),
+                    "organized": False,
+                    "retry_count": 0
+                }
+            }
+            app.logger.info(f"Added MID {id} to pending_mid_resolutions for hash resolution")
+            start_monitoring_loop()
+            
+            return jsonify({'message': result['message']})
+        else:
+            return jsonify({'error': result.get('message', 'Unknown error')}), 400
+    
+    # Fallback: No MID or auto-organize disabled - use old hash-based approach
+    app.logger.warning(f"WARNING: running hash calculation for torrent URL without MID: {torrent_url}")
     hash_val = await calculate_torrent_hash_from_url(torrent_url)
     
     if app.config.get("AUTO_ORGANIZE_ON_ADD"):
@@ -581,14 +665,13 @@ async def client_add_torrent():
         else:
             metadata = load_metadata()
             metadata[hash_val] = {
-                "id": id, "author": author, "title": title,
+                "mid": id, "author": author, "title": title,
                 "added_on": datetime.now().isoformat(),
                 "organized": False, "retry_count": 0
             }
             save_metadata(metadata)
             app.logger.info(f"Saved metadata for torrent hash: {hash_val}")
     
-    category = incoming_data.get('category', app.config.get("TORRENT_CLIENT_CATEGORY", ""))
     result = await torrent_client.add_torrent(torrent_url, category)
     
     if result['status'] == 'success':
@@ -605,6 +688,41 @@ async def client_add_torrent():
         return jsonify(response_data)
     else:
         return jsonify({'error': result.get('message', 'Unknown error')}), 400
+
+@app.route('/client/resolve_mid', methods=['POST'])
+async def client_resolve_mid():
+    """Resolve a MID (MyAnonamouse ID) to a torrent hash by querying the client."""
+    if not torrent_client:
+        return jsonify({'error': 'Client not initialized'}), 500
+    
+    data = await request.get_json()
+    mid = data.get('mid')
+    
+    if not mid:
+        return jsonify({'error': 'MID required'}), 400
+    
+    try:
+        # Fetch all torrents with metadata from the client
+        all_torrents = await torrent_client.get_torrents_with_metadata()
+        
+        # Search for the MID in torrent comments
+        for torrent in all_torrents:
+            comment = torrent.get('comment', '')
+            if comment:
+                mid_match = re.search(r'MID=(\d+)', comment)
+                if mid_match and mid_match.group(1) == str(mid):
+                    torrent_hash = torrent.get('hash', '')
+                    if torrent_hash:
+                        app.logger.debug(f"Resolved MID {mid} to hash {torrent_hash}")
+                        return jsonify({'hash': torrent_hash, 'mid': mid})
+        
+        # MID not found in client
+        return jsonify({'error': 'MID not found in client'}), 404
+        
+    except Exception as e:
+        app.logger.error(f"Error resolving MID {mid}: {e}")
+        return jsonify({'error': str(e)}), 500
+
 
 @app.route('/client/info/<hash_val>', methods=['GET'])
 async def client_torrent_info(hash_val):
@@ -715,21 +833,9 @@ async def get_torrent_hash():
     data = await request.get_json()
     url = data.get('url')
     if not url: return jsonify({'error': 'URL required'}), 400
+    app.logger.warning(f"WARNING: running hash calculation for torrent URL: {url}")
     hash_val = await calculate_torrent_hash_from_url(url)
     return jsonify({'hash': hash_val}) if hash_val else (jsonify({'error': 'Failed'}), 500)
-
-async def calculate_torrent_hash_from_url(url: str) -> str | None:
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(url, timeout=10)
-            response.raise_for_status()
-            torrent_data = bencodepy.decode(response.content)
-            if b'info' not in torrent_data: return None
-            bencoded_info = bencodepy.encode(torrent_data[b'info'])
-            return hashlib.sha1(bencoded_info).hexdigest()
-    except Exception as e:
-        app.logger.error(f"Hash calc error: {e}")
-        return None
 
 # --- SEARCH ROUTES & HELPERS ---
 def parse_author_info(info):
@@ -798,6 +904,31 @@ async def mam_search():
             client_status_data = await torrent_client.get_status() if torrent_client else {"status": "error"}
             client_connected = client_status_data.get("status") == "success"
             categories = await torrent_client.get_categories() if client_connected else {}
+            
+            # Fetch torrents with metadata and build MID-to-hash mapping
+            mid_to_hash = {}
+            if client_connected and torrent_client:
+                try:
+                    all_torrents = await torrent_client.get_torrents_with_metadata()
+                    for torrent in all_torrents:
+                        comment = torrent.get('comment', '')
+                        if comment:
+                            # Parse MID from comment using regex: MID=(\d+)
+                            mid_match = re.search(r'MID=(\d+)', comment)
+                            if mid_match:
+                                mid = mid_match.group(1)
+                                torrent_hash = torrent.get('hash', '')
+                                if torrent_hash:
+                                    mid_to_hash[mid] = torrent_hash
+                    app.logger.debug(f"Built MID-to-hash mapping with {len(mid_to_hash)} entries")
+                except Exception as e:
+                    app.logger.warning(f"Failed to fetch torrents with metadata: {e}")
+            
+            # Mark results as downloaded if MID matches
+            for item in ranked:
+                item_id = str(item.get('id', ''))
+                if item_id in mid_to_hash:
+                    item['my_snatched'] = 1
             
             return await render_template("partials/results.html", results=ranked, CLIENT_STATUS="CONNECTED" if client_connected else "NOT CONNECTED", categories=categories, TORRENT_CLIENT_CATEGORY=app.config.get("TORRENT_CLIENT_CATEGORY", ""))
     except Exception as e:
@@ -960,7 +1091,6 @@ async def events():
     async def event_stream():
         try:
             while True:
-                yield ": connected\n\n"
                 # Wait for new data, but timeout every 15 seconds to send a heartbeat
                 try:
                     # Wait for a real message

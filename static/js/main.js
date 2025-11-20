@@ -116,34 +116,37 @@ function initializeEventStream() {
     console.log('[SSE] Event stream initialized');
 }
 
-async function getTorrentHash(torrentId, torrentUrl) {
-    // 1. Check the cache using the STABLE torrent ID
+async function getTorrentHashByMID(torrentId) {
+    // 1. Check the cache using the STABLE torrent ID (MID)
     if (torrentHashMap[torrentId]) {
-        console.log(`[CACHE] Found hash for ID ${torrentId}: ${torrentHashMap[torrentId]}`);
+        console.log(`[CACHE] Found hash for MID ${torrentId}: ${torrentHashMap[torrentId]}`);
         return torrentHashMap[torrentId];
     }
     
-    // 2. If not in cache, fetch it using the DYNAMIC URL
+    // 2. Query backend to resolve MID to hash from client's torrent list
     try {
-        console.log(`[API] Calculating hash for ID ${torrentId} using URL: ${torrentUrl}`);
-        const response = await fetch('/calculate_hash', {
+        console.log(`[API] Resolving hash for MID ${torrentId} from client`);
+        const response = await fetch('/client/resolve_mid', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ url: torrentUrl })
+            body: JSON.stringify({ mid: torrentId })
         });
-        if (!response.ok) throw new Error('Backend failed to calculate hash');
+        if (!response.ok) {
+            console.log(`[API] MID resolution endpoint not available or failed`);
+            return null;
+        }
         const data = await response.json();
         
         if (data.hash) {
-            console.log(`[API] Successfully calculated hash: ${data.hash}`);
-            // 3. Store the new hash in the cache with the STABLE ID as the key
+            console.log(`[API] Successfully resolved MID ${torrentId} to hash: ${data.hash}`);
+            // Store the hash in the cache with the MID as the key
             torrentHashMap[torrentId] = data.hash;
             return data.hash;
         } else {
-            console.error(`[API] Hash calculation failed:`, data.error);
+            console.log(`[API] MID ${torrentId} not found in client yet`);
         }
     } catch (error) {
-        console.error("Error getting torrent hash:", error);
+        console.error("Error resolving MID to hash:", error);
     }
     return null;
 }
@@ -160,7 +163,7 @@ function updateTorrentUI(hash, data, resultItem) {
     
     const state = data.state || 'unknown';
     const progress = ((data.progress || 0) * 100).toFixed(0);
-    let badgeType;
+    let badgeType = 'secondary';
     let simplifiedState = 'Unknown';
     
     // Simplified state mapping
@@ -179,6 +182,9 @@ function updateTorrentUI(hash, data, resultItem) {
     } else if (['queuedUP', 'queuedDL'].includes(state)) {
         simplifiedState = 'Queued';
         badgeType = 'info';
+    } else {
+        simplifiedState = 'Unknown';
+        badgeType = 'warning';
     }
     
     const statusHtml = `
@@ -357,17 +363,37 @@ function loadMamUserData() {
 function initializeSnatchedTorrents() {
     console.log("[INIT] Checking for snatched torrents to begin polling.");
     document.querySelectorAll('.result-item[data-snatched="1"]').forEach(async (item) => {
-        const torrentUrl = item.dataset.torrentUrl;
-        const torrentId = item.dataset.torrentId; // Get the new ID
-        console.log("[INIT] Found snatched item:", item);
-        if (torrentId && torrentUrl) {
-            // Pass both arguments
-            const hash = await getTorrentHash(torrentId, torrentUrl);
+        const torrentId = item.dataset.torrentId;
+        console.log("[INIT] Found snatched item with MID:", torrentId);
+        if (torrentId) {
+            // Try to resolve MID to hash from client
+            const hash = await getTorrentHashByMID(torrentId);
             if (hash) {
                 pollTorrentStatus(hash, item);
+                // Fetch initial status immediately
+                fetchAndUpdateTorrentStatus(hash, item);
+            } else {
+                console.log(`[INIT] Hash not yet available for MID ${torrentId} - will update via SSE when ready`);
             }
         }
     });
+}
+
+/**
+ * Fetches torrent status from the backend and updates the UI immediately.
+ * @param {string} hash - The torrent hash
+ * @param {HTMLElement} resultItem - The DOM element for this result item
+ */
+async function fetchAndUpdateTorrentStatus(hash, resultItem) {
+    try {
+        const response = await fetch(`/client/info/${hash}`, { cache: "no-store" });
+        if (response.ok) {
+            const data = await response.json();
+            updateTorrentUI(hash, data, resultItem);
+        }
+    } catch (error) {
+        console.error(`[FETCH] Error fetching status for hash ${hash}:`, error);
+    }
 }
 
 // --- Main Event Listeners ---
@@ -544,6 +570,7 @@ document.addEventListener("DOMContentLoaded", function () {
                 body: JSON.stringify({
                     torrent_url: torrentUrl,
                     category: category,
+                    id: torrentId,
                     author: author,
                     title: title
                 }),
@@ -554,10 +581,33 @@ document.addEventListener("DOMContentLoaded", function () {
                     if (data.message) {
                         console.log("[ADD] Torrent added successfully via API.");
                         button.textContent = 'Added!';
-                        const hash = await getTorrentHash(torrentId, torrentUrl);
-                        if (hash) {
-                            pollTorrentStatus(hash, resultItem);
+                        // With MID-based matching, hash resolution happens in the monitoring loop
+                        // Show a waiting state - SSE will update once hash is resolved
+                        const statusContainer = resultItem.querySelector('.torrent-status-container');
+                        if (statusContainer) {
+                            statusContainer.innerHTML = `<span class="badge bg-info text-wrap">Resolving torrent...</span>`;
                         }
+                        console.log(`[ADD] MID ${torrentId} added - hash will be resolved by monitoring loop`);
+                        
+                        // Poll for hash resolution (check every 2 seconds for up to 30 seconds)
+                        let attempts = 0;
+                        const maxAttempts = 15;
+                        const pollInterval = setInterval(async () => {
+                            attempts++;
+                            const hash = await getTorrentHashByMID(torrentId);
+                            if (hash) {
+                                console.log(`[ADD] Hash resolved for MID ${torrentId}: ${hash}`);
+                                clearInterval(pollInterval);
+                                pollTorrentStatus(hash, resultItem);
+                                fetchAndUpdateTorrentStatus(hash, resultItem);
+                            } else if (attempts >= maxAttempts) {
+                                console.log(`[ADD] Hash resolution timed out for MID ${torrentId}`);
+                                clearInterval(pollInterval);
+                                if (statusContainer) {
+                                    statusContainer.innerHTML = `<span class="badge bg-warning text-wrap">Added (status pending)</span>`;
+                                }
+                            }
+                        }, 2000);
                     } else {
                         console.error("[ADD] Failed to add torrent:", data.error);
                     }
