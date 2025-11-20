@@ -879,6 +879,7 @@ async def mam_search():
         "tor[srchIn][title]": "on" if request.args.get("search_in_title") else "off",
         "tor[srchIn][author]": "on" if request.args.get("search_in_author") else "off",
         "tor[srchIn][narrator]": "on" if request.args.get("search_in_narrator") else "off",
+        "tor[srchIn][series]": "on" if request.args.get("search_in_series") else "off",
         "tor[searchType]": request.args.get("searchType", "all"),
     }
     if (media_type := request.args.get("media_type", "13")) != "all":
