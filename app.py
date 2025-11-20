@@ -892,19 +892,29 @@ async def _perform_organization(hash_val: str) -> tuple[bool, str]:
 
 @app.route('/events')
 async def events():
-    """Server-Sent Events endpoint for real-time toast notifications."""
+    """Server-Sent Events endpoint with heartbeat to prevent timeouts."""
     queue = asyncio.Queue()
     connected_websockets.add(queue)
-    
+
     async def event_stream():
         try:
             while True:
-                data = await queue.get()
-                yield f"data: {data}\n\n"
+                # Wait for new data, but timeout every 15 seconds to send a heartbeat
+                try:
+                    # Wait for a real message
+                    data = await asyncio.wait_for(queue.get(), timeout=15.0)
+                    yield f"data: {data}\n\n"
+                except asyncio.TimeoutError:
+                    # No message received in 15s; send a comment (heartbeat)
+                    # Comments start with ':' and are ignored by the browser EventSource
+                    yield ": keep-alive\n\n"
         finally:
             connected_websockets.discard(queue)
-    
-    return Response(event_stream(), mimetype='text/event-stream')
+
+    return Response(event_stream(), mimetype='text/event-stream', headers={
+        'Cache-Control': 'no-cache',
+        'X-Accel-Buffering': 'no' # Helpful for Nginx/proxies
+    })
 
 @app.route('/organize', methods=['POST'])
 @app.route('/organize/<hash_val>', methods=['POST'])
