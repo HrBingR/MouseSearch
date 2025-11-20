@@ -44,14 +44,14 @@ MouseSearch can be deployed in two ways:
     mkdir mousesearch && cd mousesearch
     ```
 
-2.  Download the example environment file:
+2.  (Optional) Download the example environment file:
     ```bash
     curl -o .env https://raw.githubusercontent.com/sevenlayercookie/MouseSearch/main/.env.example
     ```
 
 3.  Create a `compose.yaml` file (see configuration below)
 
-4.  Edit `.env` with your settings
+4.  (Optional) Edit `.env` with your settings - alternatively, configure through the web interface after launch
 
 5.  Start the application:
     ```bash
@@ -88,14 +88,14 @@ The application will be available at `http://<your-server-ip>:5000`.
     pip install -r requirements.txt
     ```
 
-4.  Create your environment file:
+3.  (Optional) Create your environment file:
     ```bash
     cp .env.example .env
     ```
 
-5.  Edit `.env` with your settings
+4.  (Optional) Edit `.env` with your settings - alternatively, configure through the web interface after launch
 
-6.  Launch the application:
+5.  Launch the application:
     ```bash
     ./launch.sh
     ```
@@ -110,6 +110,8 @@ The application will be available at `http://<your-server-ip>:5000` (or your cus
 ---
 
 ## Configuration
+
+**Environment variables are completely optional.** You can configure all settings directly through the web interface after launching the application.
 
 ### Environment Variables (`.env`)
 
@@ -203,8 +205,9 @@ The application will be available at `http://<your-server-ip>:5000`.
 ## Usage
 
 1.  Open the application in your browser.
-2.  The app will show "NOT CONNECTED" for MAM and your torrent client. The app's settings can be configured live from the UI, but using the `.env` file is recommended for persistence.
-3.  If your `.env` is set up correctly, the dashboards should automatically update to "CONNECTED" and populate your user info.
+2.  The app will show "NOT CONNECTED" for MAM and your torrent client. 
+3.  **Configure your settings:** You can configure all settings directly through the web interface, or use the `.env` file.
+4.  Once configured, the dashboards should automatically update to "CONNECTED" and populate your user info.
 4.  Use the search bar to find content.
 5.  In the results, select a torrent category (if desired) and click "Add to Client".
 6.  The torrent will be added, and a status badge will appear, polling your torrent client for live progress.
