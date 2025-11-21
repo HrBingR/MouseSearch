@@ -16,7 +16,7 @@ from pathlib import Path
 import logging # for hypercorn logging
 import sys # for stderr logging
 
-from language_dict import language_dict
+from static.language_dict import language_dict
 
 import asyncio
 

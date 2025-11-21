@@ -559,12 +559,20 @@
         <div class="form-check form-switch mb-2">
           <input class="form-check-input" type="checkbox" id="AUTO_BUY_VIP" name="AUTO_BUY_VIP" 
           {% if AUTO_BUY_VIP %}checked{% endif %}>
-          <label class="form-check-label" for="AUTO_BUY_VIP">Auto-Buy VIP Credit</label>
+          <label class="form-check-label" for="AUTO_BUY_VIP">Auto-Buy VIP Credit 
+            <i class="bi bi-info-circle" 
+              data-bs-toggle="tooltip" 
+              data-bs-placement="right" 
+              title="Automatically purchase maximum VIP weeks using bonus points at regular intervals. Costs 1,250 BP per week."></i></label>
         </div>
 
         <div class="mb-3">
           <label for="AUTO_BUY_VIP_INTERVAL_HOURS" class="form-label small">
-            VIP Top-Up Interval (hours)
+            VIP Top-Up Interval (hours) 
+            <i class="bi bi-info-circle"
+              data-bs-toggle="tooltip" 
+              data-bs-placement="right" 
+              title="How often to check and top-up VIP credit. Default: 24 hours (once daily)."></i>
           </label>
           <input
             type="number"
@@ -584,13 +592,21 @@
         <div class="form-check form-switch mb-2">
           <input class="form-check-input" type="checkbox" id="AUTO_BUY_UPLOAD_ON_RATIO" name="AUTO_BUY_UPLOAD_ON_RATIO" 
           {% if AUTO_BUY_UPLOAD_ON_RATIO %}checked{% endif %}>
-          <label class="form-check-label" for="AUTO_BUY_UPLOAD_ON_RATIO">Auto-Buy on Low Ratio</label>
+          <label class="form-check-label" for="AUTO_BUY_UPLOAD_ON_RATIO">Auto-Buy on Low Ratio 
+            <i class="bi bi-info-circle"
+              data-bs-toggle="tooltip" 
+              data-bs-placement="right" 
+              title="Automatically purchase upload credit when your ratio drops below the threshold. Costs 500 BP per GB."></i></label>
         </div>
 
         <div class="row mb-3">
           <div class="col-md-6">
             <label for="AUTO_BUY_UPLOAD_RATIO_THRESHOLD" class="form-label small">
-              Ratio Threshold
+              Ratio Threshold 
+              <i class="bi bi-info-circle"
+                data-bs-toggle="tooltip" 
+                data-bs-placement="top" 
+                title="Purchase upload credit when your ratio falls below this value. MAM requires ratio ≥ 1.0."></i>
             </label>
             <input
               type="number"
@@ -604,7 +620,11 @@
           </div>
           <div class="col-md-6">
             <label for="AUTO_BUY_UPLOAD_RATIO_AMOUNT" class="form-label small">
-              Amount to Buy (GB)
+              Amount to Buy (GB) 
+              <i class="bi bi-info-circle"
+                data-bs-toggle="tooltip" 
+                data-bs-placement="top" 
+                title="How much upload credit to purchase when ratio drops below threshold. Will be rounded to valid amount (≤3 API requests)."></i>
             </label>
             <input
               type="number"
@@ -626,13 +646,21 @@
         <div class="form-check form-switch mb-2">
           <input class="form-check-input" type="checkbox" id="AUTO_BUY_UPLOAD_ON_BUFFER" name="AUTO_BUY_UPLOAD_ON_BUFFER" 
           {% if AUTO_BUY_UPLOAD_ON_BUFFER %}checked{% endif %}>
-          <label class="form-check-label" for="AUTO_BUY_UPLOAD_ON_BUFFER">Auto-Buy on Low Buffer</label>
+          <label class="form-check-label" for="AUTO_BUY_UPLOAD_ON_BUFFER">Auto-Buy on Low Buffer 
+            <i class="bi bi-info-circle"
+              data-bs-toggle="tooltip" 
+              data-bs-placement="right" 
+              title="Automatically purchase upload credit when your buffer (uploaded - downloaded) drops below threshold. Costs 500 BP per GB."></i></label>
         </div>
 
         <div class="row mb-3">
           <div class="col-md-6">
             <label for="AUTO_BUY_UPLOAD_BUFFER_THRESHOLD" class="form-label small">
-              Buffer Threshold (GB)
+              Buffer Threshold (GB) 
+              <i class="bi bi-info-circle"
+                data-bs-toggle="tooltip" 
+                data-bs-placement="top" 
+                title="Purchase upload credit when your buffer falls below this many GB. Buffer = Total Uploaded - Total Downloaded."></i>
             </label>
             <input
               type="number"
@@ -646,7 +674,11 @@
           </div>
           <div class="col-md-6">
             <label for="AUTO_BUY_UPLOAD_BUFFER_AMOUNT" class="form-label small">
-              Amount to Buy (GB)
+              Amount to Buy (GB) 
+              <i class="bi bi-info-circle"
+                data-bs-toggle="tooltip" 
+                data-bs-placement="top" 
+                title="How much upload credit to purchase when buffer drops below threshold. Will be rounded to valid amount (≤3 API requests)."></i>
             </label>
             <input
               type="number"
@@ -663,7 +695,11 @@
 
         <div class="mb-3">
           <label for="AUTO_BUY_UPLOAD_CHECK_INTERVAL_HOURS" class="form-label small">
-            Check Interval (hours)
+            Check Interval (hours) 
+            <i class="bi bi-info-circle"
+              data-bs-toggle="tooltip" 
+              data-bs-placement="right" 
+              title="How often to check your ratio and buffer when auto-buy is enabled. Default: 6 hours."></i>
           </label>
           <input
             type="number"
@@ -681,7 +717,11 @@
         <div class="form-check form-switch mb-3">
           <input class="form-check-input" type="checkbox" id="BLOCK_DOWNLOAD_ON_LOW_BUFFER" name="BLOCK_DOWNLOAD_ON_LOW_BUFFER" 
           {% if BLOCK_DOWNLOAD_ON_LOW_BUFFER %}checked{% endif %}>
-          <label class="form-check-label" for="BLOCK_DOWNLOAD_ON_LOW_BUFFER">Block Downloads When Buffer Too Low</label>
+          <label class="form-check-label" for="BLOCK_DOWNLOAD_ON_LOW_BUFFER">Block Downloads When Buffer Too Low 
+            <i class="bi bi-info-circle"
+              data-bs-toggle="tooltip" 
+              data-bs-placement="right" 
+              title="Prevent downloads when you don't have enough buffer. Shows modal with option to purchase upload credit before downloading."></i></label>
         </div>
 
         <div class="form-check form-switch">
