@@ -289,7 +289,7 @@ async def monitor_downloads_loop():
                                 # Save metadata with hash
                                 metadata = load_metadata()
                                 metadata[torrent_hash] = pending_data["metadata"]
-                                save_metadata(metadata)
+                                save_database(metadata)
                                 
                                 # Add to monitoring state
                                 monitoring_state[torrent_hash] = {
@@ -1092,7 +1092,7 @@ async def client_add_torrent():
                 "added_on": datetime.now().isoformat(),
                 "status": "pending", "retry_count": 0
             }
-            save_metadata(metadata)
+            save_database(metadata)
             app.logger.info(f"Saved metadata for torrent hash: {hash_val}")
     
     result = await torrent_client.add_torrent(torrent_url, category)
@@ -1225,7 +1225,7 @@ def load_metadata():
         with open(DATABASE_FILE, "r") as f: return json.load(f)
     except: return {}
 
-def save_metadata(data):
+def save_database(data):
     with open(DATABASE_FILE, "w") as f: json.dump(data, f, indent=4)
 
 def sanitize_filename(name: str) -> str:
@@ -1375,7 +1375,7 @@ async def mam_search():
             
             # Save updated metadata if any snatched torrents were added
             if any(item.get('my_snatched') == 1 for item in ranked):
-                save_metadata(metadata)
+                save_database(metadata)
             
             return await render_template("partials/results.html", results=ranked, CLIENT_STATUS="CONNECTED" if client_connected else "NOT CONNECTED", categories=categories, TORRENT_CLIENT_CATEGORY=app.config.get("TORRENT_CLIENT_CATEGORY", ""))
     except Exception as e:
@@ -1643,12 +1643,12 @@ async def _perform_organization(hash_val: str) -> tuple[bool, str]:
     total = files_linked + files_exist
     if total == 0:
         metadata[hash_val]['retry_count'] += 1
-        save_metadata(metadata)
+        save_database(metadata)
         await broadcast_toast(f"Auto-organization failed for '{torrent_meta.get('title', 'Unknown')}': No files linked", "warning")
         return False, "No files found."
     
     metadata[hash_val]['status'] = 'organized'
-    save_metadata(metadata)
+    save_database(metadata)
     
     # User-friendly success message
     title = torrent_meta.get('title', 'Unknown')
