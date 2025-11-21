@@ -1432,6 +1432,7 @@ async def proxy_thumbnail():
         if time.time() - os.path.getmtime(cache_path) < 2592000:
             response = await send_file(cache_path)
             response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+            response.headers["X-Cache-Status"] = "HIT"
             return response
             
     # --- Upstream Fetch ---
@@ -1467,7 +1468,9 @@ async def proxy_thumbnail():
             finally: 
                 await r.aclose()
 
-        return Response(body(), status=r.status_code, headers=passthrough)
+        response = Response(body(), status=r.status_code, headers=passthrough)
+        response.headers["X-Cache-Status"] = "MISS"
+        return response
 
 @app.route("/update_settings", methods=["POST"])
 async def update_settings():
