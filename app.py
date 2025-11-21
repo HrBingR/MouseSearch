@@ -54,11 +54,11 @@ async def startup():
     
     # --- Initialize Active Monitoring on Startup ---
     metadata = load_metadata()
-    unorganized = [h for h, m in metadata.items() if not m.get('organized', False)]
-    if unorganized:
-        app.logger.info(f"Startup: Found {len(unorganized)} unorganized torrents. Starting active monitoring.")
+    pending = [h for h, m in metadata.items() if m.get('status') == 'pending']
+    if pending:
+        app.logger.info(f"Startup: Found {len(pending)} pending torrents. Starting active monitoring.")
         current_time = time.time()
-        for h in unorganized:
+        for h in pending:
             monitoring_state[h] = {"added_at": current_time - 20} 
         start_monitoring_loop()
 
@@ -1056,7 +1056,7 @@ async def client_add_torrent():
                     "author": author,
                     "title": title,
                     "added_on": datetime.now().isoformat(),
-                    "organized": False,
+                    "status": "pending",
                     "retry_count": 0
                 }
             }
@@ -1079,7 +1079,7 @@ async def client_add_torrent():
             metadata[hash_val] = {
                 "mid": id, "author": author, "title": title,
                 "added_on": datetime.now().isoformat(),
-                "organized": False, "retry_count": 0
+                "status": "pending", "retry_count": 0
             }
             save_metadata(metadata)
             app.logger.info(f"Saved metadata for torrent hash: {hash_val}")
@@ -1434,7 +1434,9 @@ async def _perform_organization(hash_val: str) -> tuple[bool, str]:
     """Performs the file organization for a given torrent hash."""
     metadata = load_metadata()
     if hash_val not in metadata: return False, f"No metadata for hash {hash_val}."
-    if metadata[hash_val].get('organized', False): return True, f"Already organized: {hash_val}."
+    status = metadata[hash_val].get('status', 'pending')
+    if status == 'organized': return True, f"Already organized: {hash_val}."
+    if status == 'untracked': return True, f"Torrent {hash_val} is marked as untracked - skipping organization."
     if metadata[hash_val].get('retry_count', 0) >= 3: return True, "Max retries exceeded."
     
     if not torrent_client: return False, "Client not initialized."
@@ -1506,7 +1508,7 @@ async def _perform_organization(hash_val: str) -> tuple[bool, str]:
         await broadcast_toast(f"Auto-organization failed for '{torrent_meta.get('title', 'Unknown')}': No files linked", "warning")
         return False, "No files found."
     
-    metadata[hash_val]['organized'] = True
+    metadata[hash_val]['status'] = 'organized'
     save_metadata(metadata)
     
     # User-friendly success message
@@ -1562,9 +1564,9 @@ async def organize_torrent_webhook(hash_val=None):
                 return jsonify({'status': 'error', 'message': f'Internal error: {str(e)}'}), 500
         else:
             metadata = load_metadata()
-            unorganized = [h for h, m in metadata.items() if not m.get('organized', False)]
+            pending = [h for h, m in metadata.items() if m.get('status') == 'pending']
             results = {'succeeded': 0, 'failed': 0, 'errors': []}
-            for h in unorganized:
+            for h in pending:
                 try:
                     s, m = await _perform_organization(h)
                     if s: results['succeeded'] += 1
@@ -1595,8 +1597,8 @@ async def check_for_unorganized_torrents():
     async with app.app_context():
         app.logger.info("Running safety net organization job.")
         metadata = load_metadata()
-        unorganized = [h for h, m in metadata.items() if not m.get('organized', False)]
-        for h in unorganized:
+        pending = [h for h, m in metadata.items() if m.get('status') == 'pending']
+        for h in pending:
             try:
                 success, msg = await _perform_organization(h)
                 if not success:
