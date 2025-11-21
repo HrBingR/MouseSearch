@@ -157,6 +157,7 @@ CONFIG_FILE = DATA_PATH / "config.json"
 DATABASE_FILE = DATA_PATH / "database.json"
 IP_STATE_FILE = DATA_PATH / "ip_state.json"
 
+
 # --- Setup:thumbnail cache ---
 THUMB_CACHE_DIR = DATA_PATH / "cache/thumbnails"
 
@@ -1059,6 +1060,11 @@ async def client_add_torrent():
         result = await torrent_client.add_torrent(torrent_url, category)
         
         if result['status'] == 'success':
+            # Extract additional metadata from incoming_data
+            series_info = incoming_data.get('series_info', '')
+            main_cat = incoming_data.get('main_cat', '')
+            download_link = incoming_data.get('download_link', '')
+            
             # Store in pending_mid_resolutions for later hash resolution
             pending_mid_resolutions[id] = {
                 "added_at": time.time(),
@@ -1068,7 +1074,10 @@ async def client_add_torrent():
                     "title": title,
                     "added_on": datetime.now().isoformat(),
                     "status": "pending",
-                    "retry_count": 0
+                    "retry_count": 0,
+                    "series_info": series_info,
+                    "category": get_category_name(main_cat),
+                    "download_link": download_link
                 }
             }
             app.logger.info(f"Added MID {id} to pending_mid_resolutions for hash resolution")
@@ -1086,11 +1095,19 @@ async def client_add_torrent():
         if not hash_val:
             auto_organize_warning = "Unable to calculate hash - auto-organization will not work."
         else:
+            # Extract additional metadata from incoming_data
+            series_info = incoming_data.get('series_info', '')
+            main_cat = incoming_data.get('main_cat', '')
+            download_link = incoming_data.get('download_link', '')
+            
             metadata = load_database()
             metadata[hash_val] = {
                 "mid": id, "author": author, "title": title,
                 "added_on": datetime.now().isoformat(),
-                "status": "pending", "retry_count": 0
+                "status": "pending", "retry_count": 0,
+                "series_info": series_info,
+                "category": get_category_name(main_cat),
+                "download_link": download_link
             }
             save_database(metadata)
             app.logger.info(f"Saved metadata for torrent hash: {hash_val}")
@@ -1232,6 +1249,19 @@ def sanitize_filename(name: str) -> str:
     sanitized = re.sub(r'[<>:"/\\|?*]', '', name)
     return sanitized.strip('. ') if sanitized else "Untitled"
 
+def get_category_name(category_num):
+    """Convert MAM category number to text name."""
+    category_map = {
+        13: "audiobooks",
+        14: "ebooks",
+        15: "musicology",
+        16: "radio"
+    }
+    try:
+        return category_map.get(int(category_num), "unknown")
+    except (ValueError, TypeError):
+        return "unknown"
+
 async def broadcast_payload(payload: dict):
     """Broadcast a generic payload to all connected SSE clients."""
     payload_json = json.dumps(payload)
@@ -1369,7 +1399,10 @@ async def mam_search():
                             "title": item.get('title', ''),
                             "added_on": datetime.now().isoformat(),
                             "status": "unknown",
-                            "retry_count": 0
+                            "retry_count": 0,
+                            "series_info": item.get('series_info', ''),
+                            "category": get_category_name(item.get('main_cat', '')),
+                            "download_link": item.get('download_link', '')
                         }
                         app.logger.info(f"Added snatched torrent to database: {item.get('title')} (MID: {item_id}, hash: {torrent_hash})")
             

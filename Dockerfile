@@ -46,4 +46,6 @@ CMD exec hypercorn --bind ${ADDRESS}:${PORT} \
      --worker-class asyncio \
      --access-logfile - \
      --error-logfile - \
-     --log-level info app:app
+     --log-level info app:app \
+     --graceful-timeout 5 \
+     --shutdown-timeout 5
