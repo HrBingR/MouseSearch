@@ -13,6 +13,7 @@ MouseSearch is a self-hosted web application that provides a clean, fast search 
     * View your MAM user stats (username, ratio, bonus points, etc.) directly in the app.
     * Check the connection status to both MAM and your torrent client.
 * **Dynamic IP Updater:** Automatically checks your server's public IP and updates MAM's "Dynamic Seedbox IP" setting if a change is detected. This is ideal for home servers with dynamic IPs.
+* **VIP Auto-Buy:** Automatically tops up your MAM VIP credit using bonus points on a configurable schedule. One-click manual top-up button also available.
 * **Live Torrent Polling:** After adding a torrent, the UI polls your torrent client to show its download status (e.g., "Downloading 50%", "Seeding") in real-time. Designates previously downloaded torrents as "Downloaded".
 * **[BETA] Auto-Organization:** (See details below) Automatically hard-links completed audiobooks from your download folder to a clean, organized library structure (e.g., `Author/Title/file.m4b`).
 
@@ -141,6 +142,8 @@ MouseSearch supports modular torrent clients. Currently supported: **qBittorrent
 | `DATA_PATH` | No | Directory path for storing app data files (config.json, database.json, ip_state.json). Defaults to `./data`. |
 | `ENABLE_DYNAMIC_IP_UPDATE` | No | Set to `true` to enable automatic IP checking and updating of MAM's "Dynamic Seedbox IP" setting. Defaults to `false`. |
 | `DYNAMIC_IP_UPDATE_INTERVAL_HOURS` | No | Number of hours between automatic IP checks (only applies if `ENABLE_DYNAMIC_IP_UPDATE` is `true`). Defaults to `3`. |
+| `AUTO_BUY_VIP` | No | Set to `true` to enable automatic VIP credit top-ups using bonus points. Defaults to `false`. |
+| `AUTO_BUY_VIP_INTERVAL_HOURS` | No | Number of hours between automatic VIP purchases (only applies if `AUTO_BUY_VIP` is `true`). Defaults to `24`. |
 | `AUTO_ORGANIZE_ON_ADD` | No | Set to `true` to enable auto-organization when torrents are added. Defaults to `false`. |
 | `AUTO_ORGANIZE_ON_SCHEDULE` | No | Set to `true` to enable scheduled auto-organization. Defaults to `false`. |
 | `AUTO_ORGANIZE_INTERVAL_HOURS` | No | Number of hours between scheduled organization scans (only applies if `AUTO_ORGANIZE_ON_SCHEDULE` is `true`). Defaults to `1`. |
