@@ -42,7 +42,7 @@ connected_websockets = set()
 @app.before_serving
 async def startup():
     # Only start cache cleanup if thumbnail caching is enabled
-    if initial_config.get("ENABLE_THUMBNAIL_CACHE", True):
+    if initial_config.get("ENABLE_FILESYSTEM_THUMBNAIL_CACHE", True):
         app.logger.info("Cache cleanup task started")
         app.add_background_task(cleanup_cache_task)
     
@@ -143,7 +143,8 @@ FALLBACK_CONFIG = {
     "AUTO_BUY_UPLOAD_BUFFER_AMOUNT": 10,
     "AUTO_BUY_UPLOAD_CHECK_INTERVAL_HOURS": 6,
     "BLOCK_DOWNLOAD_ON_LOW_BUFFER": True,
-    "ENABLE_THUMBNAIL_CACHE": True
+    "ENABLE_FILESYSTEM_THUMBNAIL_CACHE": False,
+    "THUMBNAIL_CACHE_MAX_SIZE_MB": 500
 }
 
 # Set up data directory and paths
@@ -1395,7 +1396,7 @@ async def index():
     
 
 async def cleanup_cache_task():
-    """Deletes files in the cache directory older than 30 days."""
+    """Deletes files in the cache directory older than 30 days and enforces size limit."""
     max_age = 30 * 24 * 60 * 60  # 30 days in seconds
     
     while True:
@@ -1403,18 +1404,56 @@ async def cleanup_cache_task():
             now = time.time()
             cutoff = now - max_age
             
-            # Iterate over files in the directory
             if os.path.exists(THUMB_CACHE_DIR):
+                # Get all files with their stats
+                file_stats = []
                 for filename in os.listdir(THUMB_CACHE_DIR):
                     filepath = os.path.join(THUMB_CACHE_DIR, filename)
-                    
-                    # Check if it's a file and older than the cutoff
                     if os.path.isfile(filepath):
-                        if os.path.getmtime(filepath) < cutoff:
-                            os.remove(filepath)
+                        stat = os.stat(filepath)
+                        file_stats.append({
+                            'path': filepath,
+                            'mtime': stat.st_mtime,
+                            'size': stat.st_size
+                        })
+                
+                # 1. Delete files older than 30 days
+                files_deleted_age = 0
+                for file_info in file_stats[:]:
+                    if file_info['mtime'] < cutoff:
+                        try:
+                            os.remove(file_info['path'])
+                            file_stats.remove(file_info)
+                            files_deleted_age += 1
+                        except Exception as e:
+                            app.logger.warning(f"Failed to delete old cache file {file_info['path']}: {e}")
+                
+                if files_deleted_age > 0:
+                    app.logger.info(f"[CACHE-CLEANUP] Deleted {files_deleted_age} files older than 30 days")
+                
+                # 2. Enforce size limit by deleting oldest files first
+                max_size_bytes = app.config.get("THUMBNAIL_CACHE_MAX_SIZE_MB", 500) * 1024 * 1024
+                total_size = sum(f['size'] for f in file_stats)
+                
+                if total_size > max_size_bytes:
+                    # Sort by modification time (oldest first)
+                    file_stats.sort(key=lambda x: x['mtime'])
+                    
+                    files_deleted_size = 0
+                    while total_size > max_size_bytes and file_stats:
+                        oldest = file_stats.pop(0)
+                        try:
+                            os.remove(oldest['path'])
+                            total_size -= oldest['size']
+                            files_deleted_size += 1
+                        except Exception as e:
+                            app.logger.warning(f"Failed to delete cache file for size limit {oldest['path']}: {e}")
+                    
+                    if files_deleted_size > 0:
+                        app.logger.info(f"[CACHE-CLEANUP] Deleted {files_deleted_size} oldest files to enforce {app.config.get('THUMBNAIL_CACHE_MAX_SIZE_MB', 500)}MB size limit (freed {(sum(f['size'] for f in file_stats[:files_deleted_size]) / 1024 / 1024):.2f} MB)")
                             
         except Exception as e:
-            print(f"Error during cache cleanup: {e}")
+            app.logger.error(f"Error during cache cleanup: {e}")
         
         # Sleep for 24 hours before checking again
         await asyncio.sleep(86400)
@@ -1426,7 +1465,7 @@ async def proxy_thumbnail():
     url = request.args.get("url")
     if not url or UPSTREAM_CLIENT is None: return "Error", 400
     
-    cache_enabled = app.config.get("ENABLE_THUMBNAIL_CACHE", True)
+    cache_enabled = app.config.get("ENABLE_FILESYSTEM_THUMBNAIL_CACHE", True)
     
     # --- Cache Read ---
     cache_key = hashlib.md5(url.encode()).hexdigest()
