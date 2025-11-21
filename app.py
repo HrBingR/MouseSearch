@@ -128,12 +128,22 @@ FALLBACK_CONFIG = {
     "ENABLE_DYNAMIC_IP_UPDATE": False,
     "DYNAMIC_IP_UPDATE_INTERVAL_HOURS": 3,
     "AUTO_BUY_VIP": False,
-    "AUTO_BUY_VIP_INTERVAL_HOURS": 24
+    "AUTO_BUY_VIP_INTERVAL_HOURS": 24,
+    "AUTO_BUY_UPLOAD_ON_RATIO": False,
+    "AUTO_BUY_UPLOAD_RATIO_THRESHOLD": 1.5,
+    "AUTO_BUY_UPLOAD_RATIO_AMOUNT": 10,
+    "AUTO_BUY_UPLOAD_ON_BUFFER": False,
+    "AUTO_BUY_UPLOAD_BUFFER_THRESHOLD": 10,
+    "AUTO_BUY_UPLOAD_BUFFER_AMOUNT": 10,
+    "AUTO_BUY_UPLOAD_CHECK_INTERVAL_HOURS": 6,
+    "BLOCK_DOWNLOAD_ON_LOW_BUFFER": True
 }
 
 # Set up data directory and paths
 DATA_PATH = Path(os.getenv("DATA_PATH", FALLBACK_CONFIG["DATA_PATH"])).resolve()
 DATA_PATH.mkdir(parents=True, exist_ok=True)
+
+UPLOAD_OPTIONS_FILE = Path("./static/upload_options.json")
 
 CONFIG_FILE = DATA_PATH / "config.json"
 METADATA_FILE = DATA_PATH / "database.json"
@@ -176,6 +186,17 @@ def initialize_config():
 
 initialize_config()
 
+def load_upload_options():
+    if not UPLOAD_OPTIONS_FILE.exists():
+        app.logger.warning("upload_options.json not found. Run generate_upload_options.py!")
+        return {}
+    try:
+        with open(UPLOAD_OPTIONS_FILE, "r") as f:
+            return json.load(f)
+    except Exception as e:
+        app.logger.error(f"Failed to load upload options: {e}")
+        return {}
+    
 async def load_new_app_config():
     new_config = load_config()
     app.secret_key = new_config["QUART_SECRET_KEY"]
@@ -187,6 +208,10 @@ async def load_new_app_config():
     }
     app.config["BASE_HEADERS"] = {k: v for k, v in app.config["BASE_HEADERS"].items() if v is not None}
     
+    # Load the pre-calculated upload options
+    app.config["UPLOAD_OPTIONS"] = load_upload_options()
+    app.logger.info(f"Loaded {len(app.config['UPLOAD_OPTIONS'])} valid upload purchase options.")
+    
     # Update path globals from config
     global ORGANIZED_PATH, TORRENT_DOWNLOAD_PATH
     ORGANIZED_PATH = Path(new_config.get("ORGANIZED_PATH", FALLBACK_CONFIG["ORGANIZED_PATH"])).resolve()
@@ -195,6 +220,7 @@ async def load_new_app_config():
     
     global mam_session_cookies
     mam_session_cookies = {"mam_id": app.config.get("MAM_ID")}
+    
 
     global torrent_client
     try:
@@ -570,6 +596,98 @@ if app.config.get("AUTO_BUY_VIP"):
     scheduler.add_job(auto_buy_vip, 'interval', hours=interval_hours, id='vip_buy_job', replace_existing=True)
     scheduler.add_job(auto_buy_vip, 'date', run_date=datetime.now() + timedelta(seconds=10), id='initial_vip_buy_job')
 
+# --- UPLOAD CREDIT AUTO-BUY SCHEDULER ---
+async def check_and_buy_upload():
+    """Check ratio and buffer thresholds, auto-purchase upload credit if needed."""
+    async with app.app_context():
+        if not app.config.get("MAM_ID"):
+            return
+        
+        if not await login_mam():
+            app.logger.warning("[AUTO-UPLOAD] Could not log into MAM")
+            return
+        
+        # Get current user stats
+        stats = await get_user_stats()
+        if not stats:
+            app.logger.warning("[AUTO-UPLOAD] Could not fetch user stats")
+            return
+        
+        ratio_check_enabled = app.config.get("AUTO_BUY_UPLOAD_ON_RATIO", False)
+        buffer_check_enabled = app.config.get("AUTO_BUY_UPLOAD_ON_BUFFER", False)
+        
+        purchased = False
+        
+        # Check ratio threshold
+        if ratio_check_enabled:
+            ratio_threshold = float(app.config.get("AUTO_BUY_UPLOAD_RATIO_THRESHOLD", 1.5))
+            if stats['ratio'] < ratio_threshold:
+                amount = float(app.config.get("AUTO_BUY_UPLOAD_RATIO_AMOUNT", 10))
+                app.logger.info(f"[AUTO-UPLOAD] Ratio {stats['ratio']} below threshold {ratio_threshold}, purchasing {amount} GB")
+                
+                try:
+                    epoch_ms = int(time.time() * 1000)
+                    api_url = f"{app.config.get('MAM_API_URL')}/json/bonusBuy.php/"
+                    params = {'spendtype': 'upload', 'amount': amount, '_': epoch_ms}
+                    
+                    async with httpx.AsyncClient() as client:
+                        response = await client.get(api_url, params=params, cookies=mam_session_cookies, timeout=10)
+                        update_cookies(response)
+                        response.raise_for_status()
+                        result = response.json()
+                        
+                        if result.get('success'):
+                            app.logger.info(f"[AUTO-UPLOAD-RATIO] Purchase successful - {amount} GB added")
+                            await broadcast_payload({
+                                'event': 'upload_purchase',
+                                'success': True,
+                                'amount': amount,
+                                'reason': 'ratio',
+                                'seedbonus': result.get('seedbonus')
+                            })
+                            purchased = True
+                        else:
+                            app.logger.warning(f"[AUTO-UPLOAD-RATIO] Purchase failed: {result}")
+                except Exception as e:
+                    app.logger.error(f"[AUTO-UPLOAD-RATIO] Error: {e}")
+        
+        # Check buffer threshold (only if we didn't already purchase)
+        if buffer_check_enabled and not purchased:
+            buffer_threshold = float(app.config.get("AUTO_BUY_UPLOAD_BUFFER_THRESHOLD", 10))
+            if stats['buffer_gb'] < buffer_threshold:
+                amount = float(app.config.get("AUTO_BUY_UPLOAD_BUFFER_AMOUNT", 10))
+                app.logger.info(f"[AUTO-UPLOAD] Buffer {stats['buffer_gb']:.2f} GB below threshold {buffer_threshold} GB, purchasing {amount} GB")
+                
+                try:
+                    epoch_ms = int(time.time() * 1000)
+                    api_url = f"{app.config.get('MAM_API_URL')}/json/bonusBuy.php/"
+                    params = {'spendtype': 'upload', 'amount': amount, '_': epoch_ms}
+                    
+                    async with httpx.AsyncClient() as client:
+                        response = await client.get(api_url, params=params, cookies=mam_session_cookies, timeout=10)
+                        update_cookies(response)
+                        response.raise_for_status()
+                        result = response.json()
+                        
+                        if result.get('success'):
+                            app.logger.info(f"[AUTO-UPLOAD-BUFFER] Purchase successful - {amount} GB added")
+                            await broadcast_payload({
+                                'event': 'upload_purchase',
+                                'success': True,
+                                'amount': amount,
+                                'reason': 'buffer',
+                                'seedbonus': result.get('seedbonus')
+                            })
+                        else:
+                            app.logger.warning(f"[AUTO-UPLOAD-BUFFER] Purchase failed: {result}")
+                except Exception as e:
+                    app.logger.error(f"[AUTO-UPLOAD-BUFFER] Error: {e}")
+
+if app.config.get("AUTO_BUY_UPLOAD_ON_RATIO") or app.config.get("AUTO_BUY_UPLOAD_ON_BUFFER"):
+    interval_hours = int(app.config.get("AUTO_BUY_UPLOAD_CHECK_INTERVAL_HOURS", 6))
+    scheduler.add_job(check_and_buy_upload, 'interval', hours=interval_hours, id='upload_check_job', replace_existing=True)
+    scheduler.add_job(check_and_buy_upload, 'date', run_date=datetime.now() + timedelta(seconds=15), id='initial_upload_check_job')
+
 # --- SESSION AND API HELPERS ---
 def update_cookies(response):
     global mam_session_cookies
@@ -578,41 +696,28 @@ def update_cookies(response):
         mam_session_cookies.update(cookies)
 
 async def login_mam():
-    url = app.config.get("MAM_API_URL")
-    if not url or not mam_session_cookies.get("mam_id"): return False
-    async with httpx.AsyncClient() as client:
-        try:
-            response = await client.get(f"{url}/jsonLoad.php", cookies=mam_session_cookies, timeout=5)
-            if response.status_code == 200:
-                if new_cookies := dict(response.cookies): mam_session_cookies.update(new_cookies)
-                return True
-        except Exception:
-            pass
-    return False
+    """Checks if the MAM session is valid by attempting to load user data."""
+    data = await fetch_mam_json_load()
+    return data is not None
 
 async def push_mam_stats():
     """Fetch MAM user stats and broadcast them via SSE."""
-    if not await login_mam():
-        app.logger.debug("[MAM-STATS] Not logged in, skipping stats push")
+    user_data = await fetch_mam_json_load()
+    
+    if not user_data:
+        app.logger.debug("[MAM-STATS] Not logged in or fetch failed, skipping stats push")
         return
-    try:
-        api_url = f"{app.config.get('MAM_API_URL')}/jsonLoad.php"
-        async with httpx.AsyncClient() as client:
-            response = await client.get(api_url, cookies=mam_session_cookies, timeout=10)
-            update_cookies(response)
-            response.raise_for_status()
-            user_data = response.json()
-            if seedbonus := user_data.get("seedbonus"):
-                user_data["seedbonus_formatted"] = f"{seedbonus:,}"
-            
-            # Broadcast MAM stats via SSE
-            await broadcast_payload({
-                "event": "mam-stats",
-                "data": user_data
-            })
-            app.logger.debug("[MAM-STATS] Successfully pushed MAM stats via SSE")
-    except Exception as e:
-        app.logger.warning(f"[MAM-STATS] Failed to fetch/push MAM stats: {e}")
+
+    # Format seedbonus for display
+    if seedbonus := user_data.get("seedbonus"):
+        user_data["seedbonus_formatted"] = f"{seedbonus:,}"
+    
+    # Broadcast MAM stats via SSE
+    await broadcast_payload({
+        "event": "mam-stats",
+        "data": user_data
+    })
+    app.logger.debug("[MAM-STATS] Successfully pushed MAM stats via SSE")
 
 # --- QUART ROUTES ---
 @app.route('/mam/status', methods=['GET'])
@@ -621,19 +726,15 @@ async def mam_status():
 
 @app.route('/mam/user_data', methods=['GET'])
 async def mam_user_data():
-    if not await login_mam(): return jsonify({'error': 'Not logged into MAM'}), 401
-    try:
-        api_url = f"{app.config.get('MAM_API_URL')}/jsonLoad.php"
-        async with httpx.AsyncClient() as client:
-            response = await client.get(api_url, cookies=mam_session_cookies, timeout=10)
-            update_cookies(response)
-            response.raise_for_status()
-            user_data = response.json()
-            if seedbonus := user_data.get("seedbonus"):
-                user_data["seedbonus_formatted"] = f"{seedbonus:,}"
-            return jsonify(user_data)
-    except Exception:
-        return jsonify({'error': 'Failed to fetch data'}), 503
+    user_data = await fetch_mam_json_load()
+    
+    if not user_data:
+        return jsonify({'error': 'Not logged into MAM or failed to fetch data'}), 401
+        
+    if seedbonus := user_data.get("seedbonus"):
+        user_data["seedbonus_formatted"] = f"{seedbonus:,}"
+        
+    return jsonify(user_data)
 
 @app.route('/mam/buy_vip', methods=['POST'])
 async def mam_buy_vip():
@@ -667,6 +768,179 @@ async def mam_buy_vip():
     except Exception as e:
         app.logger.error(f"Error buying VIP credit: {e}")
         return jsonify({'success': False, 'error': 'Failed to purchase VIP'}), 503
+
+@app.route('/mam/buy_upload', methods=['POST'])
+async def mam_buy_upload():
+    """
+    Buy upload credit using pre-calculated recipes.
+    Accepts 'max' or a specific number found in upload_options.json.
+    """
+    if not await login_mam():
+        return jsonify({'success': False, 'error': 'Not logged into MAM'}), 401
+    
+    data = await request.get_json()
+    raw_amount = data.get('amount')
+
+    # 1. Handle 'max' special case
+    if str(raw_amount).lower() == 'max':
+        chunks = ['max']
+        app.logger.info("Processing 'max' upload purchase.")
+
+    # 2. Handle numeric amounts via lookup table
+    else:
+        # Normalize input to string key (e.g. 10 -> "10", 2.5 -> "2.5")
+        try:
+            val = float(raw_amount)
+            key = str(int(val)) if val.is_integer() else str(val)
+        except (ValueError, TypeError):
+            return jsonify({'success': False, 'error': 'Invalid amount format'}), 400
+
+        options = app.config.get("UPLOAD_OPTIONS", {})
+        
+        if key not in options:
+             return jsonify({
+                'success': False, 
+                'error': f'Invalid amount: {raw_amount} GB. Valid amounts are limited to 3 requests.'
+            }), 400
+            
+        chunks = options[key]
+        app.logger.info(f"Processing purchase for {key} GB using chunks: {chunks}")
+
+    # 3. Execute the requests
+    total_purchased = 0
+    final_seedbonus = 0
+    errors = []
+    api_url = f"{app.config.get('MAM_API_URL')}/json/bonusBuy.php/"
+
+    async with httpx.AsyncClient() as client:
+        for chunk in chunks:
+            try:
+                # Rate limit safety sleep between multi-chunk requests
+                if len(chunks) > 1 and chunk != chunks[0]:
+                    await asyncio.sleep(0.5)
+
+                epoch_ms = int(time.time() * 1000)
+                params = {
+                    'spendtype': 'upload', 
+                    'amount': chunk, 
+                    '_': epoch_ms
+                }
+                
+                response = await client.get(api_url, params=params, cookies=mam_session_cookies, timeout=10)
+                update_cookies(response)
+                response.raise_for_status()
+                result = response.json()
+
+                if result.get('success'):
+                    amt_added = result.get('amount')
+                    # Handle 'max' return or numeric return
+                    try:
+                        val = float(amt_added) if str(amt_added).lower() != 'max' else 0
+                        total_purchased += val
+                    except: 
+                        pass
+                        
+                    final_seedbonus = result.get('seedbonus')
+                    app.logger.info(f"[BUY-UPLOAD] Chunk {chunk} success.")
+                else:
+                    msg = result.get('message', 'Unknown error')
+                    app.logger.warning(f"[BUY-UPLOAD] Chunk {chunk} failed: {msg}")
+                    errors.append(f"Failed on {chunk}: {msg}")
+                    break # Stop on first failure
+                    
+            except Exception as e:
+                app.logger.error(f"[BUY-UPLOAD] Exception on chunk {chunk}: {e}")
+                errors.append(f"Error on {chunk}: {str(e)}")
+                break
+
+    # 4. Return result
+    success = len(errors) == 0
+    
+    if total_purchased > 0 or (chunks == ['max'] and success):
+        await push_mam_stats()
+        
+        msg = f"Purchased {total_purchased} GB successfully."
+        if chunks == ['max']: msg = "Purchased Max upload credit."
+        
+        if errors:
+            msg += f" (Stopped early: {', '.join(errors)})"
+            
+        return jsonify({
+            'success': success,
+            'amount': total_purchased,
+            'seedbonus': final_seedbonus,
+            'message': msg
+        })
+    else:
+        return jsonify({
+            'success': False, 
+            'error': '; '.join(errors) if errors else "Purchase failed."
+        }), 400
+
+async def fetch_mam_json_load():
+    """
+    Unified helper to fetch data from jsonLoad.php.
+    Handles connection, cookies, and basic error logging.
+    Returns the JSON dict on success, or None on failure.
+    """
+    url = app.config.get("MAM_API_URL")
+    # Basic pre-check
+    if not url or not mam_session_cookies.get("mam_id"): 
+        return None
+
+    try:
+        api_url = f"{url}/jsonLoad.php"
+        async with httpx.AsyncClient() as client:
+            response = await client.get(api_url, cookies=mam_session_cookies, timeout=10)
+            
+            # Centralized cookie update
+            update_cookies(response)
+            
+            response.raise_for_status()
+            return response.json()
+            
+    except Exception as e:
+        # Log the specific error here so calling functions don't have to
+        app.logger.warning(f"[MAM-API] jsonLoad.php request failed: {e}")
+        return None
+    
+async def get_user_stats():
+    """Helper to fetch current user stats (ratio, uploaded, downloaded, seedbonus)."""
+    data = await fetch_mam_json_load()
+    
+    if not data:
+        return None
+        
+    try:
+        # Parse uploaded and downloaded (format: "123.45 GiB")
+        def parse_size(size_str):
+            if not size_str: return 0.0
+            parts = size_str.split()
+            if len(parts) != 2: return 0.0
+            value = float(parts[0])
+            unit = parts[1].upper()
+            
+            if 'TIB' in unit or 'TB' in unit: return value * 1024
+            elif 'GIB' in unit or 'GB' in unit: return value
+            elif 'MIB' in unit or 'MB' in unit: return value / 1024
+            elif 'KIB' in unit or 'KB' in unit: return value / (1024 * 1024)
+            return value
+        
+        uploaded_gb = parse_size(data.get('uploaded', '0 GiB'))
+        downloaded_gb = parse_size(data.get('downloaded', '0 GiB'))
+        ratio = float(data.get('ratio', 0))
+        seedbonus = float(data.get('seedbonus', 0))
+        
+        return {
+            'uploaded_gb': uploaded_gb,
+            'downloaded_gb': downloaded_gb,
+            'buffer_gb': uploaded_gb - downloaded_gb,
+            'ratio': ratio,
+            'seedbonus': seedbonus
+        }
+    except Exception as e:
+        app.logger.error(f"Error parsing user stats: {e}")
+        return None
     
 # --- GENERIC TORRENT CLIENT ROUTES ---
 @app.route('/client/status', methods=['GET'])
@@ -704,6 +978,58 @@ async def client_add_torrent():
     title = incoming_data.get('title', 'Unknown')
     id = incoming_data.get('id', '0')
     category = incoming_data.get('category', app.config.get("TORRENT_CLIENT_CATEGORY", ""))
+    torrent_size_str = incoming_data.get('size', '0 GiB')  # e.g., "1.5 GiB"
+    
+    # Check if download should be blocked due to low buffer
+    if app.config.get("BLOCK_DOWNLOAD_ON_LOW_BUFFER", True) and await login_mam():
+        stats = await get_user_stats()
+        if stats:
+            # Parse torrent size
+            def parse_size(size_str):
+                if not size_str:
+                    return 0.0
+                parts = size_str.split()
+                if len(parts) != 2:
+                    return 0.0
+                try:
+                    value = float(parts[0])
+                except:
+                    return 0.0
+                unit = parts[1].upper()
+                # Convert to GB
+                if 'TIB' in unit or 'TB' in unit:
+                    return value * 1024
+                elif 'GIB' in unit or 'GB' in unit:
+                    return value
+                elif 'MIB' in unit or 'MB' in unit:
+                    return value / 1024
+                elif 'KIB' in unit or 'KB' in unit:
+                    return value / (1024 * 1024)
+                return value
+            
+            torrent_size_gb = parse_size(torrent_size_str)
+            buffer_gb = stats['buffer_gb']
+            
+            if torrent_size_gb > buffer_gb:
+                # Calculate how much upload credit needed
+                needed_gb = torrent_size_gb - buffer_gb
+                cost_per_gb = 500  # bonus points
+                total_cost = int(needed_gb * cost_per_gb)
+                
+                # Round up to nearest valid amount
+                valid_amounts = [1, 2.5, 5, 20, 100]
+                recommended_amount = next((amt for amt in valid_amounts if amt >= needed_gb), 100)
+                
+                return jsonify({
+                    'status': 'insufficient_buffer',
+                    'buffer_gb': round(buffer_gb, 2),
+                    'torrent_size_gb': round(torrent_size_gb, 2),
+                    'needed_gb': round(needed_gb, 2),
+                    'recommended_amount': recommended_amount,
+                    'recommended_cost': int(recommended_amount * cost_per_gb),
+                    'seedbonus': stats['seedbonus'],
+                    'message': f'Insufficient buffer: {round(buffer_gb, 2)} GB available, {round(torrent_size_gb, 2)} GB needed'
+                }), 400
     
     auto_organize_warning = None
     hash_val = None
@@ -1021,8 +1347,13 @@ async def index():
     c_type = app.config.get("TORRENT_CLIENT_TYPE", "qbittorrent")
     display_name = get_client_display_name(c_type)
     
-    return await render_template("index.html", CLIENT_DISPLAY_NAME=display_name, **app.config)
 
+    return await render_template(
+        "index.html", 
+        CLIENT_DISPLAY_NAME=display_name,
+        **app.config
+    )
+    
 FETCH_SEMAPHORE = asyncio.Semaphore(200)
 
 @app.route("/proxy_thumbnail")
@@ -1048,7 +1379,7 @@ async def proxy_thumbnail():
 async def update_settings():
     form = await request.form
     config_to_update = app.config.copy()
-    boolean_fields = {"AUTO_ORGANIZE_ON_ADD", "AUTO_ORGANIZE_ON_SCHEDULE", "ENABLE_DYNAMIC_IP_UPDATE", "AUTO_BUY_VIP"}
+    boolean_fields = {"AUTO_ORGANIZE_ON_ADD", "AUTO_ORGANIZE_ON_SCHEDULE", "ENABLE_DYNAMIC_IP_UPDATE", "AUTO_BUY_VIP", "AUTO_BUY_UPLOAD_ON_RATIO", "AUTO_BUY_UPLOAD_ON_BUFFER", "BLOCK_DOWNLOAD_ON_LOW_BUFFER"}
     for key in FALLBACK_CONFIG.keys():
         if key in boolean_fields: config_to_update[key] = key in form
         elif key in form: config_to_update[key] = form[key]
@@ -1066,6 +1397,17 @@ async def update_settings():
         # Remove the job if disabled
         try:
             scheduler.remove_job('vip_buy_job')
+        except:
+            pass
+    
+    # Update upload credit auto-buy scheduler based on new settings
+    if app.config.get("AUTO_BUY_UPLOAD_ON_RATIO") or app.config.get("AUTO_BUY_UPLOAD_ON_BUFFER"):
+        interval_hours = int(app.config.get("AUTO_BUY_UPLOAD_CHECK_INTERVAL_HOURS", 6))
+        scheduler.add_job(check_and_buy_upload, 'interval', hours=interval_hours, id='upload_check_job', replace_existing=True)
+    else:
+        # Remove the job if disabled
+        try:
+            scheduler.remove_job('upload_check_job')
         except:
             pass
     

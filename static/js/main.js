@@ -111,6 +111,19 @@ function initializeEventStream() {
                     }
                     break;
                     
+                case 'upload_purchase':
+                    // Handle automatic upload credit purchase notifications
+                    if (data.success) {
+                        const amount = data.amount || 0;
+                        const reason = data.reason || 'manual';
+                        const reasonText = reason === 'ratio' ? 'low ratio' : reason === 'buffer' ? 'low buffer' : 'manual';
+                        const message = `Upload credit purchased (${reasonText}): Added ${amount} GB. Remaining bonus: ${data.seedbonus ? data.seedbonus.toFixed(2) : 'N/A'}`;
+                        showToast(message, 'success');
+                        // Refresh MAM stats to show updated bonus
+                        loadMamUserData();
+                    }
+                    break;
+                    
                 default:
                     console.warn('[SSE] Unknown event type:', data.event);
             }
@@ -538,6 +551,64 @@ document.addEventListener("DOMContentLoaded", function () {
                 organizeIntervalInput.classList.remove('text-muted');
             }
         }
+        
+        // Upload credit - ratio threshold fields
+        const autoUploadRatioEnabled = document.getElementById('AUTO_BUY_UPLOAD_ON_RATIO').checked;
+        const ratioThresholdInput = document.getElementById('AUTO_BUY_UPLOAD_RATIO_THRESHOLD');
+        const ratioAmountInput = document.getElementById('AUTO_BUY_UPLOAD_RATIO_AMOUNT');
+        
+        if (ratioThresholdInput) {
+            ratioThresholdInput.disabled = !autoUploadRatioEnabled;
+            if (!autoUploadRatioEnabled) {
+                ratioThresholdInput.classList.add('text-muted');
+            } else {
+                ratioThresholdInput.classList.remove('text-muted');
+            }
+        }
+        
+        if (ratioAmountInput) {
+            ratioAmountInput.disabled = !autoUploadRatioEnabled;
+            if (!autoUploadRatioEnabled) {
+                ratioAmountInput.classList.add('text-muted');
+            } else {
+                ratioAmountInput.classList.remove('text-muted');
+            }
+        }
+        
+        // Upload credit - buffer threshold fields
+        const autoUploadBufferEnabled = document.getElementById('AUTO_BUY_UPLOAD_ON_BUFFER').checked;
+        const bufferThresholdInput = document.getElementById('AUTO_BUY_UPLOAD_BUFFER_THRESHOLD');
+        const bufferAmountInput = document.getElementById('AUTO_BUY_UPLOAD_BUFFER_AMOUNT');
+        
+        if (bufferThresholdInput) {
+            bufferThresholdInput.disabled = !autoUploadBufferEnabled;
+            if (!autoUploadBufferEnabled) {
+                bufferThresholdInput.classList.add('text-muted');
+            } else {
+                bufferThresholdInput.classList.remove('text-muted');
+            }
+        }
+        
+        if (bufferAmountInput) {
+            bufferAmountInput.disabled = !autoUploadBufferEnabled;
+            if (!autoUploadBufferEnabled) {
+                bufferAmountInput.classList.add('text-muted');
+            } else {
+                bufferAmountInput.classList.remove('text-muted');
+            }
+        }
+        
+        // Upload credit - check interval (enabled if either ratio or buffer is enabled)
+        const uploadCheckIntervalInput = document.getElementById('AUTO_BUY_UPLOAD_CHECK_INTERVAL_HOURS');
+        if (uploadCheckIntervalInput) {
+            const shouldEnable = autoUploadRatioEnabled || autoUploadBufferEnabled;
+            uploadCheckIntervalInput.disabled = !shouldEnable;
+            if (!shouldEnable) {
+                uploadCheckIntervalInput.classList.add('text-muted');
+            } else {
+                uploadCheckIntervalInput.classList.remove('text-muted');
+            }
+        }
     }
 
     // Set up event listeners for toggles
@@ -549,6 +620,16 @@ document.addEventListener("DOMContentLoaded", function () {
     const autoBuyVipToggle = document.getElementById('AUTO_BUY_VIP');
     if (autoBuyVipToggle) {
         autoBuyVipToggle.addEventListener('change', updateDependentFields);
+    }
+    
+    const autoUploadRatioToggle = document.getElementById('AUTO_BUY_UPLOAD_ON_RATIO');
+    if (autoUploadRatioToggle) {
+        autoUploadRatioToggle.addEventListener('change', updateDependentFields);
+    }
+    
+    const autoUploadBufferToggle = document.getElementById('AUTO_BUY_UPLOAD_ON_BUFFER');
+    if (autoUploadBufferToggle) {
+        autoUploadBufferToggle.addEventListener('change', updateDependentFields);
     }
 
     const autoOrganizeOnAddToggle = document.getElementById('AUTO_ORGANIZE_ON_ADD');
@@ -563,6 +644,60 @@ document.addEventListener("DOMContentLoaded", function () {
 
     // Initialize disabled state on page load
     updateDependentFields();
+
+    // --- UPLOAD AMOUNT VALIDATION ---
+    // Function to find nearest valid upload amount
+    function findNearestValidAmount(value) {
+        if (!window.VALID_UPLOAD_AMOUNTS || window.VALID_UPLOAD_AMOUNTS.length === 0) {
+            return value;
+        }
+        
+        const numValue = parseFloat(value);
+        if (isNaN(numValue) || numValue < 1) {
+            return window.VALID_UPLOAD_AMOUNTS[0]; // Return smallest valid amount
+        }
+        
+        // Check if value is already valid
+        if (window.VALID_UPLOAD_AMOUNTS.includes(numValue)) {
+            return numValue;
+        }
+        
+        // Find nearest valid amount
+        let nearest = window.VALID_UPLOAD_AMOUNTS[0];
+        let minDiff = Math.abs(numValue - nearest);
+        
+        for (const validAmount of window.VALID_UPLOAD_AMOUNTS) {
+            const diff = Math.abs(numValue - validAmount);
+            if (diff < minDiff) {
+                minDiff = diff;
+                nearest = validAmount;
+            }
+        }
+        
+        return nearest;
+    }
+    
+    // Add validation to upload amount inputs
+    document.querySelectorAll('.upload-amount-input').forEach(input => {
+        input.addEventListener('blur', function() {
+            const originalValue = this.value;
+            const validValue = findNearestValidAmount(originalValue);
+            
+            if (parseFloat(originalValue) !== validValue) {
+                this.value = validValue;
+                console.log(`Rounded upload amount from ${originalValue} to ${validValue} GB`);
+            }
+        });
+        
+        // Also validate on form submission
+        const form = input.closest('form');
+        if (form) {
+            form.addEventListener('submit', function(e) {
+                const validValue = findNearestValidAmount(input.value);
+                input.value = validValue;
+            });
+        }
+    });
 
     document.getElementById('save-settings-button').addEventListener('click', function () {
         fetch('/update_settings', { method: 'POST', body: new FormData(document.getElementById('settings-form')) })
@@ -621,6 +756,122 @@ document.addEventListener("DOMContentLoaded", function () {
         });
     }
 
+    // Upload Credit Purchase Handler (Manual Modal)
+    const uploadAmountOptions = document.getElementById('upload-amount-options');
+    if (uploadAmountOptions) {
+        uploadAmountOptions.addEventListener('click', function(e) {
+            const button = e.target.closest('button');
+            if (!button) return;
+            
+            const amount = button.dataset.amount;
+            if (!amount) return;
+            
+            // Disable all buttons and show loading
+            const buttons = uploadAmountOptions.querySelectorAll('button');
+            buttons.forEach(btn => btn.disabled = true);
+            button.innerHTML = '<span class="spinner-border spinner-border-sm" aria-hidden="true"></span> Buying...';
+            
+            fetch('/mam/buy_upload', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ amount: amount === 'max' ? 'max' : parseFloat(amount) })
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        const amountText = amount === 'max' ? 'Maximum affordable' : `${amount} GB`;
+                        const message = `Upload credit purchased! Added ${amountText}. Remaining bonus: ${data.seedbonus ? data.seedbonus.toFixed(2) : 'N/A'}`;
+                        showToast(message, 'success');
+                        loadMamUserData();
+                        // Close modal
+                        const modal = bootstrap.Modal.getInstance(document.getElementById('uploadPurchaseModal'));
+                        if (modal) modal.hide();
+                    } else {
+                        showToast(data.error || 'Failed to purchase upload credit', 'danger');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error buying upload credit:', error);
+                    showToast('An error occurred while purchasing upload credit', 'danger');
+                })
+                .finally(() => {
+                    // Re-enable all buttons
+                    buttons.forEach((btn, idx) => {
+                        btn.disabled = false;
+                        // Restore original text
+                        const amounts = [1, 2.5, 5, 10, 20, 100, 'max'];
+                        const costs = [500, 1250, 2500, 5000, 10000, 50000, 'All BP'];
+                        if (amounts[idx] === 'max') {
+                            btn.innerHTML = `Max Affordable <span class="badge bg-secondary float-end">${costs[idx]}</span>`;
+                        } else {
+                            btn.innerHTML = `${amounts[idx]} GB <span class="badge bg-secondary float-end">${costs[idx].toLocaleString()} BP</span>`;
+                        }
+                    });
+                });
+        });
+    }
+
+    // Insufficient Buffer Modal - Buy Recommended Amount Handler
+    const modalBuyRecommended = document.getElementById('modal-buy-recommended');
+    if (modalBuyRecommended) {
+        modalBuyRecommended.addEventListener('click', function() {
+            const amount = parseFloat(this.dataset.amount);
+            if (!amount) return;
+            
+            this.disabled = true;
+            const originalText = this.innerHTML;
+            this.innerHTML = '<span class="spinner-border spinner-border-sm" aria-hidden="true"></span> Buying...';
+            
+            fetch('/mam/buy_upload', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ amount: amount })
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        showToast(`Upload credit purchased! Added ${amount} GB`, 'success');
+                        loadMamUserData();
+                        
+                        // Close insufficient buffer modal
+                        const modal = bootstrap.Modal.getInstance(document.getElementById('insufficientBufferModal'));
+                        if (modal) modal.hide();
+                        
+                        // Retry the original download if we stored it
+                        if (window.pendingDownload) {
+                            const pending = window.pendingDownload;
+                            window.pendingDownload = null;
+                            
+                            fetch('/client/add', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify(pending)
+                            })
+                                .then(response => response.json())
+                                .then(result => {
+                                    if (result.message) {
+                                        showToast(result.message, 'success');
+                                    } else if (result.error) {
+                                        showToast(result.error, 'danger');
+                                    }
+                                })
+                                .catch(error => console.error('Error retrying download:', error));
+                        }
+                    } else {
+                        showToast(data.error || 'Failed to purchase upload credit', 'danger');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error buying upload credit:', error);
+                    showToast('An error occurred while purchasing upload credit', 'danger');
+                })
+                .finally(() => {
+                    this.disabled = false;
+                    this.innerHTML = originalText;
+                });
+        });
+    }
+
     searchForm.addEventListener("submit", function (e) {
         e.preventDefault();
         searchButton.disabled = true;
@@ -673,25 +924,52 @@ document.addEventListener("DOMContentLoaded", function () {
             const torrentId = resultItem.dataset.torrentId;
             const author = button.dataset.author;
             const title = button.dataset.title;
+            const torrentSize = button.dataset.size || '0 GiB';  // Get size from button data
             // Find the category dropdown within the same result item
             const category = resultItem.querySelector('.category-dropdown')?.value || '';
 
             console.log(`[ADD] 'Download' clicked for URL: ${torrentUrl} with category: '${category}'`);
 
             button.disabled = true;
+            
+            const downloadData = {
+                torrent_url: torrentUrl,
+                category: category,
+                id: torrentId,
+                author: author,
+                title: title,
+                size: torrentSize
+            };
+            
             fetch('/client/add', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    torrent_url: torrentUrl,
-                    category: category,
-                    id: torrentId,
-                    author: author,
-                    title: title
-                }),
+                body: JSON.stringify(downloadData),
             })
                 .then(response => response.json())
                 .then(async data => {
+                    // Check for insufficient buffer
+                    if (data.status === 'insufficient_buffer') {
+                        // Show insufficient buffer modal
+                        document.getElementById('modal-buffer-gb').textContent = data.buffer_gb || 0;
+                        document.getElementById('modal-torrent-size').textContent = data.torrent_size_gb || 0;
+                        document.getElementById('modal-needed-gb').textContent = data.needed_gb || 0;
+                        document.getElementById('modal-recommended-amount').textContent = data.recommended_amount || 0;
+                        document.getElementById('modal-recommended-cost').textContent = (data.recommended_cost || 0).toLocaleString();
+                        
+                        const buyButton = document.getElementById('modal-buy-recommended');
+                        buyButton.dataset.amount = data.recommended_amount || 0;
+                        
+                        // Store the download data for retry after purchase
+                        window.pendingDownload = downloadData;
+                        
+                        const modal = new bootstrap.Modal(document.getElementById('insufficientBufferModal'));
+                        modal.show();
+                        
+                        button.disabled = false;
+                        return;
+                    }
+                    
                     showToast(data.message || data.error, data.message ? 'success' : 'danger');
                     if (data.message) {
                         console.log("[ADD] Torrent added successfully via API.");

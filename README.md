@@ -14,6 +14,11 @@ MouseSearch is a self-hosted web application that provides a clean, fast search 
     * Check the connection status to both MAM and your torrent client.
 * **Dynamic IP Updater:** Automatically checks your server's public IP and updates MAM's "Dynamic Seedbox IP" setting if a change is detected. This is ideal for home servers with dynamic IPs.
 * **VIP Auto-Buy:** Automatically tops up your MAM VIP credit using bonus points on a configurable schedule. One-click manual top-up button also available.
+* **Upload Credit Auto-Buy:** Intelligent upload credit management with multiple modes:
+    * Auto-purchase when ratio falls below threshold (configurable, MAM minimum is 1.0)
+    * Auto-purchase when upload buffer (uploaded - downloaded) is too low
+    * Pre-download buffer check - prevents downloads larger than available buffer and prompts for upload credit purchase
+    * Manual purchase interface with preset amounts (1 GB to 100 GB) or max affordable option
 * **Live Torrent Polling:** After adding a torrent, the UI polls your torrent client to show its download status (e.g., "Downloading 50%", "Seeding") in real-time. Designates previously downloaded torrents as "Downloaded".
 * **[BETA] Auto-Organization:** (See details below) Automatically hard-links completed audiobooks from your download folder to a clean, organized library structure (e.g., `Author/Title/file.m4b`).
 
@@ -144,6 +149,14 @@ MouseSearch supports modular torrent clients. Currently supported: **qBittorrent
 | `DYNAMIC_IP_UPDATE_INTERVAL_HOURS` | No | Number of hours between automatic IP checks (only applies if `ENABLE_DYNAMIC_IP_UPDATE` is `true`). Defaults to `3`. |
 | `AUTO_BUY_VIP` | No | Set to `true` to enable automatic VIP credit top-ups using bonus points. Defaults to `false`. |
 | `AUTO_BUY_VIP_INTERVAL_HOURS` | No | Number of hours between automatic VIP purchases (only applies if `AUTO_BUY_VIP` is `true`). Defaults to `24`. |
+| `AUTO_BUY_UPLOAD_ON_RATIO` | No | Set to `true` to enable automatic upload credit purchase when ratio falls below threshold. Defaults to `false`. |
+| `AUTO_BUY_UPLOAD_RATIO_THRESHOLD` | No | If ratio falls below this value, automatically purchase upload credit. MAM requires minimum 1.0 ratio. Defaults to `1.5`. |
+| `AUTO_BUY_UPLOAD_RATIO_AMOUNT` | No | Amount of upload credit (in GB) to purchase when ratio threshold is hit. Defaults to `10`. |
+| `AUTO_BUY_UPLOAD_ON_BUFFER` | No | Set to `true` to enable automatic upload credit purchase when buffer is too low. Defaults to `false`. |
+| `AUTO_BUY_UPLOAD_BUFFER_THRESHOLD` | No | If upload buffer (uploaded - downloaded) falls below this many GB, automatically purchase upload credit. Defaults to `10`. |
+| `AUTO_BUY_UPLOAD_BUFFER_AMOUNT` | No | Amount of upload credit (in GB) to purchase when buffer threshold is hit. Defaults to `10`. |
+| `AUTO_BUY_UPLOAD_CHECK_INTERVAL_HOURS` | No | Number of hours between ratio/buffer checks (only applies if auto-buy upload is enabled). Defaults to `6`. |
+| `BLOCK_DOWNLOAD_ON_LOW_BUFFER` | No | Set to `true` to prevent downloads when torrent size exceeds available buffer (prompts user to purchase upload credit). Defaults to `true`. |
 | `AUTO_ORGANIZE_ON_ADD` | No | Set to `true` to enable auto-organization when torrents are added. Defaults to `false`. |
 | `AUTO_ORGANIZE_ON_SCHEDULE` | No | Set to `true` to enable scheduled auto-organization. Defaults to `false`. |
 | `AUTO_ORGANIZE_INTERVAL_HOURS` | No | Number of hours between scheduled organization scans (only applies if `AUTO_ORGANIZE_ON_SCHEDULE` is `true`). Defaults to `1`. |

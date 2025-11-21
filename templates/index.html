@@ -3,6 +3,14 @@
 
 <head>
   <script src="{{ url_for('static', filename='bootstrap/js/color-modes.js') }}"></script>
+  <script>
+    // Make upload options available globally for validation
+    window.UPLOAD_OPTIONS = {{ UPLOAD_OPTIONS | tojson }};
+    // Create sorted array of valid amounts for easy lookup
+    window.VALID_UPLOAD_AMOUNTS = Object.keys(window.UPLOAD_OPTIONS)
+      .map(k => parseFloat(k))
+      .sort((a, b) => a - b);
+  </script>
 
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -363,9 +371,14 @@
                   <div>
                     <strong>Status:</strong> <span id="mam-status" class="text-warning">LOADING</span>
                   </div>
-                  <button type="button" class="btn btn-sm btn-outline-primary" id="buy-vip-button">
-                    <i class="bi bi-star-fill"></i> Top Up VIP
-                  </button>
+                  <div>
+                    <button type="button" class="btn btn-sm btn-outline-primary me-2" id="buy-vip-button">
+                      <i class="bi bi-star-fill"></i> Top Up VIP
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-success" id="buy-upload-button" data-bs-toggle="modal" data-bs-target="#uploadPurchaseModal">
+                      <i class="bi bi-cloud-arrow-up-fill"></i> Buy Upload
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -381,6 +394,80 @@
         </div>
     </div>
   </main>
+
+  <!-- Upload Credit Purchase Modal -->
+  <div class="modal fade" id="uploadPurchaseModal" tabindex="-1" aria-labelledby="uploadPurchaseModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="uploadPurchaseModalLabel">Buy Upload Credit</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <p>Select amount of upload credit to purchase:</p>
+          <div class="list-group" id="upload-amount-options">
+            <button type="button" class="list-group-item list-group-item-action" data-amount="1">
+              1 GB <span class="badge bg-secondary float-end">500 BP</span>
+            </button>
+            <button type="button" class="list-group-item list-group-item-action" data-amount="2.5">
+              2.5 GB <span class="badge bg-secondary float-end">1,250 BP</span>
+            </button>
+            <button type="button" class="list-group-item list-group-item-action" data-amount="5">
+              5 GB <span class="badge bg-secondary float-end">2,500 BP</span>
+            </button>
+            <button type="button" class="list-group-item list-group-item-action" data-amount="10">
+              10 GB <span class="badge bg-secondary float-end">5,000 BP</span>
+            </button>
+            <button type="button" class="list-group-item list-group-item-action" data-amount="20">
+              20 GB <span class="badge bg-secondary float-end">10,000 BP</span>
+            </button>
+            <button type="button" class="list-group-item list-group-item-action" data-amount="100">
+              100 GB <span class="badge bg-secondary float-end">50,000 BP</span>
+            </button>
+            <button type="button" class="list-group-item list-group-item-action" data-amount="max">
+              Max Affordable <span class="badge bg-secondary float-end">All BP</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Insufficient Buffer Modal -->
+  <div class="modal fade" id="insufficientBufferModal" tabindex="-1" aria-labelledby="insufficientBufferModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header bg-warning">
+          <h5 class="modal-title" id="insufficientBufferModalLabel">
+            <i class="bi bi-exclamation-triangle-fill"></i> Insufficient Upload Buffer
+          </h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <p>You don't have enough upload buffer to download this torrent.</p>
+          <div class="alert alert-info">
+            <strong>Your Buffer:</strong> <span id="modal-buffer-gb">0</span> GB<br>
+            <strong>Torrent Size:</strong> <span id="modal-torrent-size">0</span> GB<br>
+            <strong>Needed:</strong> <span id="modal-needed-gb">0</span> GB
+          </div>
+          <p>Purchase upload credit to proceed with this download:</p>
+          <div class="d-grid gap-2">
+            <button type="button" class="btn btn-primary" id="modal-buy-recommended">
+              Buy <span id="modal-recommended-amount">0</span> GB 
+              (<span id="modal-recommended-cost">0</span> BP)
+            </button>
+            <button type="button" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#uploadPurchaseModal">
+              Choose Custom Amount
+            </button>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="offcanvas offcanvas-end" tabindex="-1" id="settingsOffcanvas" aria-labelledby="settingsOffcanvasLabel">
     <div class="offcanvas-header">
       <h5 class="offcanvas-title" id="settingsOffcanvasLabel">Settings</h5>
@@ -468,6 +555,112 @@
           <div class="form-text small">
             How often to automatically top up VIP credit using bonus points.
           </div>
+        </div>
+
+        <h6 class="text-center border-bottom pb-2 mt-3">Upload Credit Auto-Buy</h6>
+
+        <div class="form-check form-switch mb-2">
+          <input class="form-check-input" type="checkbox" id="AUTO_BUY_UPLOAD_ON_RATIO" name="AUTO_BUY_UPLOAD_ON_RATIO" 
+          {% if AUTO_BUY_UPLOAD_ON_RATIO %}checked{% endif %}>
+          <label class="form-check-label" for="AUTO_BUY_UPLOAD_ON_RATIO">Auto-Buy on Low Ratio</label>
+        </div>
+
+        <div class="row mb-3">
+          <div class="col-md-6">
+            <label for="AUTO_BUY_UPLOAD_RATIO_THRESHOLD" class="form-label small">
+              Ratio Threshold
+            </label>
+            <input
+              type="number"
+              step="0.1"
+              class="form-control form-control-sm"
+              id="AUTO_BUY_UPLOAD_RATIO_THRESHOLD"
+              name="AUTO_BUY_UPLOAD_RATIO_THRESHOLD"
+              min="1.0"
+              value="{{ AUTO_BUY_UPLOAD_RATIO_THRESHOLD }}"
+            >
+          </div>
+          <div class="col-md-6">
+            <label for="AUTO_BUY_UPLOAD_RATIO_AMOUNT" class="form-label small">
+              Amount to Buy (GB)
+            </label>
+            <input
+              type="number"
+              step="0.5"
+              class="form-control form-control-sm upload-amount-input"
+              id="AUTO_BUY_UPLOAD_RATIO_AMOUNT"
+              name="AUTO_BUY_UPLOAD_RATIO_AMOUNT"
+              min="1"
+              value="{{ AUTO_BUY_UPLOAD_RATIO_AMOUNT }}"
+              list="upload-amounts-list"
+            >
+            <datalist id="upload-amounts-list">
+              {% for amount in UPLOAD_OPTIONS.keys() | sort %}
+              <option value="{{ amount }}"></option>
+              {% endfor %}
+            </datalist>
+          </div>
+        </div>
+
+        <div class="form-check form-switch mb-2">
+          <input class="form-check-input" type="checkbox" id="AUTO_BUY_UPLOAD_ON_BUFFER" name="AUTO_BUY_UPLOAD_ON_BUFFER" 
+          {% if AUTO_BUY_UPLOAD_ON_BUFFER %}checked{% endif %}>
+          <label class="form-check-label" for="AUTO_BUY_UPLOAD_ON_BUFFER">Auto-Buy on Low Buffer</label>
+        </div>
+
+        <div class="row mb-3">
+          <div class="col-md-6">
+            <label for="AUTO_BUY_UPLOAD_BUFFER_THRESHOLD" class="form-label small">
+              Buffer Threshold (GB)
+            </label>
+            <input
+              type="number"
+              step="0.5"
+              class="form-control form-control-sm"
+              id="AUTO_BUY_UPLOAD_BUFFER_THRESHOLD"
+              name="AUTO_BUY_UPLOAD_BUFFER_THRESHOLD"
+              min="0"
+              value="{{ AUTO_BUY_UPLOAD_BUFFER_THRESHOLD }}"
+            >
+          </div>
+          <div class="col-md-6">
+            <label for="AUTO_BUY_UPLOAD_BUFFER_AMOUNT" class="form-label small">
+              Amount to Buy (GB)
+            </label>
+            <input
+              type="number"
+              step="0.5"
+              class="form-control form-control-sm upload-amount-input"
+              id="AUTO_BUY_UPLOAD_BUFFER_AMOUNT"
+              name="AUTO_BUY_UPLOAD_BUFFER_AMOUNT"
+              min="1"
+              value="{{ AUTO_BUY_UPLOAD_BUFFER_AMOUNT }}"
+              list="upload-amounts-list"
+            >
+          </div>
+        </div>
+
+        <div class="mb-3">
+          <label for="AUTO_BUY_UPLOAD_CHECK_INTERVAL_HOURS" class="form-label small">
+            Check Interval (hours)
+          </label>
+          <input
+            type="number"
+            class="form-control form-control-sm"
+            id="AUTO_BUY_UPLOAD_CHECK_INTERVAL_HOURS"
+            name="AUTO_BUY_UPLOAD_CHECK_INTERVAL_HOURS"
+            min="1"
+            value="{{ AUTO_BUY_UPLOAD_CHECK_INTERVAL_HOURS }}"
+          >
+          <div class="form-text small">
+            How often to check ratio and buffer when auto-buy is enabled.
+          </div>
+        </div>
+
+        <div class="form-check form-switch mb-3">
+          <input class="form-check-input" type="checkbox" id="BLOCK_DOWNLOAD_ON_LOW_BUFFER" name="BLOCK_DOWNLOAD_ON_LOW_BUFFER" 
+          {% if BLOCK_DOWNLOAD_ON_LOW_BUFFER %}checked{% endif %}>
+          <label class="form-check-label" for="BLOCK_DOWNLOAD_ON_LOW_BUFFER">Block Downloads When Buffer Too Low</label>
         </div>
 
         <div class="form-check form-switch">
