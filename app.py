@@ -36,10 +36,6 @@ torrent_status_cache = {}
 CACHE_TTL = 2.0
 pending_mid_resolutions = {}  # Maps MID -> {"added_at": timestamp, "metadata": {...}}
 
-# --- Setup:thumbnail cache ---
-THUMB_CACHE_DIR = "data/cache/thumbnails"
-os.makedirs(THUMB_CACHE_DIR, exist_ok=True)
-
 # --- SSE Globals ---
 connected_websockets = set() 
 
@@ -155,6 +151,10 @@ UPLOAD_OPTIONS_FILE = Path("./static/upload_options.json")
 CONFIG_FILE = DATA_PATH / "config.json"
 METADATA_FILE = DATA_PATH / "database.json"
 IP_STATE_FILE = DATA_PATH / "ip_state.json"
+
+# --- Setup:thumbnail cache ---
+THUMB_CACHE_DIR = DATA_PATH / "cache/thumbnails"
+os.makedirs(THUMB_CACHE_DIR, exist_ok=True)
 
 # These will be set from config
 ORGANIZED_PATH = None
