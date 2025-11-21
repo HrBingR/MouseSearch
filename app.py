@@ -188,7 +188,7 @@ initialize_config()
 
 def load_upload_options():
     if not UPLOAD_OPTIONS_FILE.exists():
-        app.logger.warning("upload_options.json not found. Run generate_upload_options.py!")
+        app.logger.warning("upload_options.json not found.")
         return {}
     try:
         with open(UPLOAD_OPTIONS_FILE, "r") as f:
@@ -1014,11 +1014,17 @@ async def client_add_torrent():
                 # Calculate how much upload credit needed
                 needed_gb = torrent_size_gb - buffer_gb
                 cost_per_gb = 500  # bonus points
-                total_cost = int(needed_gb * cost_per_gb)
                 
-                # Round up to nearest valid amount
-                valid_amounts = [1, 2.5, 5, 20, 100]
-                recommended_amount = next((amt for amt in valid_amounts if amt >= needed_gb), 100)
+                # Get valid amounts from UPLOAD_OPTIONS (all keys as floats, sorted)
+                upload_options = app.config.get("UPLOAD_OPTIONS", {})
+                valid_amounts = sorted([float(k) for k in upload_options.keys()])
+                
+                # Find smallest valid amount that covers the needed GB
+                if valid_amounts:
+                    recommended_amount = next((amt for amt in valid_amounts if amt >= needed_gb), valid_amounts[-1])
+                else:
+                    # Fallback if UPLOAD_OPTIONS not loaded
+                    recommended_amount = max(1, needed_gb)
                 
                 return jsonify({
                     'status': 'insufficient_buffer',

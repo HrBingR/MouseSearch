@@ -811,6 +811,90 @@ document.addEventListener("DOMContentLoaded", function () {
         });
     }
 
+    // Custom Upload Amount Purchase Handler
+    const buyCustomUploadButton = document.getElementById('buy-custom-upload-button');
+    if (buyCustomUploadButton) {
+        const customAmountInput = document.getElementById('custom-upload-amount');
+        const costInfo = document.getElementById('custom-amount-cost-info');
+        
+        // Update cost display when user types
+        if (customAmountInput) {
+            customAmountInput.addEventListener('input', function() {
+                const rawAmount = this.value;
+                
+                if (!rawAmount || parseFloat(rawAmount) < 1) {
+                    costInfo.textContent = '';
+                    return;
+                }
+                
+                const validAmount = findNearestValidAmount(rawAmount);
+                const cost = validAmount * 500;
+                
+                costInfo.textContent = `Cost: ${cost.toLocaleString()} BP`;
+                
+            });
+        }
+        
+        buyCustomUploadButton.addEventListener('click', function() {
+            const rawAmount = customAmountInput.value;
+            
+            if (!rawAmount || parseFloat(rawAmount) < 1) {
+                showToast('Please enter a valid amount (minimum 1 GB)', 'warning');
+                return;
+            }
+            
+            // Apply validation to round to nearest valid amount
+            const validAmount = findNearestValidAmount(rawAmount);
+            
+            // Show user if amount was rounded
+            if (parseFloat(rawAmount) !== validAmount) {
+                showToast(`Amount rounded from ${rawAmount} to ${validAmount} GB`, 'info');
+            }
+            
+            // Disable button and show loading
+            buyCustomUploadButton.disabled = true;
+            const originalText = buyCustomUploadButton.innerHTML;
+            buyCustomUploadButton.innerHTML = '<span class="spinner-border spinner-border-sm" aria-hidden="true"></span> Buying...';
+            
+            fetch('/mam/buy_upload', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ amount: validAmount })
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        const message = `Upload credit purchased! Added ${validAmount} GB. Remaining bonus: ${data.seedbonus ? data.seedbonus.toFixed(2) : 'N/A'}`;
+                        showToast(message, 'success');
+                        loadMamUserData();
+                        customAmountInput.value = ''; // Clear input
+                        // Close modal
+                        const modal = bootstrap.Modal.getInstance(document.getElementById('uploadPurchaseModal'));
+                        if (modal) modal.hide();
+                    } else {
+                        showToast(data.error || 'Failed to purchase upload credit', 'danger');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error buying upload credit:', error);
+                    showToast('An error occurred while purchasing upload credit', 'danger');
+                })
+                .finally(() => {
+                    buyCustomUploadButton.disabled = false;
+                    buyCustomUploadButton.innerHTML = originalText;
+                });
+        });
+        
+        // Allow Enter key to trigger purchase
+        if (customAmountInput) {
+            customAmountInput.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    buyCustomUploadButton.click();
+                }
+            });
+        }
+    }
+
     // Insufficient Buffer Modal - Buy Recommended Amount Handler
     const modalBuyRecommended = document.getElementById('modal-buy-recommended');
     if (modalBuyRecommended) {

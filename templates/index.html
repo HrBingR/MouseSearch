@@ -218,7 +218,7 @@
 
     <div class="my-3 p-3 bg-body rounded shadow-sm">
       <main class="">
-<form id="search-form" method="GET">
+<form id="search-form" method="GET" autocomplete="off">
   <h1 class="h3 mb-3 fw-normal"></h1>
 
   <div class="form-floating">
@@ -428,6 +428,27 @@
               Max Affordable <span class="badge bg-secondary float-end">All BP</span>
             </button>
           </div>
+          
+          <div class="mt-3">
+            <label for="custom-upload-amount" class="form-label">Or enter custom amount (GB):</label>
+            <div class="input-group">
+              <input 
+                type="number" 
+                class="form-control upload-amount-input" 
+                id="custom-upload-amount"
+                placeholder=""
+                min="1"
+                step="0.5"
+                list="upload-amounts-list"
+                autocomplete="off">
+              <button class="btn btn-primary" type="button" id="buy-custom-upload-button">
+                Buy Custom Amount
+              </button>
+            </div>
+            <div class="form-text">
+              <span id="custom-amount-cost-info"></span>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -474,7 +495,7 @@
       <button type="button" class="btn-close text-reset" data-bs-dismiss="offcanvas" aria-label="Close"></button>
     </div>
     <div class="offcanvas-body">
-      <form id="settings-form">
+      <form id="settings-form" autocomplete="off">
         <h5 class="text-center border-bottom pb-2 mb-0">Torrent Client Settings</h5>
         <div class="mb-3">
           <label for="TORRENT_CLIENT_TYPE" class="form-label">Client Type</label>
@@ -494,7 +515,8 @@
         <div class="mb-3">
           <label for="TORRENT_CLIENT_PASSWORD" class="form-label">Password</label>
           <input type="password" class="form-control" id="TORRENT_CLIENT_PASSWORD" name="TORRENT_CLIENT_PASSWORD" value="{{ TORRENT_CLIENT_PASSWORD }}"
-            required />
+            required 
+            autocomplete="off" />
         </div>
         <div class="mb-3">
           <label for="TORRENT_CLIENT_CATEGORY" class="form-label">Default category</label>
@@ -592,7 +614,6 @@
               name="AUTO_BUY_UPLOAD_RATIO_AMOUNT"
               min="1"
               value="{{ AUTO_BUY_UPLOAD_RATIO_AMOUNT }}"
-              list="upload-amounts-list"
             >
             <datalist id="upload-amounts-list">
               {% for amount in UPLOAD_OPTIONS.keys() | sort %}
