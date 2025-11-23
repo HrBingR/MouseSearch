@@ -985,6 +985,10 @@ async def client_add_torrent():
     await torrent_client.login()
     incoming_data = await request.get_json()
     
+    # --- NEW: Extract custom path ---
+    custom_relative_path = incoming_data.get('custom_relative_path')
+    # --------------------------------
+    
     torrent_url = incoming_data.get('torrent_url') or incoming_data.get('url')
     author = incoming_data.get('author', 'Unknown')
     title = incoming_data.get('title', 'Unknown')
@@ -1077,7 +1081,8 @@ async def client_add_torrent():
                     "retry_count": 0,
                     "series_info": series_info,
                     "category": get_category_name(main_cat),
-                    "download_link": download_link
+                    "download_link": download_link,
+                    "custom_relative_path": custom_relative_path
                 }
             }
             app.logger.info(f"Added MID {id} to pending_mid_resolutions for hash resolution")
@@ -1107,7 +1112,8 @@ async def client_add_torrent():
                 "status": "pending", "retry_count": 0,
                 "series_info": series_info,
                 "category": get_category_name(main_cat),
-                "download_link": download_link
+                "download_link": download_link,
+                "custom_relative_path": custom_relative_path
             }
             save_database(metadata)
             app.logger.info(f"Saved metadata for torrent hash: {hash_val}")
@@ -1638,7 +1644,16 @@ async def _perform_organization(hash_val: str) -> tuple[bool, str]:
     content_path = Path(TORRENT_DOWNLOAD_PATH) / info.get('name')
     organized_path = Path(ORGANIZED_PATH)
     torrent_meta = metadata[hash_val]
-    dest_path = organized_path / sanitize_filename(torrent_meta['author']) / sanitize_filename(torrent_meta['title'])
+    
+    # --- CHANGED LOGIC START ---
+    if torrent_meta.get('custom_relative_path'):
+        # Use user-defined path (strip leading slashes to ensure it stays relative)
+        rel_path = torrent_meta['custom_relative_path'].strip('/\\')
+        dest_path = organized_path / rel_path
+    else:
+        # Use default logic
+        dest_path = organized_path / sanitize_filename(torrent_meta['author']) / sanitize_filename(torrent_meta['title'])
+    # --- CHANGED LOGIC END ---
     
     # Wait up to 10s for the filesystem to settle (fix for "Move on Completion" race condition)
     for _ in range(5):

@@ -511,6 +511,12 @@ async function fetchAndUpdateTorrentStatus(hash, resultItem) {
     }
 }
 
+function sanitizeFilename(name) {
+    if (!name) return "Untitled";
+    // Regex matches characters invalid in Windows/Linux filenames: < > : " / \ | ? *
+    return name.replace(/[<>:"/\\|?*]/g, '').trim();
+}
+
 // --- Main Event Listeners ---
 document.addEventListener("DOMContentLoaded", function () {
     const searchForm = document.getElementById("search-form");
@@ -519,196 +525,120 @@ document.addEventListener("DOMContentLoaded", function () {
     const wrapper = document.getElementById('results-container-wrapper');
     const resultsTitle = document.getElementById('results-title');
 
-    // Initialize SSE for real-time notifications
+    // --- Helper: Sanitize Filenames for Default Path Proposal ---
+    function sanitizeFilename(name) {
+        if (!name) return "Unknown";
+        // Remove characters invalid in folders: < > : " / \ | ? *
+        return name.replace(/[<>:"/\\|?*]/g, '').trim();
+    }
+
+    // --- Initialize SSE for real-time notifications ---
     initializeEventStream();
 
-    // Initialize Bootstrap tooltips
+    // --- Initialize Bootstrap tooltips ---
     const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]');
     const tooltipList = [...tooltipTriggerList].map(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl));
 
+    // --- Initial Data Loads ---
     checkClientStatus();
     loadMamUserData();
-    // setInterval(checkForIpUpdate, 30000);
-    // checkForIpUpdate();
+
+    // ============================================================
+    //  SETTINGS & UI LOGIC
+    // ============================================================
 
     // Function to toggle dependent fields based on parent toggles
     function updateDependentFields() {
-        const dynamicIpEnabled = document.getElementById('ENABLE_DYNAMIC_IP_UPDATE').checked;
+        const dynamicIpEnabled = document.getElementById('ENABLE_DYNAMIC_IP_UPDATE')?.checked;
         const dynamicIpIntervalInput = document.getElementById('DYNAMIC_IP_UPDATE_INTERVAL_HOURS');
-        
+
         if (dynamicIpIntervalInput) {
             dynamicIpIntervalInput.disabled = !dynamicIpEnabled;
-            if (!dynamicIpEnabled) {
-                dynamicIpIntervalInput.classList.add('text-muted');
-            } else {
-                dynamicIpIntervalInput.classList.remove('text-muted');
-            }
+            dynamicIpIntervalInput.classList.toggle('text-muted', !dynamicIpEnabled);
         }
 
-        // VIP auto-buy interval is only enabled when auto-buy is enabled
-        const autoBuyVipEnabled = document.getElementById('AUTO_BUY_VIP').checked;
+        const autoBuyVipEnabled = document.getElementById('AUTO_BUY_VIP')?.checked;
         const vipIntervalInput = document.getElementById('AUTO_BUY_VIP_INTERVAL_HOURS');
-        
+
         if (vipIntervalInput) {
             vipIntervalInput.disabled = !autoBuyVipEnabled;
-            if (!autoBuyVipEnabled) {
-                vipIntervalInput.classList.add('text-muted');
-            } else {
-                vipIntervalInput.classList.remove('text-muted');
-            }
+            vipIntervalInput.classList.toggle('text-muted', !autoBuyVipEnabled);
         }
 
-        // Organization path is only enabled if at least one auto-organize option is enabled
-        const autoOrganizeOnAdd = document.getElementById('AUTO_ORGANIZE_ON_ADD').checked;
-        const autoOrganizeOnSchedule = document.getElementById('AUTO_ORGANIZE_ON_SCHEDULE').checked;
+        const autoOrganizeOnAdd = document.getElementById('AUTO_ORGANIZE_ON_ADD')?.checked;
+        const autoOrganizeOnSchedule = document.getElementById('AUTO_ORGANIZE_ON_SCHEDULE')?.checked;
         const organizedPathInput = document.getElementById('ORGANIZED_PATH');
         const downloadPathInput = document.getElementById('TORRENT_DOWNLOAD_PATH');
         const organizeIntervalInput = document.getElementById('AUTO_ORGANIZE_INTERVAL_HOURS');
-        
+        const shouldEnablePaths = autoOrganizeOnAdd || autoOrganizeOnSchedule;
+
         if (organizedPathInput) {
-            const shouldEnable = autoOrganizeOnAdd || autoOrganizeOnSchedule;
-            organizedPathInput.disabled = !shouldEnable;
-            if (!shouldEnable) {
-                organizedPathInput.classList.add('text-muted');
-            } else {
-                organizedPathInput.classList.remove('text-muted');
-            }
+            organizedPathInput.disabled = !shouldEnablePaths;
+            organizedPathInput.classList.toggle('text-muted', !shouldEnablePaths);
         }
-
         if (downloadPathInput) {
-            const shouldEnable = autoOrganizeOnAdd || autoOrganizeOnSchedule;
-            downloadPathInput.disabled = !shouldEnable;
-            if (!shouldEnable) {
-                downloadPathInput.classList.add('text-muted');
-            } else {
-                downloadPathInput.classList.remove('text-muted');
-            }
+            downloadPathInput.disabled = !shouldEnablePaths;
+            downloadPathInput.classList.toggle('text-muted', !shouldEnablePaths);
         }
-
-        // Organize interval is only enabled when scheduled re-scan is enabled
         if (organizeIntervalInput) {
             organizeIntervalInput.disabled = !autoOrganizeOnSchedule;
-            if (!autoOrganizeOnSchedule) {
-                organizeIntervalInput.classList.add('text-muted');
-            } else {
-                organizeIntervalInput.classList.remove('text-muted');
-            }
+            organizeIntervalInput.classList.toggle('text-muted', !autoOrganizeOnSchedule);
         }
-        
-        // Upload credit - ratio threshold fields
-        const autoUploadRatioEnabled = document.getElementById('AUTO_BUY_UPLOAD_ON_RATIO').checked;
+
+        // Upload credit toggles
+        const autoUploadRatioEnabled = document.getElementById('AUTO_BUY_UPLOAD_ON_RATIO')?.checked;
         const ratioThresholdInput = document.getElementById('AUTO_BUY_UPLOAD_RATIO_THRESHOLD');
         const ratioAmountInput = document.getElementById('AUTO_BUY_UPLOAD_RATIO_AMOUNT');
-        
+
         if (ratioThresholdInput) {
             ratioThresholdInput.disabled = !autoUploadRatioEnabled;
-            if (!autoUploadRatioEnabled) {
-                ratioThresholdInput.classList.add('text-muted');
-            } else {
-                ratioThresholdInput.classList.remove('text-muted');
-            }
+            ratioThresholdInput.classList.toggle('text-muted', !autoUploadRatioEnabled);
         }
-        
         if (ratioAmountInput) {
             ratioAmountInput.disabled = !autoUploadRatioEnabled;
-            if (!autoUploadRatioEnabled) {
-                ratioAmountInput.classList.add('text-muted');
-            } else {
-                ratioAmountInput.classList.remove('text-muted');
-            }
+            ratioAmountInput.classList.toggle('text-muted', !autoUploadRatioEnabled);
         }
-        
-        // Upload credit - buffer threshold fields
-        const autoUploadBufferEnabled = document.getElementById('AUTO_BUY_UPLOAD_ON_BUFFER').checked;
+
+        const autoUploadBufferEnabled = document.getElementById('AUTO_BUY_UPLOAD_ON_BUFFER')?.checked;
         const bufferThresholdInput = document.getElementById('AUTO_BUY_UPLOAD_BUFFER_THRESHOLD');
         const bufferAmountInput = document.getElementById('AUTO_BUY_UPLOAD_BUFFER_AMOUNT');
-        
+
         if (bufferThresholdInput) {
             bufferThresholdInput.disabled = !autoUploadBufferEnabled;
-            if (!autoUploadBufferEnabled) {
-                bufferThresholdInput.classList.add('text-muted');
-            } else {
-                bufferThresholdInput.classList.remove('text-muted');
-            }
+            bufferThresholdInput.classList.toggle('text-muted', !autoUploadBufferEnabled);
         }
-        
         if (bufferAmountInput) {
             bufferAmountInput.disabled = !autoUploadBufferEnabled;
-            if (!autoUploadBufferEnabled) {
-                bufferAmountInput.classList.add('text-muted');
-            } else {
-                bufferAmountInput.classList.remove('text-muted');
-            }
+            bufferAmountInput.classList.toggle('text-muted', !autoUploadBufferEnabled);
         }
-        
-        // Upload credit - check interval (enabled if either ratio or buffer is enabled)
+
         const uploadCheckIntervalInput = document.getElementById('AUTO_BUY_UPLOAD_CHECK_INTERVAL_HOURS');
         if (uploadCheckIntervalInput) {
             const shouldEnable = autoUploadRatioEnabled || autoUploadBufferEnabled;
             uploadCheckIntervalInput.disabled = !shouldEnable;
-            if (!shouldEnable) {
-                uploadCheckIntervalInput.classList.add('text-muted');
-            } else {
-                uploadCheckIntervalInput.classList.remove('text-muted');
-            }
+            uploadCheckIntervalInput.classList.toggle('text-muted', !shouldEnable);
         }
     }
 
-    // Set up event listeners for toggles
-    const dynamicIpToggle = document.getElementById('ENABLE_DYNAMIC_IP_UPDATE');
-    if (dynamicIpToggle) {
-        dynamicIpToggle.addEventListener('change', updateDependentFields);
-    }
+    // Attach listeners to all toggles
+    ['ENABLE_DYNAMIC_IP_UPDATE', 'AUTO_BUY_VIP', 'AUTO_BUY_UPLOAD_ON_RATIO', 
+     'AUTO_BUY_UPLOAD_ON_BUFFER', 'AUTO_ORGANIZE_ON_ADD', 'AUTO_ORGANIZE_ON_SCHEDULE'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener('change', updateDependentFields);
+    });
 
-    const autoBuyVipToggle = document.getElementById('AUTO_BUY_VIP');
-    if (autoBuyVipToggle) {
-        autoBuyVipToggle.addEventListener('change', updateDependentFields);
-    }
-    
-    const autoUploadRatioToggle = document.getElementById('AUTO_BUY_UPLOAD_ON_RATIO');
-    if (autoUploadRatioToggle) {
-        autoUploadRatioToggle.addEventListener('change', updateDependentFields);
-    }
-    
-    const autoUploadBufferToggle = document.getElementById('AUTO_BUY_UPLOAD_ON_BUFFER');
-    if (autoUploadBufferToggle) {
-        autoUploadBufferToggle.addEventListener('change', updateDependentFields);
-    }
-
-    const autoOrganizeOnAddToggle = document.getElementById('AUTO_ORGANIZE_ON_ADD');
-    if (autoOrganizeOnAddToggle) {
-        autoOrganizeOnAddToggle.addEventListener('change', updateDependentFields);
-    }
-
-    const autoOrganizeOnScheduleToggle = document.getElementById('AUTO_ORGANIZE_ON_SCHEDULE');
-    if (autoOrganizeOnScheduleToggle) {
-        autoOrganizeOnScheduleToggle.addEventListener('change', updateDependentFields);
-    }
-
-    // Initialize disabled state on page load
+    // Initialize UI state
     updateDependentFields();
 
-    // --- UPLOAD AMOUNT VALIDATION ---
-    // Function to find nearest valid upload amount
+    // --- UPLOAD AMOUNT VALIDATION (Rounding logic) ---
     function findNearestValidAmount(value) {
-        if (!window.VALID_UPLOAD_AMOUNTS || window.VALID_UPLOAD_AMOUNTS.length === 0) {
-            return value;
-        }
-        
+        if (!window.VALID_UPLOAD_AMOUNTS || window.VALID_UPLOAD_AMOUNTS.length === 0) return value;
         const numValue = parseFloat(value);
-        if (isNaN(numValue) || numValue < 1) {
-            return window.VALID_UPLOAD_AMOUNTS[0]; // Return smallest valid amount
-        }
-        
-        // Check if value is already valid
-        if (window.VALID_UPLOAD_AMOUNTS.includes(numValue)) {
-            return numValue;
-        }
-        
-        // Find nearest valid amount
+        if (isNaN(numValue) || numValue < 1) return window.VALID_UPLOAD_AMOUNTS[0];
+        if (window.VALID_UPLOAD_AMOUNTS.includes(numValue)) return numValue;
+
         let nearest = window.VALID_UPLOAD_AMOUNTS[0];
         let minDiff = Math.abs(numValue - nearest);
-        
         for (const validAmount of window.VALID_UPLOAD_AMOUNTS) {
             const diff = Math.abs(numValue - validAmount);
             if (diff < minDiff) {
@@ -716,32 +646,21 @@ document.addEventListener("DOMContentLoaded", function () {
                 nearest = validAmount;
             }
         }
-        
         return nearest;
     }
-    
-    // Add validation to upload amount inputs
+
     document.querySelectorAll('.upload-amount-input').forEach(input => {
         input.addEventListener('blur', function() {
-            const originalValue = this.value;
-            const validValue = findNearestValidAmount(originalValue);
-            
-            if (parseFloat(originalValue) !== validValue) {
-                this.value = validValue;
-                console.log(`Rounded upload amount from ${originalValue} to ${validValue} GB`);
-            }
+            const valid = findNearestValidAmount(this.value);
+            if (parseFloat(this.value) !== valid) this.value = valid;
         });
-        
-        // Also validate on form submission
-        const form = input.closest('form');
-        if (form) {
-            form.addEventListener('submit', function(e) {
-                const validValue = findNearestValidAmount(input.value);
-                input.value = validValue;
-            });
-        }
     });
 
+    // ============================================================
+    //  BUTTON HANDLERS (Settings, VIP, Upload)
+    // ============================================================
+
+    // Save Settings
     document.getElementById('save-settings-button').addEventListener('click', function () {
         fetch('/update_settings', { method: 'POST', body: new FormData(document.getElementById('settings-form')) })
             .then(response => response.json())
@@ -750,14 +669,9 @@ document.addEventListener("DOMContentLoaded", function () {
                 if (data.status === 'success') {
                     document.getElementById('clientLink').href = document.getElementById('TORRENT_CLIENT_URL').value;
                     document.getElementById('clientLink').textContent = document.getElementById('TORRENT_CLIENT_URL').value;
-                    
-                    // REMOVED: The manual capitalization logic that was here
-                    
-                    // Update the display name using the value returned from the server
                     if (data.client_display_name) {
                         document.getElementById('client-type-display').textContent = data.client_display_name;
                     }
-                    
                     checkClientStatus();
                     loadMamUserData();
                 }
@@ -765,274 +679,186 @@ document.addEventListener("DOMContentLoaded", function () {
             .catch(error => showToast("An error occurred while saving settings.", 'danger'));
     });
 
-    // VIP Top-Up Button Handler
+    // Buy VIP
     const buyVipButton = document.getElementById('buy-vip-button');
     if (buyVipButton) {
         buyVipButton.addEventListener('click', function () {
-            // Disable button and show loading state
             buyVipButton.disabled = true;
             const originalText = buyVipButton.innerHTML;
             buyVipButton.innerHTML = '<span class="spinner-border spinner-border-sm" aria-hidden="true"></span> Buying...';
-            
+
             fetch('/mam/buy_vip', { method: 'POST' })
                 .then(response => response.json())
                 .then(data => {
                     if (data.success) {
-                        const amount = data.amount || 0;
-                        const message = `VIP topped up! Added ${amount.toFixed(2)} weeks. Remaining bonus: ${data.seedbonus ? data.seedbonus.toFixed(2) : 'N/A'}`;
-                        showToast(message, 'success');
-                        // Refresh MAM user data to show updated bonus points
+                        showToast(`VIP topped up! Added ${data.amount} weeks.`, 'success');
                         loadMamUserData();
                     } else {
-                        showToast(data.error || 'Failed to purchase VIP credit', 'danger');
+                        showToast(data.error || 'Failed to purchase VIP', 'danger');
                     }
                 })
-                .catch(error => {
-                    console.error('Error buying VIP:', error);
-                    showToast('An error occurred while purchasing VIP credit', 'danger');
-                })
+                .catch(() => showToast('Error purchasing VIP', 'danger'))
                 .finally(() => {
-                    // Re-enable button and restore text
                     buyVipButton.disabled = false;
                     buyVipButton.innerHTML = originalText;
                 });
         });
     }
 
-    // Upload Credit Purchase Handler (Manual Modal)
+    // Buy Upload (Pre-defined amounts)
     const uploadAmountOptions = document.getElementById('upload-amount-options');
     if (uploadAmountOptions) {
         uploadAmountOptions.addEventListener('click', function(e) {
             const button = e.target.closest('button');
             if (!button) return;
-            
             const amount = button.dataset.amount;
-            if (!amount) return;
             
-            // Disable all buttons and show loading
             const buttons = uploadAmountOptions.querySelectorAll('button');
             buttons.forEach(btn => btn.disabled = true);
-            button.innerHTML = '<span class="spinner-border spinner-border-sm" aria-hidden="true"></span> Buying...';
-            
+            const originalHtml = button.innerHTML;
+            button.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Buying...';
+
             fetch('/mam/buy_upload', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ amount: amount === 'max' ? 'max' : parseFloat(amount) })
             })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        const amountText = amount === 'max' ? 'Maximum affordable' : `${amount} GB`;
-                        const message = `Upload credit purchased! Added ${amountText}. Remaining bonus: ${data.seedbonus ? data.seedbonus.toFixed(2) : 'N/A'}`;
-                        showToast(message, 'success');
-                        loadMamUserData();
-                        // Close modal
-                        const modal = bootstrap.Modal.getInstance(document.getElementById('uploadPurchaseModal'));
-                        if (modal) modal.hide();
-                    } else {
-                        showToast(data.error || 'Failed to purchase upload credit', 'danger');
-                    }
-                })
-                .catch(error => {
-                    console.error('Error buying upload credit:', error);
-                    showToast('An error occurred while purchasing upload credit', 'danger');
-                })
-                .finally(() => {
-                    // Re-enable all buttons
-                    buttons.forEach((btn, idx) => {
-                        btn.disabled = false;
-                        // Restore original text
-                        const amounts = [1, 2.5, 5, 10, 20, 100, 'max'];
-                        const costs = [500, 1250, 2500, 5000, 10000, 50000, 'All BP'];
-                        if (amounts[idx] === 'max') {
-                            btn.innerHTML = `Max Affordable <span class="badge bg-secondary float-end">${costs[idx]}</span>`;
-                        } else {
-                            btn.innerHTML = `${amounts[idx]} GB <span class="badge bg-secondary float-end">${costs[idx].toLocaleString()} BP</span>`;
-                        }
-                    });
-                });
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showToast(`Purchased ${data.amount} GB.`, 'success');
+                    loadMamUserData();
+                    bootstrap.Modal.getInstance(document.getElementById('uploadPurchaseModal'))?.hide();
+                } else {
+                    showToast(data.error || 'Failed', 'danger');
+                }
+            })
+            .catch(() => showToast('Error purchasing upload', 'danger'))
+            .finally(() => {
+                buttons.forEach(btn => btn.disabled = false);
+                button.innerHTML = originalHtml;
+            });
         });
     }
 
-    // Custom Upload Amount Purchase Handler
+    // Buy Custom Upload
     const buyCustomUploadButton = document.getElementById('buy-custom-upload-button');
-    if (buyCustomUploadButton) {
-        const customAmountInput = document.getElementById('custom-upload-amount');
-        const costInfo = document.getElementById('custom-amount-cost-info');
-        
-        // Update cost display when user types
-        if (customAmountInput) {
-            customAmountInput.addEventListener('input', function() {
-                const rawAmount = this.value;
-                
-                if (!rawAmount || parseFloat(rawAmount) < 1) {
-                    costInfo.textContent = '';
-                    return;
-                }
-                
-                const validAmount = findNearestValidAmount(rawAmount);
-                const cost = validAmount * 500;
-                
-                costInfo.textContent = `Cost: ${cost.toLocaleString()} BP`;
-                
-            });
-        }
-        
-        buyCustomUploadButton.addEventListener('click', function() {
-            const rawAmount = customAmountInput.value;
+    const customAmountInput = document.getElementById('custom-upload-amount');
+    
+    if (customAmountInput) {
+        customAmountInput.addEventListener('input', function() {
+            const val = parseFloat(this.value);
+            const costInfo = document.getElementById('custom-amount-cost-info');
+            if (!val || val < 1) { costInfo.textContent = ''; return; }
+            const valid = findNearestValidAmount(val);
+            costInfo.textContent = `Cost: ${(valid * 500).toLocaleString()} BP`;
+        });
+    }
+
+    if (buyCustomUploadButton && customAmountInput) {
+        const handleCustomBuy = () => {
+            const raw = customAmountInput.value;
+            if (!raw || parseFloat(raw) < 1) return showToast('Enter valid amount', 'warning');
             
-            if (!rawAmount || parseFloat(rawAmount) < 1) {
-                showToast('Please enter a valid amount (minimum 1 GB)', 'warning');
-                return;
-            }
-            
-            // Apply validation to round to nearest valid amount
-            const validAmount = findNearestValidAmount(rawAmount);
-            
-            // Show user if amount was rounded
-            if (parseFloat(rawAmount) !== validAmount) {
-                showToast(`Amount rounded from ${rawAmount} to ${validAmount} GB`, 'info');
-            }
-            
-            // Disable button and show loading
+            const valid = findNearestValidAmount(raw);
+            if (parseFloat(raw) !== valid) showToast(`Rounding to ${valid} GB`, 'info');
+
             buyCustomUploadButton.disabled = true;
             const originalText = buyCustomUploadButton.innerHTML;
-            buyCustomUploadButton.innerHTML = '<span class="spinner-border spinner-border-sm" aria-hidden="true"></span> Buying...';
-            
+            buyCustomUploadButton.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Buying...';
+
             fetch('/mam/buy_upload', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ amount: validAmount })
+                body: JSON.stringify({ amount: valid })
             })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        const message = `Upload credit purchased! Added ${validAmount} GB. Remaining bonus: ${data.seedbonus ? data.seedbonus.toFixed(2) : 'N/A'}`;
-                        showToast(message, 'success');
-                        loadMamUserData();
-                        customAmountInput.value = ''; // Clear input
-                        // Close modal
-                        const modal = bootstrap.Modal.getInstance(document.getElementById('uploadPurchaseModal'));
-                        if (modal) modal.hide();
-                    } else {
-                        showToast(data.error || 'Failed to purchase upload credit', 'danger');
-                    }
-                })
-                .catch(error => {
-                    console.error('Error buying upload credit:', error);
-                    showToast('An error occurred while purchasing upload credit', 'danger');
-                })
-                .finally(() => {
-                    buyCustomUploadButton.disabled = false;
-                    buyCustomUploadButton.innerHTML = originalText;
-                });
-        });
-        
-        // Allow Enter key to trigger purchase
-        if (customAmountInput) {
-            customAmountInput.addEventListener('keypress', function(e) {
-                if (e.key === 'Enter') {
-                    buyCustomUploadButton.click();
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showToast(`Purchased ${valid} GB.`, 'success');
+                    loadMamUserData();
+                    customAmountInput.value = '';
+                    bootstrap.Modal.getInstance(document.getElementById('uploadPurchaseModal'))?.hide();
+                } else {
+                    showToast(data.error || 'Failed', 'danger');
                 }
+            })
+            .catch(() => showToast('Error purchasing upload', 'danger'))
+            .finally(() => {
+                buyCustomUploadButton.disabled = false;
+                buyCustomUploadButton.innerHTML = originalText;
             });
-        }
+        };
+
+        buyCustomUploadButton.addEventListener('click', handleCustomBuy);
+        customAmountInput.addEventListener('keypress', (e) => { if(e.key === 'Enter') handleCustomBuy(); });
     }
 
-    // Insufficient Buffer Modal - Buy Recommended Amount Handler
+    // Insufficient Buffer Modal - Buy Recommended
     const modalBuyRecommended = document.getElementById('modal-buy-recommended');
     if (modalBuyRecommended) {
         modalBuyRecommended.addEventListener('click', function() {
             const amount = parseFloat(this.dataset.amount);
-            if (!amount) return;
-            
             this.disabled = true;
-            const originalText = this.innerHTML;
-            this.innerHTML = '<span class="spinner-border spinner-border-sm" aria-hidden="true"></span> Buying...';
-            
+            this.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Buying...';
+
             fetch('/mam/buy_upload', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ amount: amount })
             })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        showToast(`Upload credit purchased! Added ${amount} GB`, 'success');
-                        loadMamUserData();
-                        
-                        // Close insufficient buffer modal
-                        const modal = bootstrap.Modal.getInstance(document.getElementById('insufficientBufferModal'));
-                        if (modal) modal.hide();
-                        
-                        // Retry the original download if we stored it
-                        if (window.pendingDownload) {
-                            const pending = window.pendingDownload;
-                            window.pendingDownload = null;
-                            
-                            fetch('/client/add', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify(pending)
-                            })
-                                .then(response => response.json())
-                                .then(result => {
-                                    if (result.message) {
-                                        showToast(result.message, 'success');
-                                    } else if (result.error) {
-                                        showToast(result.error, 'danger');
-                                    }
-                                })
-                                .catch(error => console.error('Error retrying download:', error));
-                        }
-                    } else {
-                        showToast(data.error || 'Failed to purchase upload credit', 'danger');
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showToast(`Purchased ${amount} GB`, 'success');
+                    loadMamUserData();
+                    bootstrap.Modal.getInstance(document.getElementById('insufficientBufferModal'))?.hide();
+
+                    // Retry pending download
+                    if (window.pendingDownload) {
+                        performDownload(window.pendingDownload, null); 
+                        window.pendingDownload = null;
                     }
-                })
-                .catch(error => {
-                    console.error('Error buying upload credit:', error);
-                    showToast('An error occurred while purchasing upload credit', 'danger');
-                })
-                .finally(() => {
-                    this.disabled = false;
-                    this.innerHTML = originalText;
-                });
+                } else {
+                    showToast(data.error || 'Failed', 'danger');
+                }
+            })
+            .finally(() => {
+                this.disabled = false;
+                this.innerHTML = `Buy ${amount} GB`;
+            });
         });
     }
 
+    // ============================================================
+    //  SEARCH SUBMISSION
+    // ============================================================
     searchForm.addEventListener("submit", function (e) {
         e.preventDefault();
         searchButton.disabled = true;
-        searchButton.innerHTML = `<span class="spinner-border spinner-border-sm" aria-hidden="true"></span> Searching...`;
+        searchButton.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Searching...`;
+        if (resultsTitle) resultsTitle.textContent = 'Results';
 
-        if (resultsTitle) {
-            resultsTitle.textContent = 'Results';
-        }
-
-        // Clear hash-to-element mappings before a new search
-        console.log("[SEARCH] New search submitted. Clearing hash mappings.");
+        // Clear hash mappings on new search
         hashToElementMap.clear();
 
         const queryParams = new URLSearchParams(new FormData(searchForm)).toString();
 
         fetch(`/mam/search?${queryParams}`)
-            .then(response => response.text()) // Expect HTML now, not JSON
+            .then(response => response.text())
             .then(html => {
-                wrapper.style.display = 'block'; // Make the results container visible
+                wrapper.style.display = 'block';
                 resultsContainer.innerHTML = html;
-
-                const resultsCount = resultsContainer.querySelectorAll('.result-item').length;
-                if (resultsTitle) {
-                    resultsTitle.textContent = `Results (${resultsCount})`;
-                }
-
+                const count = resultsContainer.querySelectorAll('.result-item').length;
+                if (resultsTitle) resultsTitle.textContent = `Results (${count})`;
                 wrapper.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 refreshCategories();
                 initializeSnatchedTorrents();
             })
             .catch(error => {
                 wrapper.style.display = 'block';
-                resultsContainer.innerHTML = `<div class="alert alert-danger">Search failed. See console for details.</div>`;
-                console.error("Error during search request:", error);
+                resultsContainer.innerHTML = `<div class="alert alert-danger">Search failed.</div>`;
+                console.error(error);
             })
             .finally(() => {
                 searchButton.disabled = false;
@@ -1040,102 +866,153 @@ document.addEventListener("DOMContentLoaded", function () {
             });
     });
 
+    // ============================================================
+    //  DOWNLOAD & PATH CONFIRMATION LOGIC
+    // ============================================================
+
+    // State for the confirmation modal
+    let pendingDownloadData = null; 
+    let pendingButton = null;
+
+    // References to Modal Elements
+    const confirmModalEl = document.getElementById('downloadConfirmModal');
+    const confirmModal = confirmModalEl ? new bootstrap.Modal(confirmModalEl) : null;
+    const confirmInput = document.getElementById('confirm-path-input');
+    const previewSpan = document.getElementById('full-path-preview');
+    const confirmBtn = document.getElementById('confirm-download-btn');
+
+    // Live update of path preview in modal
+    if (confirmInput && previewSpan) {
+        confirmInput.addEventListener('input', function() {
+            previewSpan.textContent = this.value;
+        });
+    }
+
+    // Handle "Start Download" inside the Modal
+    if (confirmBtn) {
+        confirmBtn.addEventListener('click', function() {
+            if (!pendingDownloadData) return;
+            // Inject user's custom path into payload
+            pendingDownloadData.custom_relative_path = confirmInput.value;
+            confirmModal.hide();
+            performDownload(pendingDownloadData, pendingButton);
+        });
+    }
+
+    /**
+     * Core function to execute the API call to add the torrent.
+     * Handles success, failure, and insufficient buffer scenarios.
+     */
+    function performDownload(downloadData, button) {
+        if(button) button.disabled = true;
+
+        fetch('/client/add', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(downloadData),
+        })
+        .then(response => response.json())
+        .then(async data => {
+            // Case 1: Insufficient Buffer
+            if (data.status === 'insufficient_buffer') {
+                document.getElementById('modal-buffer-gb').textContent = data.buffer_gb || 0;
+                document.getElementById('modal-torrent-size').textContent = data.torrent_size_gb || 0;
+                document.getElementById('modal-needed-gb').textContent = data.needed_gb || 0;
+                document.getElementById('modal-recommended-amount').textContent = data.recommended_amount || 0;
+                document.getElementById('modal-recommended-cost').textContent = (data.recommended_cost || 0).toLocaleString();
+                
+                const buyBtn = document.getElementById('modal-buy-recommended');
+                buyBtn.dataset.amount = data.recommended_amount || 0;
+
+                // Save for retry after purchase
+                window.pendingDownload = downloadData;
+                
+                new bootstrap.Modal(document.getElementById('insufficientBufferModal')).show();
+                
+                if(button) button.disabled = false;
+                return;
+            }
+
+            // Case 2: Success or Generic Error
+            showToast(data.message || data.error, data.message ? 'success' : 'danger');
+
+            if (data.message && button) {
+                button.textContent = 'Added!';
+                
+                // Show temporary status on the result item
+                const resultItem = button.closest('.result-item');
+                const statusContainer = resultItem.querySelector('.torrent-status-container');
+                if (statusContainer) {
+                    statusContainer.innerHTML = `<span class="badge bg-info text-wrap">Resolving torrent...</span>`;
+                }
+
+                // Poll for hash resolution (MID -> Hash)
+                const torrentId = downloadData.id;
+                let attempts = 0;
+                const maxAttempts = 15;
+                const pollInterval = setInterval(async () => {
+                    attempts++;
+                    const hash = await getTorrentHashByMID(torrentId);
+                    if (hash) {
+                        clearInterval(pollInterval);
+                        pollTorrentStatus(hash, resultItem);
+                        fetchAndUpdateTorrentStatus(hash, resultItem);
+                    } else if (attempts >= maxAttempts) {
+                        clearInterval(pollInterval);
+                        if (statusContainer) statusContainer.innerHTML = `<span class="badge bg-warning">Added (pending)</span>`;
+                    }
+                }, 2000);
+
+            } else if (button) {
+                button.disabled = false;
+            }
+        })
+        .catch(error => {
+            console.error("Download Error:", error);
+            showToast("An error occurred while adding torrent.", 'danger');
+            if(button) button.disabled = false;
+        });
+    }
+
+    // Main Result List Click Listener
     resultsContainer.addEventListener('click', function (event) {
-        // Find the button, even if the click was on an icon inside it
         const button = event.target.closest('.add-to-client-button');
         if (button) {
             event.preventDefault();
-            // Find the result item first (needed to get torrentId and category)
+
+            // Extract Data
             const resultItem = button.closest('.result-item');
-            const torrentUrl = button.dataset.torrentUrl;
-            const torrentId = resultItem.dataset.torrentId;
-            const author = button.dataset.author;
-            const title = button.dataset.title;
-            const torrentSize = button.dataset.size || '0 GiB';  // Get size from button data
-            // Find the category dropdown within the same result item
-            const category = resultItem.querySelector('.category-dropdown')?.value || '';
-
-            console.log(`[ADD] 'Download' clicked for URL: ${torrentUrl} with category: '${category}'`);
-
-            button.disabled = true;
-            
             const downloadData = {
-                torrent_url: torrentUrl,
-                category: category,
-                id: torrentId,
-                author: author,
-                title: title,
-                size: torrentSize
+                torrent_url: button.dataset.torrentUrl,
+                category: resultItem.querySelector('.category-dropdown')?.value || '',
+                id: resultItem.dataset.torrentId,
+                author: button.dataset.author || "Unknown",
+                title: button.dataset.title || "Unknown",
+                size: button.dataset.size || '0 GiB',
+                main_cat: button.dataset.mainCat || ''
             };
-            
-            fetch('/client/add', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(downloadData),
-            })
-                .then(response => response.json())
-                .then(async data => {
-                    // Check for insufficient buffer
-                    if (data.status === 'insufficient_buffer') {
-                        // Show insufficient buffer modal
-                        document.getElementById('modal-buffer-gb').textContent = data.buffer_gb || 0;
-                        document.getElementById('modal-torrent-size').textContent = data.torrent_size_gb || 0;
-                        document.getElementById('modal-needed-gb').textContent = data.needed_gb || 0;
-                        document.getElementById('modal-recommended-amount').textContent = data.recommended_amount || 0;
-                        document.getElementById('modal-recommended-cost').textContent = (data.recommended_cost || 0).toLocaleString();
-                        
-                        const buyButton = document.getElementById('modal-buy-recommended');
-                        buyButton.dataset.amount = data.recommended_amount || 0;
-                        
-                        // Store the download data for retry after purchase
-                        window.pendingDownload = downloadData;
-                        
-                        const modal = new bootstrap.Modal(document.getElementById('insufficientBufferModal'));
-                        modal.show();
-                        
-                        button.disabled = false;
-                        return;
-                    }
-                    
-                    showToast(data.message || data.error, data.message ? 'success' : 'danger');
-                    if (data.message) {
-                        console.log("[ADD] Torrent added successfully via API.");
-                        button.textContent = 'Added!';
-                        // With MID-based matching, hash resolution happens in the monitoring loop
-                        // Show a waiting state - SSE will update once hash is resolved
-                        const statusContainer = resultItem.querySelector('.torrent-status-container');
-                        if (statusContainer) {
-                            statusContainer.innerHTML = `<span class="badge bg-info text-wrap">Resolving torrent...</span>`;
-                        }
-                        console.log(`[ADD] MID ${torrentId} added - hash will be resolved by monitoring loop`);
-                        
-                        // Poll for hash resolution (check every 2 seconds for up to 30 seconds)
-                        let attempts = 0;
-                        const maxAttempts = 15;
-                        const pollInterval = setInterval(async () => {
-                            attempts++;
-                            const hash = await getTorrentHashByMID(torrentId);
-                            if (hash) {
-                                console.log(`[ADD] Hash resolved for MID ${torrentId}: ${hash}`);
-                                clearInterval(pollInterval);
-                                pollTorrentStatus(hash, resultItem);
-                                fetchAndUpdateTorrentStatus(hash, resultItem);
-                            } else if (attempts >= maxAttempts) {
-                                console.log(`[ADD] Hash resolution timed out for MID ${torrentId}`);
-                                clearInterval(pollInterval);
-                                if (statusContainer) {
-                                    statusContainer.innerHTML = `<span class="badge bg-warning text-wrap">Added (status pending)</span>`;
-                                }
-                            }
-                        }, 2000);
-                    } else {
-                        console.error("[ADD] Failed to add torrent:", data.error);
-                    }
-                })
-                .catch(error => {
-                    showToast("An error occurred while adding torrent.", 'danger');
-                    button.disabled = false;
-                });
+
+            // Check Settings
+            const autoOrganizeEnabled = document.getElementById('AUTO_ORGANIZE_ON_ADD')?.checked;
+
+            if (autoOrganizeEnabled && confirmModal) {
+                // Show Path Confirmation Modal
+                const cleanAuthor = sanitizeFilename(downloadData.author);
+                const cleanTitle = sanitizeFilename(downloadData.title);
+                const defaultPath = `${cleanAuthor}/${cleanTitle}`;
+
+                confirmInput.value = defaultPath;
+                previewSpan.textContent = defaultPath;
+
+                pendingDownloadData = downloadData;
+                pendingButton = button;
+
+                confirmModal.show();
+            } else {
+                // Default immediate download
+                performDownload(downloadData, button);
+            }
         }
     });
+
 });
