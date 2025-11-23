@@ -444,7 +444,6 @@
                 placeholder=""
                 min="1"
                 step="0.5"
-                list="upload-amounts-list"
                 autocomplete="off">
               <button class="btn btn-primary" type="button" id="buy-custom-upload-button">
                 Buy Custom Amount
@@ -531,284 +530,212 @@
     </div>
   </div>
 
-  <div class="offcanvas offcanvas-end" tabindex="-1" id="settingsOffcanvas" aria-labelledby="settingsOffcanvasLabel">
-    <div class="offcanvas-header">
-      <h5 class="offcanvas-title" id="settingsOffcanvasLabel">Settings</h5>
+  <div class="offcanvas offcanvas-end w-md-50" tabindex="-1" id="settingsOffcanvas" aria-labelledby="settingsOffcanvasLabel">
+    <div class="offcanvas-header bg-body-tertiary border-bottom">
+      <h5 class="offcanvas-title" id="settingsOffcanvasLabel">
+        <i class="bi bi-gear-fill me-2"></i>Settings
+      </h5>
       <button type="button" class="btn-close text-reset" data-bs-dismiss="offcanvas" aria-label="Close"></button>
     </div>
-    <div class="offcanvas-body">
-      <form id="settings-form" autocomplete="off">
-        <h5 class="text-center border-bottom pb-2 mb-0">Torrent Client Settings</h5>
-        <div class="mb-3">
-          <label for="TORRENT_CLIENT_TYPE" class="form-label">Client Type</label>
-          <select class="form-select" id="TORRENT_CLIENT_TYPE" name="TORRENT_CLIENT_TYPE">
-            <option value="qbittorrent" {% if (TORRENT_CLIENT_TYPE or 'qbittorrent') == 'qbittorrent' %}selected{% endif %}>qBittorrent</option>
-          </select>
-        </div>
-        <div class="mb-3">
-          <label for="TORRENT_CLIENT_URL" class="form-label">Client URL</label>
-          <input type="text" class="form-control" id="TORRENT_CLIENT_URL" name="TORRENT_CLIENT_URL" value="{{ TORRENT_CLIENT_URL }}" required />
-        </div>
-        <div class="mb-3">
-          <label for="TORRENT_CLIENT_USERNAME" class="form-label">Username</label>
-          <input type="text" class="form-control" id="TORRENT_CLIENT_USERNAME" name="TORRENT_CLIENT_USERNAME" value="{{ TORRENT_CLIENT_USERNAME }}"
-            required />
-        </div>
-        <div class="mb-3">
-          <label for="TORRENT_CLIENT_PASSWORD" class="form-label">Password</label>
-          <input type="password" class="form-control" id="TORRENT_CLIENT_PASSWORD" name="TORRENT_CLIENT_PASSWORD" value="{{ TORRENT_CLIENT_PASSWORD }}"
-            required 
-            autocomplete="off" />
-        </div>
-        <div class="mb-3">
-          <label for="TORRENT_CLIENT_CATEGORY" class="form-label">Default category</label>
-          <select class="form-select" id="TORRENT_CLIENT_CATEGORY" name="TORRENT_CLIENT_CATEGORY" data-current-value="{{ TORRENT_CLIENT_CATEGORY }}">
-             <option value="{{ TORRENT_CLIENT_CATEGORY }}" selected>{{ TORRENT_CLIENT_CATEGORY }}</option>
-          </select>
+
+    <div class="offcanvas-body p-0">
+      <form id="settings-form" autocomplete="off" class="d-flex flex-column h-100">
+        
+        <div class="px-3 pt-3">
+          <ul class="nav nav-tabs" id="settingTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+              <button class="nav-link active" id="general-tab" data-bs-toggle="tab" data-bs-target="#general-pane" type="button" role="tab" aria-controls="general-pane" aria-selected="true">
+                General
+              </button>
+            </li>
+            <li class="nav-item" role="presentation">
+              <button class="nav-link" id="organize-tab" data-bs-toggle="tab" data-bs-target="#organize-pane" type="button" role="tab" aria-controls="organize-pane" aria-selected="false">
+                Auto-Organize
+              </button>
+            </li>
+            <li class="nav-item" role="presentation">
+              <button class="nav-link" id="helpers-tab" data-bs-toggle="tab" data-bs-target="#helpers-pane" type="button" role="tab" aria-controls="helpers-pane" aria-selected="false">
+                MAM Helpers
+              </button>
+            </li>
+          </ul>
         </div>
 
-        <h5 class="text-center border-bottom pb-2">MyAnonaMouse</h5>
-        <div class="mb-3">
-          <label for="MAM_ID" class="form-label">MAM ID</label>
-          <input type="text" class="form-control" id="MAM_ID" name="MAM_ID" value="{{ MAM_ID }}" required />
-        </div>
+        <div class="tab-content p-3 overflow-y-auto" id="settingsTabContent">
 
-        <h5 class="text-center border-bottom pb-2 mt-3">Automation</h5>
+          <div class="tab-pane fade show active" id="general-pane" role="tabpanel" aria-labelledby="general-tab" tabindex="0">
+            
+            <h6 class="text-body-secondary text-uppercase small mb-3">Torrent Client</h6>
+            <div class="card card-body border-secondary-subtle mb-4">
+              <div class="mb-3">
+                <label for="TORRENT_CLIENT_TYPE" class="form-label">Client Type</label>
+                <select class="form-select" id="TORRENT_CLIENT_TYPE" name="TORRENT_CLIENT_TYPE">
+                  <option value="qbittorrent" {% if (TORRENT_CLIENT_TYPE or 'qbittorrent') == 'qbittorrent' %}selected{% endif %}>qBittorrent</option>
+                </select>
+              </div>
+              <div class="mb-3">
+                <label for="TORRENT_CLIENT_URL" class="form-label">Client URL</label>
+                <input type="text" class="form-control" id="TORRENT_CLIENT_URL" name="TORRENT_CLIENT_URL" value="{{ TORRENT_CLIENT_URL }}" required />
+              </div>
+              <div class="row">
+                <div class="col-6 mb-3">
+                  <label for="TORRENT_CLIENT_USERNAME" class="form-label">Username</label>
+                  <input type="text" class="form-control" id="TORRENT_CLIENT_USERNAME" name="TORRENT_CLIENT_USERNAME" value="{{ TORRENT_CLIENT_USERNAME }}" required />
+                </div>
+                <div class="col-6 mb-3">
+                  <label for="TORRENT_CLIENT_PASSWORD" class="form-label">Password</label>
+                  <input type="password" class="form-control" id="TORRENT_CLIENT_PASSWORD" name="TORRENT_CLIENT_PASSWORD" value="{{ TORRENT_CLIENT_PASSWORD }}" required autocomplete="off" />
+                </div>
+              </div>
+              <div class="mb-0">
+                <label for="TORRENT_CLIENT_CATEGORY" class="form-label">Default category</label>
+                <select class="form-select" id="TORRENT_CLIENT_CATEGORY" name="TORRENT_CLIENT_CATEGORY" data-current-value="{{ TORRENT_CLIENT_CATEGORY }}">
+                   <option value="{{ TORRENT_CLIENT_CATEGORY }}" selected>{{ TORRENT_CLIENT_CATEGORY }}</option>
+                </select>
+              </div>
+            </div>
 
-        <div class="form-check form-switch mb-2">
-          <input class="form-check-input" type="checkbox" id="ENABLE_DYNAMIC_IP_UPDATE" name="ENABLE_DYNAMIC_IP_UPDATE" 
-          {% if ENABLE_DYNAMIC_IP_UPDATE %}checked{% endif %}>
-          <label class="form-check-label" for="ENABLE_DYNAMIC_IP_UPDATE">Update MAM Dynamic Seedbox IP</label>
-        </div>
+            <h6 class="text-body-secondary text-uppercase small mb-3">MyAnonaMouse Auth</h6>
+            <div class="mb-3">
+              <label for="MAM_ID" class="form-label">MAM Session ID</label>
+              <input type="text" class="form-control font-monospace" id="MAM_ID" name="MAM_ID" value="{{ MAM_ID }}" required />
+              <div class="form-text">The <code class="text-primary">mam_id</code> cookie value.</div>
+            </div>
+          </div>
 
-        <div class="mb-3">
-          <label for="DYNAMIC_IP_UPDATE_INTERVAL_HOURS" class="form-label small">
-            IP Update Interval (hours)
-          </label>
-          <input
-            type="number"
-            class="form-control form-control-sm"
-            id="DYNAMIC_IP_UPDATE_INTERVAL_HOURS"
-            name="DYNAMIC_IP_UPDATE_INTERVAL_HOURS"
-            min="1"
-            value="{{ DYNAMIC_IP_UPDATE_INTERVAL_HOURS }}"
-          >
-          <div class="form-text small">
-            How often to check for public IP changes when dynamic update is enabled.
+          <div class="tab-pane fade" id="organize-pane" role="tabpanel" aria-labelledby="organize-tab" tabindex="0">
+            
+            <h6 class="text-body-secondary text-uppercase small mb-3">Path Configuration</h6>
+            <div class="mb-3">
+              <label for="TORRENT_DOWNLOAD_PATH" class="form-label small">Download Source Path</label>
+              <input type="text" class="form-control font-monospace" id="TORRENT_DOWNLOAD_PATH" name="TORRENT_DOWNLOAD_PATH" value="{{ TORRENT_DOWNLOAD_PATH }}">
+            </div>
+
+            <div class="mb-4">
+              <label for="ORGANIZED_PATH" class="form-label small">Organized Destination Path</label>
+              <input type="text" class="form-control font-monospace" id="ORGANIZED_PATH" name="ORGANIZED_PATH" value="{{ ORGANIZED_PATH }}">
+            </div>
+
+            <hr class="border-secondary-subtle my-3">
+            
+            <h6 class="text-body-secondary text-uppercase small mb-3">Triggers</h6>
+            <div class="form-check form-switch mb-3">
+              <input class="form-check-input" type="checkbox" id="AUTO_ORGANIZE_ON_ADD" name="AUTO_ORGANIZE_ON_ADD" {% if AUTO_ORGANIZE_ON_ADD %}checked{% endif %}>
+              <label class="form-check-label" for="AUTO_ORGANIZE_ON_ADD">Organize immediately on download</label>
+            </div>
+            <div class="form-check form-switch mb-2">
+              <input class="form-check-input" type="checkbox" id="AUTO_ORGANIZE_ON_SCHEDULE" name="AUTO_ORGANIZE_ON_SCHEDULE" {% if AUTO_ORGANIZE_ON_SCHEDULE %}checked{% endif %}>
+              <label class="form-check-label" for="AUTO_ORGANIZE_ON_SCHEDULE">Enable Scheduled Scan</label>
+            </div>
+            <div class="mb-0">
+              <label for="AUTO_ORGANIZE_INTERVAL_HOURS" class="form-label small">Scan Interval (hours)</label>
+              <input type="number" class="form-control form-control-sm" id="AUTO_ORGANIZE_INTERVAL_HOURS" name="AUTO_ORGANIZE_INTERVAL_HOURS" min="1" value="{{ AUTO_ORGANIZE_INTERVAL_HOURS }}">
+            </div>
+
+          </div>
+
+          <div class="tab-pane fade" id="helpers-pane" role="tabpanel" aria-labelledby="helpers-tab" tabindex="0">
+
+            <div class="card mb-3 border-secondary-subtle">
+              <div class="card-header bg-transparent d-flex justify-content-between align-items-center py-2">
+                <span class="small fw-bold"><i class="bi bi-hdd-network me-1"></i> Dynamic IP</span>
+                <div class="form-check form-switch m-0">
+                  <input class="form-check-input" type="checkbox" id="ENABLE_DYNAMIC_IP_UPDATE" name="ENABLE_DYNAMIC_IP_UPDATE" {% if ENABLE_DYNAMIC_IP_UPDATE %}checked{% endif %}>
+                </div>
+              </div>
+              <div class="card-body pt-2 pb-2">
+                 <label for="DYNAMIC_IP_UPDATE_INTERVAL_HOURS" class="form-label small mb-1">Update Interval (hours)</label>
+                 <input type="number" class="form-control form-control-sm" id="DYNAMIC_IP_UPDATE_INTERVAL_HOURS" name="DYNAMIC_IP_UPDATE_INTERVAL_HOURS" min="1" value="{{ DYNAMIC_IP_UPDATE_INTERVAL_HOURS }}">
+              </div>
+            </div>
+
+            <div class="card mb-3 border-secondary-subtle">
+              <div class="card-header bg-transparent d-flex justify-content-between align-items-center py-2">
+                <span class="small fw-bold"><i class="bi bi-star-fill me-1"></i> Auto-Buy VIP</span>
+                <div class="form-check form-switch m-0">
+                  <input class="form-check-input" type="checkbox" id="AUTO_BUY_VIP" name="AUTO_BUY_VIP" {% if AUTO_BUY_VIP %}checked{% endif %}>
+                </div>
+              </div>
+              <div class="card-body pt-2 pb-2">
+                 <label for="AUTO_BUY_VIP_INTERVAL_HOURS" class="form-label small mb-1">Top-up Interval (hours)</label>
+                 <input type="number" class="form-control form-control-sm" id="AUTO_BUY_VIP_INTERVAL_HOURS" name="AUTO_BUY_VIP_INTERVAL_HOURS" min="1" value="{{ AUTO_BUY_VIP_INTERVAL_HOURS }}">
+              </div>
+            </div>
+
+            <hr class="border-secondary-subtle my-4">
+            
+            <h6 class="text-body-secondary text-uppercase small mb-3">Upload Credit Automation</h6>
+            
+
+            <div class="row g-3 mb-3">
+              <div class="col-12">
+                 <div class="card h-100 border-secondary-subtle">
+                    <div class="card-header bg-transparent py-2 d-flex justify-content-between align-items-center">
+                       <span class="small fw-bold">Ratio Watch</span>
+                       <div class="form-check form-switch m-0">
+                          <input class="form-check-input" type="checkbox" id="AUTO_BUY_UPLOAD_ON_RATIO" name="AUTO_BUY_UPLOAD_ON_RATIO" {% if AUTO_BUY_UPLOAD_ON_RATIO %}checked{% endif %}>
+                       </div>
+                    </div>
+                    <div class="card-body p-2">
+                       <div class="row g-2">
+                          <div class="col-6">
+                             <label class="small text-body-secondary d-block">Threshold</label>
+                             <input type="number" step="0.1" class="form-control form-control-sm" id="AUTO_BUY_UPLOAD_RATIO_THRESHOLD" name="AUTO_BUY_UPLOAD_RATIO_THRESHOLD" min="1.0" value="{{ AUTO_BUY_UPLOAD_RATIO_THRESHOLD }}">
+                          </div>
+                          <div class="col-6">
+                             <label class="small text-body-secondary d-block">Buy (GB)</label>
+                             <input type="number" step="0.5" class="form-control form-control-sm upload-amount-input" id="AUTO_BUY_UPLOAD_RATIO_AMOUNT" name="AUTO_BUY_UPLOAD_RATIO_AMOUNT" min="1" value="{{ AUTO_BUY_UPLOAD_RATIO_AMOUNT }}">
+                          </div>
+                       </div>
+                    </div>
+                 </div>
+              </div>
+
+              <div class="col-12">
+                 <div class="card h-100 border-secondary-subtle">
+                    <div class="card-header bg-transparent py-2 d-flex justify-content-between align-items-center">
+                       <span class="small fw-bold">Buffer Watch</span>
+                       <div class="form-check form-switch m-0">
+                          <input class="form-check-input" type="checkbox" id="AUTO_BUY_UPLOAD_ON_BUFFER" name="AUTO_BUY_UPLOAD_ON_BUFFER" {% if AUTO_BUY_UPLOAD_ON_BUFFER %}checked{% endif %}>
+                       </div>
+                    </div>
+                    <div class="card-body p-2">
+                       <div class="row g-2">
+                          <div class="col-6">
+                             <label class="small text-body-secondary d-block">Threshold (GB)</label>
+                             <input type="number" step="0.5" class="form-control form-control-sm" id="AUTO_BUY_UPLOAD_BUFFER_THRESHOLD" name="AUTO_BUY_UPLOAD_BUFFER_THRESHOLD" min="0" value="{{ AUTO_BUY_UPLOAD_BUFFER_THRESHOLD }}">
+                          </div>
+                          <div class="col-6">
+                             <label class="small text-body-secondary d-block">Buy (GB)</label>
+                             <input type="number" step="0.5" class="form-control form-control-sm upload-amount-input" id="AUTO_BUY_UPLOAD_BUFFER_AMOUNT" name="AUTO_BUY_UPLOAD_BUFFER_AMOUNT" min="1" value="{{ AUTO_BUY_UPLOAD_BUFFER_AMOUNT }}" >
+                          </div>
+                       </div>
+                    </div>
+                 </div>
+              </div>
+            </div>
+
+            <div class="mb-3">
+               <label for="AUTO_BUY_UPLOAD_CHECK_INTERVAL_HOURS" class="form-label small">Check Interval (hours)</label>
+               <input type="number" class="form-control form-control-sm" id="AUTO_BUY_UPLOAD_CHECK_INTERVAL_HOURS" name="AUTO_BUY_UPLOAD_CHECK_INTERVAL_HOURS" min="1" value="{{ AUTO_BUY_UPLOAD_CHECK_INTERVAL_HOURS }}">
+            </div>
+
+             <datalist id="upload-amounts-list">
+               {% for amount in UPLOAD_OPTIONS.keys() | sort %}
+               <option value="{{ amount }}"></option>
+               {% endfor %}
+             </datalist>
+
           </div>
         </div>
 
-        <div class="form-check form-switch mb-2">
-          <input class="form-check-input" type="checkbox" id="AUTO_BUY_VIP" name="AUTO_BUY_VIP" 
-          {% if AUTO_BUY_VIP %}checked{% endif %}>
-          <label class="form-check-label" for="AUTO_BUY_VIP">Auto-Buy VIP Credit 
-            <i class="bi bi-info-circle" 
-              data-bs-toggle="tooltip" 
-              data-bs-placement="right" 
-              title="Automatically purchase maximum VIP weeks using bonus points at regular intervals. Costs 1,250 BP per week."></i></label>
+        <div class="p-3 border-top bg-body-tertiary mt-auto">
+          <button type="button" class="btn btn-primary w-100" id="save-settings-button">
+            <i class="bi bi-save me-2"></i>Save Settings
+          </button>
+          <div id="response-message-settings" class="mt-2 text-center small"></div>
         </div>
-
-        <div class="mb-3">
-          <label for="AUTO_BUY_VIP_INTERVAL_HOURS" class="form-label small">
-            VIP Top-Up Interval (hours) 
-            <i class="bi bi-info-circle"
-              data-bs-toggle="tooltip" 
-              data-bs-placement="right" 
-              title="How often to check and top-up VIP credit. Default: 24 hours (once daily)."></i>
-          </label>
-          <input
-            type="number"
-            class="form-control form-control-sm"
-            id="AUTO_BUY_VIP_INTERVAL_HOURS"
-            name="AUTO_BUY_VIP_INTERVAL_HOURS"
-            min="1"
-            value="{{ AUTO_BUY_VIP_INTERVAL_HOURS }}"
-          >
-          <div class="form-text small">
-            How often to automatically top up VIP credit using bonus points.
-          </div>
-        </div>
-
-        <h6 class="text-center border-bottom pb-2 mt-3">Upload Credit Auto-Buy</h6>
-
-        <div class="form-check form-switch mb-2">
-          <input class="form-check-input" type="checkbox" id="AUTO_BUY_UPLOAD_ON_RATIO" name="AUTO_BUY_UPLOAD_ON_RATIO" 
-          {% if AUTO_BUY_UPLOAD_ON_RATIO %}checked{% endif %}>
-          <label class="form-check-label" for="AUTO_BUY_UPLOAD_ON_RATIO">Auto-Buy on Low Ratio 
-            <i class="bi bi-info-circle"
-              data-bs-toggle="tooltip" 
-              data-bs-placement="right" 
-              title="Automatically purchase upload credit when your ratio drops below the threshold. Costs 500 BP per GB."></i></label>
-        </div>
-
-        <div class="row mb-3">
-          <div class="col-md-6">
-            <label for="AUTO_BUY_UPLOAD_RATIO_THRESHOLD" class="form-label small">
-              Ratio Threshold 
-              <i class="bi bi-info-circle"
-                data-bs-toggle="tooltip" 
-                data-bs-placement="top" 
-                title="Purchase upload credit when your ratio falls below this value. MAM requires ratio ≥ 1.0."></i>
-            </label>
-            <input
-              type="number"
-              step="0.1"
-              class="form-control form-control-sm"
-              id="AUTO_BUY_UPLOAD_RATIO_THRESHOLD"
-              name="AUTO_BUY_UPLOAD_RATIO_THRESHOLD"
-              min="1.0"
-              value="{{ AUTO_BUY_UPLOAD_RATIO_THRESHOLD }}"
-            >
-          </div>
-          <div class="col-md-6">
-            <label for="AUTO_BUY_UPLOAD_RATIO_AMOUNT" class="form-label small">
-              Amount to Buy (GB) 
-              <i class="bi bi-info-circle"
-                data-bs-toggle="tooltip" 
-                data-bs-placement="top" 
-                title="How much upload credit to purchase when ratio drops below threshold. Will be rounded to valid amount (≤3 API requests)."></i>
-            </label>
-            <input
-              type="number"
-              step="0.5"
-              class="form-control form-control-sm upload-amount-input"
-              id="AUTO_BUY_UPLOAD_RATIO_AMOUNT"
-              name="AUTO_BUY_UPLOAD_RATIO_AMOUNT"
-              min="1"
-              value="{{ AUTO_BUY_UPLOAD_RATIO_AMOUNT }}"
-            >
-            <datalist id="upload-amounts-list">
-              {% for amount in UPLOAD_OPTIONS.keys() | sort %}
-              <option value="{{ amount }}"></option>
-              {% endfor %}
-            </datalist>
-          </div>
-        </div>
-
-        <div class="form-check form-switch mb-2">
-          <input class="form-check-input" type="checkbox" id="AUTO_BUY_UPLOAD_ON_BUFFER" name="AUTO_BUY_UPLOAD_ON_BUFFER" 
-          {% if AUTO_BUY_UPLOAD_ON_BUFFER %}checked{% endif %}>
-          <label class="form-check-label" for="AUTO_BUY_UPLOAD_ON_BUFFER">Auto-Buy on Low Buffer 
-            <i class="bi bi-info-circle"
-              data-bs-toggle="tooltip" 
-              data-bs-placement="right" 
-              title="Automatically purchase upload credit when your buffer (uploaded - downloaded) drops below threshold. Costs 500 BP per GB."></i></label>
-        </div>
-
-        <div class="row mb-3">
-          <div class="col-md-6">
-            <label for="AUTO_BUY_UPLOAD_BUFFER_THRESHOLD" class="form-label small">
-              Buffer Threshold (GB) 
-              <i class="bi bi-info-circle"
-                data-bs-toggle="tooltip" 
-                data-bs-placement="top" 
-                title="Purchase upload credit when your buffer falls below this many GB. Buffer = Total Uploaded - Total Downloaded."></i>
-            </label>
-            <input
-              type="number"
-              step="0.5"
-              class="form-control form-control-sm"
-              id="AUTO_BUY_UPLOAD_BUFFER_THRESHOLD"
-              name="AUTO_BUY_UPLOAD_BUFFER_THRESHOLD"
-              min="0"
-              value="{{ AUTO_BUY_UPLOAD_BUFFER_THRESHOLD }}"
-            >
-          </div>
-          <div class="col-md-6">
-            <label for="AUTO_BUY_UPLOAD_BUFFER_AMOUNT" class="form-label small">
-              Amount to Buy (GB) 
-              <i class="bi bi-info-circle"
-                data-bs-toggle="tooltip" 
-                data-bs-placement="top" 
-                title="How much upload credit to purchase when buffer drops below threshold. Will be rounded to valid amount (≤3 API requests)."></i>
-            </label>
-            <input
-              type="number"
-              step="0.5"
-              class="form-control form-control-sm upload-amount-input"
-              id="AUTO_BUY_UPLOAD_BUFFER_AMOUNT"
-              name="AUTO_BUY_UPLOAD_BUFFER_AMOUNT"
-              min="1"
-              value="{{ AUTO_BUY_UPLOAD_BUFFER_AMOUNT }}"
-              list="upload-amounts-list"
-            >
-          </div>
-        </div>
-
-        <div class="mb-3">
-          <label for="AUTO_BUY_UPLOAD_CHECK_INTERVAL_HOURS" class="form-label small">
-            Check Interval (hours) 
-            <i class="bi bi-info-circle"
-              data-bs-toggle="tooltip" 
-              data-bs-placement="right" 
-              title="How often to check your ratio and buffer when auto-buy is enabled. Default: 6 hours."></i>
-          </label>
-          <input
-            type="number"
-            class="form-control form-control-sm"
-            id="AUTO_BUY_UPLOAD_CHECK_INTERVAL_HOURS"
-            name="AUTO_BUY_UPLOAD_CHECK_INTERVAL_HOURS"
-            min="1"
-            value="{{ AUTO_BUY_UPLOAD_CHECK_INTERVAL_HOURS }}"
-          >
-          <div class="form-text small">
-            How often to check ratio and buffer when auto-buy is enabled.
-          </div>
-        </div>
-
-        <div class="form-check form-switch mb-3">
-          <input class="form-check-input" type="checkbox" id="BLOCK_DOWNLOAD_ON_LOW_BUFFER" name="BLOCK_DOWNLOAD_ON_LOW_BUFFER" 
-          {% if BLOCK_DOWNLOAD_ON_LOW_BUFFER %}checked{% endif %}>
-          <label class="form-check-label" for="BLOCK_DOWNLOAD_ON_LOW_BUFFER">Block Downloads When Buffer Too Low 
-            <i class="bi bi-info-circle"
-              data-bs-toggle="tooltip" 
-              data-bs-placement="right" 
-              title="Prevent downloads when you don't have enough buffer. Shows modal with option to purchase upload credit before downloading."></i></label>
-        </div>
-
-        <div class="form-check form-switch">
-          <input class="form-check-input" type="checkbox" id="AUTO_ORGANIZE_ON_ADD" name="AUTO_ORGANIZE_ON_ADD" 
-          {% if AUTO_ORGANIZE_ON_ADD %}checked{% endif %}>
-          <label class="form-check-label" for="AUTO_ORGANIZE_ON_ADD">Auto-Organize on Download</label>
-        </div>
-
-        <div class="form-check form-switch mb-2">
-          <input class="form-check-input" type="checkbox" id="AUTO_ORGANIZE_ON_SCHEDULE" name="AUTO_ORGANIZE_ON_SCHEDULE" 
-          {% if AUTO_ORGANIZE_ON_SCHEDULE %}checked{% endif %}>
-          <label class="form-check-label" for="AUTO_ORGANIZE_ON_SCHEDULE">Scheduled Scan</label>
-        </div>
-
-        <div class="mb-3">
-          <label for="AUTO_ORGANIZE_INTERVAL_HOURS" class="form-label small">
-            Scan Interval (hours)
-          </label>
-          <input
-            type="number"
-            class="form-control form-control-sm"
-            id="AUTO_ORGANIZE_INTERVAL_HOURS"
-            name="AUTO_ORGANIZE_INTERVAL_HOURS"
-            min="1"
-            value="{{ AUTO_ORGANIZE_INTERVAL_HOURS }}"
-          >
-          <div class="form-text small">
-            How often to scan for unorganized torrents when scheduled scan is enabled.
-          </div>
-        </div>
-
-        <div class="mb-3">
-          <label for="ORGANIZED_PATH" class="form-label small">Auto-Organize Destination</label>
-          <input type="text" class="form-control form-control-sm" id="ORGANIZED_PATH" name="ORGANIZED_PATH" value="{{ ORGANIZED_PATH }}">
-        </div>
-
-        <div class="mb-3">
-          <label for="TORRENT_DOWNLOAD_PATH" class="form-label small">Torrent Download Path</label>
-          <input type="text" class="form-control form-control-sm" id="TORRENT_DOWNLOAD_PATH" name="TORRENT_DOWNLOAD_PATH" value="{{ TORRENT_DOWNLOAD_PATH }}">
-        </div>
-
-        <button type="button" class="btn btn-primary" id="save-settings-button">Save Settings</button>
-        <p class="form-text text-muted small mt-2">Note: GUI settings override Docker Environment variables.</p>
       </form>
-      <div id="response-message-settings" class="mt-3"></div>
     </div>
   </div>
 
