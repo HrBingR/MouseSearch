@@ -564,7 +564,6 @@
         <div class="tab-content p-3 overflow-y-auto" id="settingsTabContent">
 
           <div class="tab-pane fade show active" id="general-pane" role="tabpanel" aria-labelledby="general-tab" tabindex="0">
-            
             <h6 class="text-body-secondary text-uppercase small mb-3">Torrent Client</h6>
             <div class="card card-body border-secondary-subtle mb-4">
               <div class="mb-3">
@@ -599,7 +598,7 @@
             <div class="mb-3">
               <label for="MAM_ID" class="form-label">MAM Session ID</label>
               <input type="text" class="form-control font-monospace" id="MAM_ID" name="MAM_ID" value="{{ MAM_ID }}" required />
-              <div class="form-text">The <code class="text-primary">mam_id</code> cookie value.</div>
+              <div class="form-text">The <code class="text-primary">mam_id</code> value from MyAnonaMouse <a href="https://www.myanonamouse.net/preferences/index.php?view=security">Settings.</div>
             </div>
           </div>
 
@@ -630,24 +629,26 @@
               <label for="ORGANIZED_PATH" class="form-label small">Organized Destination Path</label>
               <input type="text" class="form-control font-monospace" id="ORGANIZED_PATH" name="ORGANIZED_PATH" value="{{ ORGANIZED_PATH }}">
             </div>
-
-            
-            
-            
-
           </div>
 
           <div class="tab-pane fade" id="helpers-pane" role="tabpanel" aria-labelledby="helpers-tab" tabindex="0">
 
             <div class="card mb-3 border-secondary-subtle">
               <div class="card-header bg-transparent d-flex justify-content-between align-items-center py-2">
-                <span class="small fw-bold"><i class="bi bi-hdd-network me-1"></i> Dynamic IP</span>
+                <span class="small fw-bold">
+                  <i class="bi bi-hdd-network me-1"></i> Dynamic IP
+                </span>
                 <div class="form-check form-switch m-0">
                   <input class="form-check-input" type="checkbox" id="ENABLE_DYNAMIC_IP_UPDATE" name="ENABLE_DYNAMIC_IP_UPDATE" {% if ENABLE_DYNAMIC_IP_UPDATE %}checked{% endif %}>
                 </div>
               </div>
               <div class="card-body pt-2 pb-2">
-                 <label for="DYNAMIC_IP_UPDATE_INTERVAL_HOURS" class="form-label small mb-1">Update Interval (hours)</label>
+                 <label for="DYNAMIC_IP_UPDATE_INTERVAL_HOURS" class="form-label small mb-1">
+                   Update Interval (hours)
+                   <i class="bi bi-info-circle-fill text-secondary ms-1" 
+                      data-bs-toggle="tooltip" data-bs-placement="top" 
+                      title="How often to sync your IP address with MAM (to keep MouseSearch and your torrents running!)."></i>
+                 </label>
                  <input type="number" class="form-control form-control-sm" id="DYNAMIC_IP_UPDATE_INTERVAL_HOURS" name="DYNAMIC_IP_UPDATE_INTERVAL_HOURS" min="1" value="{{ DYNAMIC_IP_UPDATE_INTERVAL_HOURS }}">
               </div>
             </div>
@@ -660,7 +661,12 @@
                 </div>
               </div>
               <div class="card-body pt-2 pb-2">
-                 <label for="AUTO_BUY_VIP_INTERVAL_HOURS" class="form-label small mb-1">Top-up Interval (hours)</label>
+                 <label for="AUTO_BUY_VIP_INTERVAL_HOURS" class="form-label small mb-1">
+                   Top-up Interval (hours)
+                   <i class="bi bi-info-circle-fill text-secondary ms-1" 
+                      data-bs-toggle="tooltip" 
+                      title="Keeps your VIP time topped up to the maximum allowed (1250 BP/week)."></i>
+                 </label>
                  <input type="number" class="form-control form-control-sm" id="AUTO_BUY_VIP_INTERVAL_HOURS" name="AUTO_BUY_VIP_INTERVAL_HOURS" min="1" value="{{ AUTO_BUY_VIP_INTERVAL_HOURS }}">
               </div>
             </div>
@@ -669,7 +675,6 @@
             
             <h6 class="text-body-secondary text-uppercase small mb-3">Upload Credit Automation</h6>
             
-
             <div class="row g-3 mb-3">
               <div class="col-12">
                  <div class="card h-100 border-secondary-subtle">
@@ -682,11 +687,21 @@
                     <div class="card-body p-2">
                        <div class="row g-2">
                           <div class="col-6">
-                             <label class="small text-body-secondary d-block">Threshold</label>
+                             <label class="small text-body-secondary d-block">
+                               Threshold
+                               <i class="bi bi-info-circle-fill text-secondary ms-1" 
+                                  data-bs-toggle="tooltip" 
+                                  title="Triggers purchase if your MAM ratio falls below this value. MAM requires > 1.0."></i>
+                             </label>
                              <input type="number" step="0.1" class="form-control form-control-sm" id="AUTO_BUY_UPLOAD_RATIO_THRESHOLD" name="AUTO_BUY_UPLOAD_RATIO_THRESHOLD" min="1.0" value="{{ AUTO_BUY_UPLOAD_RATIO_THRESHOLD }}">
                           </div>
                           <div class="col-6">
-                             <label class="small text-body-secondary d-block">Buy (GB)</label>
+                             <label class="small text-body-secondary d-block">
+                               Buy (GB)
+                               <i class="bi bi-info-circle-fill text-secondary ms-1" 
+                                  data-bs-toggle="tooltip" 
+                                  title="Amount of credit to buy when triggered. 500 BP per GB."></i>
+                             </label>
                              <input type="number" step="0.5" class="form-control form-control-sm upload-amount-input" id="AUTO_BUY_UPLOAD_RATIO_AMOUNT" name="AUTO_BUY_UPLOAD_RATIO_AMOUNT" min="1" value="{{ AUTO_BUY_UPLOAD_RATIO_AMOUNT }}">
                           </div>
                        </div>
@@ -705,21 +720,36 @@
                     <div class="card-body p-2">
                        <div class="row g-2">
                           <div class="col-6">
-                             <label class="small text-body-secondary d-block">Threshold (GB)</label>
+                             <label class="small text-body-secondary d-block">
+                               Threshold (GB)
+                               <i class="bi bi-info-circle-fill text-secondary ms-1" 
+                                  data-bs-toggle="tooltip" 
+                                  title="Triggers purchase if your buffer (Uploaded - Downloaded) drops below this GB amount."></i>
+                             </label>
                              <input type="number" step="0.5" class="form-control form-control-sm" id="AUTO_BUY_UPLOAD_BUFFER_THRESHOLD" name="AUTO_BUY_UPLOAD_BUFFER_THRESHOLD" min="0" value="{{ AUTO_BUY_UPLOAD_BUFFER_THRESHOLD }}">
                           </div>
                           <div class="col-6">
-                             <label class="small text-body-secondary d-block">Buy (GB)</label>
-                             <input type="number" step="0.5" class="form-control form-control-sm upload-amount-input" id="AUTO_BUY_UPLOAD_BUFFER_AMOUNT" name="AUTO_BUY_UPLOAD_BUFFER_AMOUNT" min="1" value="{{ AUTO_BUY_UPLOAD_BUFFER_AMOUNT }}" >
+                             <label class="small text-body-secondary d-block">
+                              Buy (GB)
+                                  <i class="bi bi-info-circle-fill text-secondary ms-1" 
+                                  data-bs-toggle="tooltip" 
+                                  title="Amount of credit to buy when triggered. 500 BP per GB."></i>
+                            </label>
+                             <input type="number" step="0.5" class="form-control form-control-sm upload-amount-input" id="AUTO_BUY_UPLOAD_BUFFER_AMOUNT" name="AUTO_BUY_UPLOAD_BUFFER_AMOUNT" min="1" value="{{ AUTO_BUY_UPLOAD_BUFFER_AMOUNT }}" list="upload-amounts-list">
                           </div>
                        </div>
                     </div>
                  </div>
               </div>
             </div>
-
+            
             <div class="mb-3">
-               <label for="AUTO_BUY_UPLOAD_CHECK_INTERVAL_HOURS" class="form-label small">Check Interval (hours)</label>
+               <label for="AUTO_BUY_UPLOAD_CHECK_INTERVAL_HOURS" class="form-label small">
+                Check Interval (hours)
+                <i class="bi bi-info-circle-fill text-secondary ms-1" 
+                  data-bs-toggle="tooltip" 
+                  title="How often to check against these thresholds."></i>
+              </label>
                <input type="number" class="form-control form-control-sm" id="AUTO_BUY_UPLOAD_CHECK_INTERVAL_HOURS" name="AUTO_BUY_UPLOAD_CHECK_INTERVAL_HOURS" min="1" value="{{ AUTO_BUY_UPLOAD_CHECK_INTERVAL_HOURS }}">
             </div>
 
