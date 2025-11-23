@@ -604,20 +604,6 @@
           </div>
 
           <div class="tab-pane fade" id="organize-pane" role="tabpanel" aria-labelledby="organize-tab" tabindex="0">
-            
-            <h6 class="text-body-secondary text-uppercase small mb-3">Path Configuration</h6>
-            <div class="mb-3">
-              <label for="TORRENT_DOWNLOAD_PATH" class="form-label small">Download Source Path</label>
-              <input type="text" class="form-control font-monospace" id="TORRENT_DOWNLOAD_PATH" name="TORRENT_DOWNLOAD_PATH" value="{{ TORRENT_DOWNLOAD_PATH }}">
-            </div>
-
-            <div class="mb-4">
-              <label for="ORGANIZED_PATH" class="form-label small">Organized Destination Path</label>
-              <input type="text" class="form-control font-monospace" id="ORGANIZED_PATH" name="ORGANIZED_PATH" value="{{ ORGANIZED_PATH }}">
-            </div>
-
-            <hr class="border-secondary-subtle my-3">
-            
             <h6 class="text-body-secondary text-uppercase small mb-3">Triggers</h6>
             <div class="form-check form-switch mb-3">
               <input class="form-check-input" type="checkbox" id="AUTO_ORGANIZE_ON_ADD" name="AUTO_ORGANIZE_ON_ADD" {% if AUTO_ORGANIZE_ON_ADD %}checked{% endif %}>
@@ -631,6 +617,23 @@
               <label for="AUTO_ORGANIZE_INTERVAL_HOURS" class="form-label small">Scan Interval (hours)</label>
               <input type="number" class="form-control form-control-sm" id="AUTO_ORGANIZE_INTERVAL_HOURS" name="AUTO_ORGANIZE_INTERVAL_HOURS" min="1" value="{{ AUTO_ORGANIZE_INTERVAL_HOURS }}">
             </div>
+
+            <hr class="border-secondary-subtle my-3">
+            
+            <h6 class="text-body-secondary text-uppercase small mb-3">Path Configuration</h6>
+            <div class="mb-3">
+              <label for="TORRENT_DOWNLOAD_PATH" class="form-label small">Download Source Path</label>
+              <input type="text" class="form-control font-monospace" id="TORRENT_DOWNLOAD_PATH" name="TORRENT_DOWNLOAD_PATH" value="{{ TORRENT_DOWNLOAD_PATH }}">
+            </div>
+
+            <div class="mb-4">
+              <label for="ORGANIZED_PATH" class="form-label small">Organized Destination Path</label>
+              <input type="text" class="form-control font-monospace" id="ORGANIZED_PATH" name="ORGANIZED_PATH" value="{{ ORGANIZED_PATH }}">
+            </div>
+
+            
+            
+            
 
           </div>
 
