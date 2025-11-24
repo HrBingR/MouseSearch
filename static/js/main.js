@@ -575,7 +575,7 @@ document.addEventListener("DOMContentLoaded", function () {
                         if (data.success) {
                             const added = data.amount || (duration === 'max' ? 'Max' : duration);
                             if (parseFloat(data.amount) === 0 && duration === 'max') {
-                                showToast(`Already at VIP limit.`, 'success');
+                                showToast(`Already at maximum VIP limit.`, 'success');
                             } else {
                                 showToast(`Success! Added ${added} weeks. Remaining: ${data.seedbonus} BP`, 'success');
                             }

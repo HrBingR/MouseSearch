@@ -110,7 +110,7 @@
     }
 
     .bd-mode-toggle {
-      z-index: 1100;
+      z-index: 1000;
     }
 
     .bd-mode-toggle .dropdown-menu .active .bi {
@@ -916,9 +916,10 @@
 
 
   <div id="toast-container" aria-live="polite" aria-atomic="true" class="position-fixed bottom-0 end-0 p-3"
-    style="z-index: 1101;">
+    style="z-index: 1101; pointer-events: none;">
+    
     <div id="server-response-toast" class="toast align-items-center text-bg-primary border-0" role="alert"
-      aria-live="assertive" aria-atomic="true">
+      aria-live="assertive" aria-atomic="true" style="pointer-events: auto;">
       <div class="d-flex">
         <div class="toast-body" id="toast-message">
         </div>
