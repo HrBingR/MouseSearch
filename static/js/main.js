@@ -750,7 +750,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
                             // Show series name next to button
                             if (seriesPreviewEl) {
-                                seriesPreviewEl.textContent = cleanSeries;
+                                seriesPreviewEl.textContent = `"${cleanSeries}"`;
                                 seriesPreviewEl.style.display = 'inline';
                             }
                         } else {
