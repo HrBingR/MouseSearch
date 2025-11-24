@@ -648,6 +648,22 @@ document.addEventListener("DOMContentLoaded", function () {
         return name.replace(/[<>:"/\\|?*]/g, '').trim();
     }
 
+    function getSeriesName(seriesJsonStr) {
+        try {
+            if (!seriesJsonStr) return null;
+            // The format is usually "{\"ID\":[\"Name\",\"BookNum\",count]}"
+            const data = JSON.parse(seriesJsonStr);
+            const values = Object.values(data);
+            // We want the first item of the first array value
+            if (values.length > 0 && Array.isArray(values[0])) {
+                return values[0][0];
+            }
+        } catch (e) {
+            console.error("Error parsing series info:", e);
+        }
+        return null;
+    }
+
     if (searchForm) {
         searchForm.addEventListener("submit", function (e) {
             e.preventDefault();
@@ -683,6 +699,12 @@ document.addEventListener("DOMContentLoaded", function () {
             if (button) {
                 event.preventDefault();
                 const resultItem = button.closest('.result-item');
+
+                // --- EXTRACT SERIES INFO HERE ---
+                const rawSeries = button.dataset.seriesInfo;
+                const seriesName = getSeriesName(rawSeries);
+                // -------------------------------
+
                 const downloadData = {
                     torrent_url: button.dataset.torrentUrl,
                     category: resultItem.querySelector('.category-dropdown')?.value || '',
@@ -690,14 +712,58 @@ document.addEventListener("DOMContentLoaded", function () {
                     author: button.dataset.author || "Unknown",
                     title: button.dataset.title || "Unknown",
                     size: button.dataset.size || '0 GiB',
-                    main_cat: button.dataset.mainCat || ''
+                    main_cat: button.dataset.mainCat || '',
+                    series_info: rawSeries // Pass this along just in case
                 };
+
                 const autoOrganizeEnabled = document.getElementById('AUTO_ORGANIZE_ON_ADD')?.checked;
+
                 if (autoOrganizeEnabled && confirmModal) {
                     const cleanAuthor = sanitizeFilename(downloadData.author);
                     const cleanTitle = sanitizeFilename(downloadData.title);
+
+                    // 1. Reset Input
                     confirmInput.value = `${cleanAuthor}/${cleanTitle}`;
                     previewSpan.textContent = confirmInput.value;
+
+                    // 2. Reset Hint
+                    const hintEl = document.getElementById('path-format-hint');
+                    if (hintEl) hintEl.textContent = "Format: Author / Title";
+
+                    // 3. Button & Series Preview Logic
+                    const addSeriesBtn = document.getElementById('add-series-btn');
+                    const seriesPreviewEl = document.getElementById('series-name-preview'); // <--- Select the new span
+
+                    if (addSeriesBtn) {
+                        // Reset button state
+                        addSeriesBtn.dataset.cleanAuthor = cleanAuthor;
+                        addSeriesBtn.dataset.cleanTitle = cleanTitle;
+                        addSeriesBtn.dataset.active = "false";
+                        addSeriesBtn.classList.remove('btn-secondary', 'text-white');
+                        addSeriesBtn.classList.add('btn-outline-secondary');
+                        addSeriesBtn.innerHTML = '<i class="bi bi-plus-lg"></i> Series';
+
+                        if (seriesName) {
+                            const cleanSeries = sanitizeFilename(seriesName);
+                            addSeriesBtn.dataset.cleanSeries = cleanSeries;
+                            addSeriesBtn.disabled = false;
+
+                            // Show series name next to button
+                            if (seriesPreviewEl) {
+                                seriesPreviewEl.textContent = cleanSeries;
+                                seriesPreviewEl.style.display = 'inline';
+                            }
+                        } else {
+                            addSeriesBtn.dataset.cleanSeries = "";
+                            addSeriesBtn.disabled = true;
+
+                            // Hide series name
+                            if (seriesPreviewEl) {
+                                seriesPreviewEl.style.display = 'none';
+                            }
+                        }
+                    }
+
                     pendingDownloadData = downloadData;
                     pendingButton = button;
                     confirmModal.show();
@@ -713,6 +779,57 @@ document.addEventListener("DOMContentLoaded", function () {
         pendingDownloadData.custom_relative_path = confirmInput.value;
         confirmModal.hide();
         performDownload(pendingDownloadData, pendingButton);
+    });
+
+    document.getElementById('add-series-btn')?.addEventListener('click', function () {
+        const input = document.getElementById('confirm-path-input');
+        const hintEl = document.getElementById('path-format-hint');
+
+        // Retrieve stored components
+        const author = this.dataset.cleanAuthor;
+        const title = this.dataset.cleanTitle;
+        const series = this.dataset.cleanSeries;
+
+        // Check current state (default is false/undefined)
+        const isActive = this.dataset.active === "true";
+
+        if (!isActive) {
+            // === STATE: TURN ON (+ Series -> - Series) ===
+
+            // 1. Update Input
+            input.value = `${author}/${series}/${title}`;
+
+            // 2. Update Hint
+            if (hintEl) hintEl.textContent = "Format: Author / Series / Title";
+
+            // 3. Update Button Visuals
+            this.innerHTML = '<i class="bi bi-dash-lg"></i> Series';
+            this.classList.remove('btn-outline-secondary');
+            this.classList.add('btn-secondary', 'text-white');
+
+            // 4. Update State
+            this.dataset.active = "true";
+
+        } else {
+            // === STATE: TURN OFF (- Series -> + Series) ===
+
+            // 1. Update Input
+            input.value = `${author}/${title}`;
+
+            // 2. Update Hint
+            if (hintEl) hintEl.textContent = "Format: Author / Title";
+
+            // 3. Update Button Visuals
+            this.innerHTML = '<i class="bi bi-plus-lg"></i> Series';
+            this.classList.remove('btn-secondary', 'text-white');
+            this.classList.add('btn-outline-secondary');
+
+            // 4. Update State
+            this.dataset.active = "false";
+        }
+
+        // Trigger input event so the full path preview (blue text) updates
+        input.dispatchEvent(new Event('input'));
     });
 
     function performDownload(downloadData, button) {
