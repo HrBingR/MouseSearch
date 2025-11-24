@@ -43,7 +43,7 @@ connected_websockets = set()
 async def startup():
     # Only start cache cleanup if thumbnail caching is enabled
     if initial_config.get("ENABLE_FILESYSTEM_THUMBNAIL_CACHE", True):
-        app.logger.info("Cache cleanup task started")
+        app.logger.debug("Cache cleanup task started")
         app.add_background_task(cleanup_cache_task)
     
     await load_new_app_config()
@@ -750,32 +750,36 @@ async def mam_user_data():
 
 @app.route('/mam/buy_vip', methods=['POST'])
 async def mam_buy_vip():
-    """Buy VIP credit using bonus points. Uses duration=max to top up to maximum."""
-    if not await login_mam(): 
+    """Buy VIP credit using bonus points. Accepts 'max' or specific weeks."""
+    if not await login_mam():
         return jsonify({'success': False, 'error': 'Not logged into MAM'}), 401
-    
+
     try:
+        # Get JSON data to determine duration
+        data = await request.get_json() or {}
+        duration = data.get('duration', 'max') # Default to max if not specified
+
         # Get current epoch time in milliseconds for the request
         epoch_ms = int(time.time() * 1000)
         api_url = f"{app.config.get('MAM_API_URL')}/json/bonusBuy.php/"
         params = {
             'spendtype': 'VIP',
-            'duration': 'max',
+            'duration': duration,
             '_': epoch_ms
         }
-        
+
         async with httpx.AsyncClient() as client:
             response = await client.get(api_url, params=params, cookies=mam_session_cookies, timeout=10)
             update_cookies(response)
             response.raise_for_status()
             result = response.json()
-            
+
             # Log the result
             if result.get('success'):
-                app.logger.info(f"VIP purchase successful - Amount: {result.get('amount')} weeks, Remaining bonus: {result.get('seedbonus')}")
+                app.logger.info(f"VIP purchase successful - Duration: {duration}, Amount added: {result.get('amount')} weeks, Remaining bonus: {result.get('seedbonus')}")
             else:
                 app.logger.warning(f"VIP purchase failed: {result}")
-            
+
             return jsonify(result)
     except Exception as e:
         app.logger.error(f"Error buying VIP credit: {e}")

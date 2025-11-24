@@ -30,6 +30,11 @@ const hashToElementMap = new Map(); // Maps hash -> resultItem element
 let lastClientStatus = null;
 let lastMamStats = null;
 
+// Global storage for VIP expiry date (updated by loadMamUserData)
+window.currentVipUntil = null;
+window.currentBonusPoints = 0;
+
+
 /**
  * Initializes Server-Sent Events (SSE) connection for real-time toast notifications.
  */
@@ -104,7 +109,7 @@ function initializeEventStream() {
                     // Handle automatic VIP purchase notifications
                     if (data.success) {
                         const amount = data.amount || 0;
-                        const message = `Auto VIP top-up: Added ${amount.toFixed(2)} weeks. Remaining bonus: ${data.seedbonus ? data.seedbonus.toFixed(2) : 'N/A'}`;
+                        const message = `Auto VIP top-up: Added ${amount.toFixed(1)} weeks. Remaining bonus points: ${data.seedbonus ? data.seedbonus.toFixed(0) : 'N/A'}`;
                         showToast(message, 'success');
                         // Refresh MAM stats to show updated bonus
                         loadMamUserData();
@@ -405,73 +410,49 @@ function loadMamUserData() {
 
     fetch('/mam/user_data', { cache: "no-store" })
         .then(response => {
-            if (!response.ok) {
-                throw new Error(`HTTP error! Status: ${response.status}`);
-            }
+            if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
             return response.json();
         })
         .then(data => {
+            // ... (Existing UI updates for username, class, etc.) ...
             statusSpan.textContent = 'CONNECTED';
             statusSpan.className = 'text-success';
             if (statusIconSpan) statusIconSpan.innerHTML = greenCheckIcon;
+            
             document.getElementById('mam-username').textContent = data.username || 'N/A';
             document.getElementById('mam-class').textContent = data.classname || 'N/A';
             document.getElementById('mam-uploaded').textContent = data.uploaded || 'N/A';
             document.getElementById('mam-downloaded').textContent = data.downloaded || 'N/A';
             document.getElementById('mam-ratio').textContent = data.ratio || 'N/A';
-            document.getElementById('mam-bonus').textContent = data.seedbonus_formatted || data.seedbonus || 'N/A';
-            
-            // Calculate and display VIP weeks remaining
+            document.getElementById('mam-bonus').textContent = data.seedbonus_formatted || 'N/A';
+
+            // --- NEW: Store data globally for the modal calculations ---
+            window.currentVipUntil = data.vip_until; // e.g., "2025-01-15 12:00:00"
+            window.currentBonusPoints = parseFloat(data.seedbonus || 0);
+
+            // Calculate and display VIP weeks remaining in the accordion
             const vipWeeksContainer = document.getElementById('vip-weeks-container');
             const vipWeeksSpan = document.getElementById('vip-weeks-remaining');
+            
             if (data.vip_until && vipWeeksContainer && vipWeeksSpan) {
-                try {
-                    const vipUntil = new Date(data.vip_until);
-                    const now = new Date();
-                    const diffMs = vipUntil - now;
-                    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-                    const diffWeeks = Math.floor(diffDays / 7);
-                    const remainingDays = diffDays % 7;
-                    
-                    if (diffMs > 0) {
-                        let vipText = '';
-                        if (diffWeeks > 0) {
-                            vipText = `${diffWeeks} week${diffWeeks !== 1 ? 's' : ''}`;
-                            if (remainingDays > 0) {
-                                vipText += `, ${remainingDays} day${remainingDays !== 1 ? 's' : ''}`;
-                            }
-                        } else if (diffDays > 0) {
-                            vipText = `${diffDays} day${diffDays !== 1 ? 's' : ''}`;
-                        } else {
-                            vipText = 'less than 1 day';
-                        }
-                        vipWeeksSpan.textContent = vipText;
-                        vipWeeksContainer.style.display = 'block';
-                    } else {
-                        vipWeeksContainer.style.display = 'none';
-                    }
-                } catch (e) {
-                    console.error('Error parsing VIP date:', e);
-                    vipWeeksContainer.style.display = 'none';
+                const now = new Date();
+                const vipDate = new Date(data.vip_until.replace(' ', 'T')); // Fix for some browser date parsing
+                const diffMs = vipDate - now;
+                const diffWeeks = diffMs / (1000 * 60 * 60 * 24 * 7);
+
+                if (diffWeeks > 0) {
+                    vipWeeksSpan.textContent = `${diffWeeks.toFixed(1)} weeks`;
+                    vipWeeksContainer.style.display = 'block';
+                } else {
+                    vipWeeksSpan.textContent = 'Expired';
+                    vipWeeksContainer.style.display = 'block';
                 }
-            } else if (vipWeeksContainer) {
-                vipWeeksContainer.style.display = 'none';
             }
         })
         .catch(error => {
             console.error("Error fetching MAM user data:", error);
             statusSpan.textContent = 'NOT CONNECTED';
             statusSpan.className = 'text-danger';
-            if (statusIconSpan) statusIconSpan.innerHTML = redXIcon;
-            // Clear other fields on error
-            document.getElementById('mam-username').textContent = 'N/A';
-            document.getElementById('mam-class').textContent = 'N/A';
-            document.getElementById('mam-uploaded').textContent = 'N/A';
-            document.getElementById('mam-downloaded').textContent = 'N/A';
-            document.getElementById('mam-ratio').textContent = 'N/A';
-            document.getElementById('mam-bonus').textContent = 'N/A';
-            const vipWeeksContainer = document.getElementById('vip-weeks-container');
-            if (vipWeeksContainer) vipWeeksContainer.style.display = 'none';
         });
 }
 
@@ -679,29 +660,143 @@ document.addEventListener("DOMContentLoaded", function () {
             .catch(error => showToast("An error occurred while saving settings.", 'danger'));
     });
 
-    // Buy VIP
+    // Buy VIP Logic
     const buyVipButton = document.getElementById('buy-vip-button');
-    if (buyVipButton) {
-        buyVipButton.addEventListener('click', function () {
-            buyVipButton.disabled = true;
-            const originalText = buyVipButton.innerHTML;
-            buyVipButton.innerHTML = '<span class="spinner-border spinner-border-sm" aria-hidden="true"></span> Buying...';
+    const vipModalEl = document.getElementById('vipPurchaseModal');
+    const vipModal = vipModalEl ? new bootstrap.Modal(vipModalEl) : null;
+    const VIP_COST_PER_WEEK = 1250;
+    const MAX_VIP_WEEKS = 12.85; // Using 12.85 to provide a tiny buffer for floating point comparisons
 
-            fetch('/mam/buy_vip', { method: 'POST' })
+    if (buyVipButton && vipModal) {
+        buyVipButton.addEventListener('click', function () {
+            // 1. Calculate Current VIP Weeks
+            let currentWeeks = 0;
+            if (window.currentVipUntil) {
+                const now = new Date();
+                const vipDate = new Date(window.currentVipUntil.replace(' ', 'T'));
+                if (vipDate > now) {
+                    const diffMs = vipDate - now;
+                    currentWeeks = diffMs / (1000 * 60 * 60 * 24 * 7);
+                }
+            }
+
+            // 2. Update Modal Context Info
+            document.getElementById('vip-modal-current-bp').textContent = window.currentBonusPoints.toLocaleString();
+            document.getElementById('vip-modal-current-weeks').textContent = currentWeeks > 0 ? `${currentWeeks.toFixed(1)} weeks` : "0 weeks";
+
+            // 3. Configure "Max" Button Logic
+            const weeksToCap = Math.max(0, MAX_VIP_WEEKS - currentWeeks);
+            const weeksAffordable = window.currentBonusPoints / VIP_COST_PER_WEEK;
+            
+            // The actual purchase is the smaller of: what you need to hit limit vs what you can afford
+            let purchaseWeeks = Math.min(weeksToCap, weeksAffordable);
+            
+            // Round to 1 decimal place (MAM allows 0.1 increments)
+            purchaseWeeks = Math.floor(purchaseWeeks * 10) / 10;
+            
+            const maxBtn = document.getElementById('vip-buy-max-btn');
+            const maxTitle = document.getElementById('vip-max-title');
+            const maxSubtitle = document.getElementById('vip-max-subtitle');
+            const maxCostBadge = document.getElementById('vip-max-cost');
+
+            // Reset Max Button State
+            maxBtn.disabled = false; // Always enabled
+            maxBtn.classList.remove('btn-secondary');
+
+            if (purchaseWeeks < 0.1) {
+                // User is already practically at the limit
+                maxTitle.textContent = "Top Up Max";
+                maxSubtitle.textContent = "You are already at the limit (90 days)";
+                maxCostBadge.textContent = "0 BP"; 
+                // We keep it enabled, but make it look neutral since it won't do much
+                // maxBtn.classList.add('btn-secondary');
+            } else {
+                // Valid purchase calculation
+                const purchaseCost = Math.ceil(purchaseWeeks * VIP_COST_PER_WEEK);
+                maxTitle.textContent = `Top Up +${purchaseWeeks.toFixed(1)} Weeks`;
+                maxSubtitle.textContent = weeksAffordable < weeksToCap ? "Limited by your points" : "To reach 12.8 week limit";
+                maxCostBadge.textContent = `${purchaseCost.toLocaleString()} BP`;
+                maxBtn.classList.add('btn-success');
+            }
+
+            // 4. Configure Fixed Options (4 and 8 weeks)
+            document.querySelectorAll('.vip-buy-btn[data-duration="4"], .vip-buy-btn[data-duration="8"]').forEach(btn => {
+                const weeks = parseInt(btn.dataset.duration);
+                const cost = weeks * VIP_COST_PER_WEEK;
+                
+                // Check 1: Can they afford it?
+                const canAfford = window.currentBonusPoints >= cost;
+                
+                // Check 2: Does it exceed the hard limit?
+                // Using 12.85 allows a tiny bit of wiggle room so users at 0 can buy 4+8 without strict floating point errors blocking them
+                const wouldExceed = (currentWeeks + weeks) > MAX_VIP_WEEKS; 
+
+                if (!canAfford) {
+                    btn.disabled = true;
+                    btn.querySelector('.badge').className = 'badge bg-danger';
+                    btn.querySelector('.badge').textContent = 'Not enough BP';
+                } else if (wouldExceed) {
+                    btn.disabled = true;
+                    btn.querySelector('.badge').className = 'badge bg-warning text-dark';
+                    btn.querySelector('.badge').textContent = 'Exceeds Limit';
+                } else {
+                    btn.disabled = false;
+                    btn.querySelector('.badge').className = 'badge bg-secondary';
+                    btn.querySelector('.badge').textContent = `${cost.toLocaleString()} BP`;
+                }
+            });
+
+            vipModal.show();
+        });
+
+        // Handle Click on Options
+        document.querySelectorAll('.vip-buy-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                if(this.disabled) return;
+
+                const duration = this.dataset.duration; // '4', '8', or 'max'
+                
+                // Lock UI
+                const originalHtml = this.innerHTML;
+                this.disabled = true;
+                this.innerHTML = `<div class="d-flex align-items-center"><span class="spinner-border spinner-border-sm me-2"></span> Processing...</div>`;
+                
+                // Disable siblings
+                const allBtns = document.querySelectorAll('.vip-buy-btn');
+                allBtns.forEach(b => b.classList.add('disabled'));
+
+                fetch('/mam/buy_vip', { 
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ duration: duration }) 
+                })
                 .then(response => response.json())
                 .then(data => {
                     if (data.success) {
-                        showToast(`VIP topped up! Added ${data.amount} weeks.`, 'success');
-                        loadMamUserData();
+                        const added = data.amount || (duration === 'max' ? 'Max' : duration);
+                        // If amount is 0 (already at max), change the message slightly
+                        if (parseFloat(data.amount) === 0 && duration === 'max') {
+                            showToast(`You are already at the VIP limit.`, 'success');
+                        } else {
+                            showToast(`Success! Added ${added} weeks. Remaining: ${data.seedbonus} BP`, 'success');
+                        }
+                        loadMamUserData(); // Refresh global data
+                        vipModal.hide();
                     } else {
-                        showToast(data.error || 'Failed to purchase VIP', 'danger');
+                        showToast(data.error || 'Purchase failed', 'danger');
                     }
                 })
-                .catch(() => showToast('Error purchasing VIP', 'danger'))
+                .catch(err => {
+                    console.error(err);
+                    showToast('Connection error', 'danger');
+                })
                 .finally(() => {
-                    buyVipButton.disabled = false;
-                    buyVipButton.innerHTML = originalText;
+                    // Restore UI
+                    this.disabled = false;
+                    this.innerHTML = originalHtml;
+                    allBtns.forEach(b => b.classList.remove('disabled'));
                 });
+            });
         });
     }
 

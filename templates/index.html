@@ -25,7 +25,7 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 
   <link rel="stylesheet" href="static/bootstrap/css/bootstrap.min.css" />
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css"> 
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 
   <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon/favicon-96x96.png') }}"
@@ -119,7 +119,7 @@
   </style>
 
 
-  </head>
+</head>
 
 <body class="bg-body-tertiary">
   <svg xmlns="http://www.w3.org/2000/svg" class="d-none">
@@ -218,124 +218,128 @@
 
     <div class="my-3 p-3 bg-body rounded shadow-sm">
       <main class="">
-<form id="search-form" method="GET" autocomplete="off">
-  <h1 class="h3 mb-3 fw-normal"></h1>
+        <form id="search-form" method="GET" autocomplete="off">
+          <h1 class="h3 mb-3 fw-normal"></h1>
 
-  <div class="form-floating">
-    <input type="text" class="form-control" id="query" name="query" placeholder="The Great Gatsby F. Scott Fitzgerald">
-    <label for="query">Search...</label>
-  </div>
-  <div>
-    <div class="form-check form-check-inline text-start my-3">
-      <input class="form-check-input" name="search_in_title" type="checkbox" id="search_in_title" checked>
-      <label class="form-check-label" for="search_in_title">
-        Title
-      </label>
-    </div>
-    <div class="form-check form-check-inline text-start my-3">
-      <input class="form-check-input" name="search_in_author" type="checkbox" id="search_in_author" checked>
-      <label class="form-check-label" for="search_in_author">
-        Author
-      </label>
-    </div>
-    <div class="form-check form-check-inline text-start my-3">
-      <input class="form-check-input" name="search_in_narrator" type="checkbox" id="search_in_narrator">
-      <label class="form-check-label" for="search_in_narrator">
-        Narrator
-      </label>
-    </div>
-    <div class="form-check form-check-inline text-start my-3">
-      <input class="form-check-input" name="search_in_series" type="checkbox" id="search_in_series" checked>
-      <label class="form-check-label" for="search_in_series">
-        Series
-      </label>
-    </div>
-  </div>
-  <div class="mb-3 form-floating">
-    <select class="form-select" name="media_type" id="media_type" aria-label="Media type">
-      <option value="13" selected>Audiobooks</option>
-      <option value="14">E-Books</option>
-      <option value="15">Musicology</option>
-      <option value="16">Radio</option>
-      <option value="all">All</option>
-    </select>
-    <label for="media_type">Media type</label>
-  </div>
-  <div class="mb-3 form-floating">
-    <select class="form-select" name="language" id="language" aria-label="Language">
-      {% for lang in
-      ['English','Afrikaans','Arabic','Bengali','Bosnian','Bulgarian','Burmese','Cantonese','Catalan','Chinese','Croatian','Czech','Danish','Dutch','Estonian','Farsi','Finnish','French','German','Greek','Greek,
-      Ancient','Gujarati','Hebrew','Hindi','Hungarian','Icelandic','Indonesian','Irish','Italian','Japanese','Javanese','Kannada','Korean','Lithuanian','Latin','Latvian','Malay','Malayalam','Manx','Marathi','Norwegian','Polish','Portuguese','Brazilian
-      Portuguese (BP)','Punjabi','Romanian','Russian','Scottish
-      Gaelic','Sanskrit','Serbian','Slovenian','Spanish','Castilian
-      Spanish','Swedish','Tagalog','Tamil','Telugu','Thai','Turkish','Ukrainian','Urdu','Vietnamese','Other'] %}
-      <option value="{{ lang }}" {% if lang=='English' %}selected{% endif %}>{{ lang }}</option>
-      {% endfor %}
-    </select>
-    <label for="language">Language</label>
-  </div>
+          <div class="form-floating">
+            <input type="text" class="form-control" id="query" name="query"
+              placeholder="The Great Gatsby F. Scott Fitzgerald">
+            <label for="query">Search...</label>
+          </div>
+          <div>
+            <div class="form-check form-check-inline text-start my-3">
+              <input class="form-check-input" name="search_in_title" type="checkbox" id="search_in_title" checked>
+              <label class="form-check-label" for="search_in_title">
+                Title
+              </label>
+            </div>
+            <div class="form-check form-check-inline text-start my-3">
+              <input class="form-check-input" name="search_in_author" type="checkbox" id="search_in_author" checked>
+              <label class="form-check-label" for="search_in_author">
+                Author
+              </label>
+            </div>
+            <div class="form-check form-check-inline text-start my-3">
+              <input class="form-check-input" name="search_in_narrator" type="checkbox" id="search_in_narrator">
+              <label class="form-check-label" for="search_in_narrator">
+                Narrator
+              </label>
+            </div>
+            <div class="form-check form-check-inline text-start my-3">
+              <input class="form-check-input" name="search_in_series" type="checkbox" id="search_in_series" checked>
+              <label class="form-check-label" for="search_in_series">
+                Series
+              </label>
+            </div>
+          </div>
+          <div class="mb-3 form-floating">
+            <select class="form-select" name="media_type" id="media_type" aria-label="Media type">
+              <option value="13" selected>Audiobooks</option>
+              <option value="14">E-Books</option>
+              <option value="15">Musicology</option>
+              <option value="16">Radio</option>
+              <option value="all">All</option>
+            </select>
+            <label for="media_type">Media type</label>
+          </div>
+          <div class="mb-3 form-floating">
+            <select class="form-select" name="language" id="language" aria-label="Language">
+              {% for lang in
+              ['English','Afrikaans','Arabic','Bengali','Bosnian','Bulgarian','Burmese','Cantonese','Catalan','Chinese','Croatian','Czech','Danish','Dutch','Estonian','Farsi','Finnish','French','German','Greek','Greek,
+              Ancient','Gujarati','Hebrew','Hindi','Hungarian','Icelandic','Indonesian','Irish','Italian','Japanese','Javanese','Kannada','Korean','Lithuanian','Latin','Latvian','Malay','Malayalam','Manx','Marathi','Norwegian','Polish','Portuguese','Brazilian
+              Portuguese (BP)','Punjabi','Romanian','Russian','Scottish
+              Gaelic','Sanskrit','Serbian','Slovenian','Spanish','Castilian
+              Spanish','Swedish','Tagalog','Tamil','Telugu','Thai','Turkish','Ukrainian','Urdu','Vietnamese','Other'] %}
+              <option value="{{ lang }}" {% if lang=='English' %}selected{% endif %}>{{ lang }}</option>
+              {% endfor %}
+            </select>
+            <label for="language">Language</label>
+          </div>
 
-  <div class="d-grid mb-3">
-    <button class="btn btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#advancedFilters" aria-expanded="false" aria-controls="advancedFilters">
-      Advanced Filters
-    </button>
-  </div>
+          <div class="d-grid mb-3">
+            <button class="btn btn-outline-secondary" type="button" data-bs-toggle="collapse"
+              data-bs-target="#advancedFilters" aria-expanded="false" aria-controls="advancedFilters">
+              Advanced Filters
+            </button>
+          </div>
 
-  <div class="collapse" id="advancedFilters">
-    <div class="card card-body mb-3">
-      <h6 class="card-title">Search Type</h6>
-      <div class="form-check">
-        <input class="form-check-input" type="radio" name="searchType" id="searchTypeAll" value="all" checked>
-        <label class="form-check-label" for="searchTypeAll">All (Default)</label>
-      </div>
-      <div class="form-check">
-        <input class="form-check-input" type="radio" name="searchType" id="searchTypeActive" value="active">
-        <label class="form-check-label" for="searchTypeActive">Active (1+ seeders)</label>
-      </div>
-      <div class="form-check">
-        <input class="form-check-input" type="radio" name="searchType" id="searchTypeInactive" value="inactive">
-        <label class="form-check-label" for="searchTypeInactive">Inactive (0 seeders)</label>
-      </div>
-      <div class="form-check">
-        <input class="form-check-input" type="radio" name="searchType" id="searchTypeFL" value="fl">
-        <label class="form-check-label" for="searchTypeFL">Freeleech</label>
-      </div>
-      <div class="form-check">
-        <input class="form-check-input" type="radio" name="searchType" id="searchTypeFLVIP" value="fl-VIP">
-        <label class="form-check-label" for="searchTypeFLVIP">Freeleech or VIP</label>
-      </div>
-      <div class="form-check">
-        <input class="form-check-input" type="radio" name="searchType" id="searchTypeVIP" value="VIP">
-        <label class="form-check-label" for="searchTypeVIP">VIP Only</label>
-      </div>
-      <div class="form-check">
-        <input class="form-check-input" type="radio" name="searchType" id="searchTypeNVIP" value="nVIP">
-        <label class="form-check-label" for="searchTypeNVIP">Not VIP</label>
-      </div>
-       <div class="form-check">
-        <input class="form-check-input" type="radio" name="searchType" id="searchTypeNMeta" value="nMeta">
-        <label class="form-check-label" for="searchTypeNMeta">Missing Metadata</label>
-      </div>
-    </div>
-  </div>
+          <div class="collapse" id="advancedFilters">
+            <div class="card card-body mb-3">
+              <h6 class="card-title">Search Type</h6>
+              <div class="form-check">
+                <input class="form-check-input" type="radio" name="searchType" id="searchTypeAll" value="all" checked>
+                <label class="form-check-label" for="searchTypeAll">All (Default)</label>
+              </div>
+              <div class="form-check">
+                <input class="form-check-input" type="radio" name="searchType" id="searchTypeActive" value="active">
+                <label class="form-check-label" for="searchTypeActive">Active (1+ seeders)</label>
+              </div>
+              <div class="form-check">
+                <input class="form-check-input" type="radio" name="searchType" id="searchTypeInactive" value="inactive">
+                <label class="form-check-label" for="searchTypeInactive">Inactive (0 seeders)</label>
+              </div>
+              <div class="form-check">
+                <input class="form-check-input" type="radio" name="searchType" id="searchTypeFL" value="fl">
+                <label class="form-check-label" for="searchTypeFL">Freeleech</label>
+              </div>
+              <div class="form-check">
+                <input class="form-check-input" type="radio" name="searchType" id="searchTypeFLVIP" value="fl-VIP">
+                <label class="form-check-label" for="searchTypeFLVIP">Freeleech or VIP</label>
+              </div>
+              <div class="form-check">
+                <input class="form-check-input" type="radio" name="searchType" id="searchTypeVIP" value="VIP">
+                <label class="form-check-label" for="searchTypeVIP">VIP Only</label>
+              </div>
+              <div class="form-check">
+                <input class="form-check-input" type="radio" name="searchType" id="searchTypeNVIP" value="nVIP">
+                <label class="form-check-label" for="searchTypeNVIP">Not VIP</label>
+              </div>
+              <div class="form-check">
+                <input class="form-check-input" type="radio" name="searchType" id="searchTypeNMeta" value="nMeta">
+                <label class="form-check-label" for="searchTypeNMeta">Missing Metadata</label>
+              </div>
+            </div>
+          </div>
 
-  <button class="btn btn-primary w-100 py-2" id="searchButton" type="submit">Search</button>
-</form>
+          <button class="btn btn-primary w-100 py-2" id="searchButton" type="submit">Search</button>
+        </form>
 
         <div class="accordion my-3" id="clientAccordion">
           <div class="accordion-item">
-<h2 class="accordion-header" id="clientAccordionHeading">
+            <h2 class="accordion-header" id="clientAccordionHeading">
               <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse"
                 data-bs-target="#clientAccordionCollapse" aria-expanded="true" aria-controls="clientAccordionCollapse">
-                <span id="client-type-display">{{ CLIENT_DISPLAY_NAME }}</span><span id="client-status-icon" class="ms-2"></span>
+                <span id="client-type-display">{{ CLIENT_DISPLAY_NAME }}</span><span id="client-status-icon"
+                  class="ms-2"></span>
               </button>
             </h2>
-            <div id="clientAccordionCollapse" class="accordion-collapse collapse" aria-labelledby="clientAccordionHeading"
-              data-bs-parent="#clientAccordion">
+            <div id="clientAccordionCollapse" class="accordion-collapse collapse"
+              aria-labelledby="clientAccordionHeading" data-bs-parent="#clientAccordion">
               <div class="accordion-body">
                 <a href="{{ TORRENT_CLIENT_URL }}" id="clientLink" target="_blank" class="">{{ TORRENT_CLIENT_URL }}</a>
                 <br>
-                Status: <span id="client-status" class="{{ 'text-success' if CLIENT_STATUS == 'CONNECTED' else 'text-danger' }}">
+                Status: <span id="client-status"
+                  class="{{ 'text-success' if CLIENT_STATUS == 'CONNECTED' else 'text-danger' }}">
                   {{ CLIENT_STATUS or 'NOT CONNECTED' }}
                 </span>
               </div>
@@ -375,7 +379,8 @@
                     <button type="button" class="btn btn-sm btn-outline-primary me-2" id="buy-vip-button">
                       <i class="bi bi-star-fill"></i> Top Up VIP
                     </button>
-                    <button type="button" class="btn btn-sm btn-outline-success" id="buy-upload-button" data-bs-toggle="modal" data-bs-target="#uploadPurchaseModal">
+                    <button type="button" class="btn btn-sm btn-outline-success" id="buy-upload-button"
+                      data-bs-toggle="modal" data-bs-target="#uploadPurchaseModal">
                       <i class="bi bi-cloud-arrow-up-fill"></i> Buy Upload
                     </button>
                   </div>
@@ -393,15 +398,17 @@
       </main>
     </div>
 
-    <div class="my-3 p-3 bg-body rounded shadow-sm results-container-wrapper" id="results-container-wrapper" style="display: none;">
+    <div class="my-3 p-3 bg-body rounded shadow-sm results-container-wrapper" id="results-container-wrapper"
+      style="display: none;">
       <h6 id="results-title" class="border-bottom pb-2 mb-0">Results</h6>
       <div id="results-container">
-        </div>
+      </div>
     </div>
   </main>
 
   <!-- Upload Credit Purchase Modal -->
-  <div class="modal fade" id="uploadPurchaseModal" tabindex="-1" aria-labelledby="uploadPurchaseModalLabel" aria-hidden="true">
+  <div class="modal fade" id="uploadPurchaseModal" tabindex="-1" aria-labelledby="uploadPurchaseModalLabel"
+    aria-hidden="true">
     <div class="modal-dialog">
       <div class="modal-content">
         <div class="modal-header">
@@ -433,18 +440,12 @@
               Max Affordable <span class="badge bg-secondary float-end">All BP</span>
             </button>
           </div>
-          
+
           <div class="mt-3">
             <label for="custom-upload-amount" class="form-label">Or enter custom amount (GB):</label>
             <div class="input-group">
-              <input 
-                type="number" 
-                class="form-control upload-amount-input" 
-                id="custom-upload-amount"
-                placeholder=""
-                min="1"
-                step="0.5"
-                autocomplete="off">
+              <input type="number" class="form-control upload-amount-input" id="custom-upload-amount" placeholder=""
+                min="1" step="0.5" autocomplete="off">
               <button class="btn btn-primary" type="button" id="buy-custom-upload-button">
                 Buy Custom Amount
               </button>
@@ -457,46 +458,120 @@
       </div>
     </div>
   </div>
-  
-  <!-- Download Confirmation Modal -->
-  <div class="modal fade" id="downloadConfirmModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title">Confirm Download</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-      </div>
-      <div class="modal-body">
-        <p>Review the organization path before downloading.</p>
-        
-        <div class="mb-3">
-          <label class="form-label text-muted small">Organization Root</label>
-          <input type="text" class="form-control" value="{{ ORGANIZED_PATH }}" disabled readonly>
-        </div>
 
-        <div class="mb-3">
-          <label for="confirm-path-input" class="form-label">Relative Path</label>
-          <input type="text" class="form-control" id="confirm-path-input">
-          <div class="form-text">Format: Author / Title</div>
+  <div class="modal fade" id="vipPurchaseModal" tabindex="-1" aria-labelledby="vipPurchaseModalLabel"
+    aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="vipPurchaseModalLabel">
+            <i class="bi bi-star-fill text-warning"></i> Top Up VIP
+          </h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
+        <div class="modal-body">
 
-        <div class="alert alert-light border small" role="alert">
-          <strong>Full Path: </strong>
-          <span class="text-muted">{{ ORGANIZED_PATH }}/</span><span id="full-path-preview" class="text-primary fw-bold"></span>
+          <div class="card bg-light mb-3">
+            <div class="card-body py-2 px-3">
+              <div class="d-flex justify-content-between small">
+                <span class="text-muted">Current Bonus Points:</span>
+                <strong id="vip-modal-current-bp">---</strong>
+              </div>
+              <div class="d-flex justify-content-between small">
+                <span class="text-muted">Current VIP Duration:</span>
+                <strong id="vip-modal-current-weeks">---</strong>
+              </div>
+              <div class="d-flex justify-content-between small">
+                <span class="text-muted">Max Allowed:</span>
+                <strong>12.8 weeks (90 days)</strong>
+              </div>
+            </div>
+          </div>
+
+          <p class="small text-muted mb-3 text-center">
+            VIP costs <strong>1,250 BP</strong> per week.
+          </p>
+
+          <div class="d-grid gap-2">
+            <button type="button"
+              class="btn btn-outline-primary d-flex justify-content-between align-items-center vip-buy-btn"
+              data-duration="4">
+              <div class="text-start">
+                <div class="fw-bold">Buy 4 Weeks</div>
+                <small class="text-muted" style="font-size: 0.75rem;">+28 Days</small>
+              </div>
+              <span class="badge bg-secondary">5,000 BP</span>
+            </button>
+
+            <button type="button"
+              class="btn btn-outline-primary d-flex justify-content-between align-items-center vip-buy-btn"
+              data-duration="8">
+              <div class="text-start">
+                <div class="fw-bold">Buy 8 Weeks</div>
+                <small class="text-muted" style="font-size: 0.75rem;">+56 Days</small>
+              </div>
+              <span class="badge bg-secondary">10,000 BP</span>
+            </button>
+
+            <hr class="my-2">
+
+            <button type="button" class="btn btn-success d-flex justify-content-between align-items-center vip-buy-btn"
+              data-duration="max" id="vip-buy-max-btn">
+              <div class="text-start">
+                <div class="fw-bold" id="vip-max-title">Top Up Max</div>
+                <small class="text-white-50" style="font-size: 0.75rem;" id="vip-max-subtitle">Calculated based on
+                  limit</small>
+              </div>
+              <span class="badge bg-dark" id="vip-max-cost">Calculating...</span>
+            </button>
+          </div>
+
         </div>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-        <button type="button" class="btn btn-primary" id="confirm-download-btn">
-          <i class="bi bi-download"></i> Start Download
-        </button>
       </div>
     </div>
   </div>
-</div>
+
+  <!-- Download Confirmation Modal -->
+  <div class="modal fade" id="downloadConfirmModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Confirm Download</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <p>Review the organization path before downloading.</p>
+
+          <div class="mb-3">
+            <label class="form-label text-muted small">Organization Root</label>
+            <input type="text" class="form-control" value="{{ ORGANIZED_PATH }}" disabled readonly>
+          </div>
+
+          <div class="mb-3">
+            <label for="confirm-path-input" class="form-label">Relative Path</label>
+            <input type="text" class="form-control" id="confirm-path-input">
+            <div class="form-text">Format: Author / Title</div>
+          </div>
+
+          <div class="alert alert-light border small" role="alert">
+            <strong>Full Path: </strong>
+            <span class="text-muted">{{ ORGANIZED_PATH }}/</span><span id="full-path-preview"
+              class="text-primary fw-bold"></span>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-primary" id="confirm-download-btn">
+            <i class="bi bi-download"></i> Start Download
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <!-- Insufficient Buffer Modal -->
-  <div class="modal fade" id="insufficientBufferModal" tabindex="-1" aria-labelledby="insufficientBufferModalLabel" aria-hidden="true">
+  <div class="modal fade" id="insufficientBufferModal" tabindex="-1" aria-labelledby="insufficientBufferModalLabel"
+    aria-hidden="true">
     <div class="modal-dialog">
       <div class="modal-content">
         <div class="modal-header bg-warning">
@@ -515,10 +590,11 @@
           <p>Purchase upload credit to proceed with this download:</p>
           <div class="d-grid gap-2">
             <button type="button" class="btn btn-primary" id="modal-buy-recommended">
-              Buy <span id="modal-recommended-amount">0</span> GB 
+              Buy <span id="modal-recommended-amount">0</span> GB
               (<span id="modal-recommended-cost">0</span> BP)
             </button>
-            <button type="button" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#uploadPurchaseModal">
+            <button type="button" class="btn btn-outline-secondary" data-bs-toggle="modal"
+              data-bs-target="#uploadPurchaseModal">
               Choose Custom Amount
             </button>
           </div>
@@ -530,7 +606,8 @@
     </div>
   </div>
 
-  <div class="offcanvas offcanvas-end w-md-50" tabindex="-1" id="settingsOffcanvas" aria-labelledby="settingsOffcanvasLabel">
+  <div class="offcanvas offcanvas-end w-md-50" tabindex="-1" id="settingsOffcanvas"
+    aria-labelledby="settingsOffcanvasLabel">
     <div class="offcanvas-header bg-body-tertiary border-bottom">
       <h5 class="offcanvas-title" id="settingsOffcanvasLabel">
         <i class="bi bi-gear-fill me-2"></i>Settings
@@ -540,21 +617,24 @@
 
     <div class="offcanvas-body p-0">
       <form id="settings-form" autocomplete="off" class="d-flex flex-column h-100">
-        
+
         <div class="px-3 pt-3">
           <ul class="nav nav-tabs" id="settingTabs" role="tablist">
             <li class="nav-item" role="presentation">
-              <button class="nav-link active" id="general-tab" data-bs-toggle="tab" data-bs-target="#general-pane" type="button" role="tab" aria-controls="general-pane" aria-selected="true">
+              <button class="nav-link active" id="general-tab" data-bs-toggle="tab" data-bs-target="#general-pane"
+                type="button" role="tab" aria-controls="general-pane" aria-selected="true">
                 General
               </button>
             </li>
             <li class="nav-item" role="presentation">
-              <button class="nav-link" id="organize-tab" data-bs-toggle="tab" data-bs-target="#organize-pane" type="button" role="tab" aria-controls="organize-pane" aria-selected="false">
+              <button class="nav-link" id="organize-tab" data-bs-toggle="tab" data-bs-target="#organize-pane"
+                type="button" role="tab" aria-controls="organize-pane" aria-selected="false">
                 Auto-Organize
               </button>
             </li>
             <li class="nav-item" role="presentation">
-              <button class="nav-link" id="helpers-tab" data-bs-toggle="tab" data-bs-target="#helpers-pane" type="button" role="tab" aria-controls="helpers-pane" aria-selected="false">
+              <button class="nav-link" id="helpers-tab" data-bs-toggle="tab" data-bs-target="#helpers-pane"
+                type="button" role="tab" aria-controls="helpers-pane" aria-selected="false">
                 MAM Helpers
               </button>
             </li>
@@ -563,201 +643,256 @@
 
         <div class="tab-content p-3 overflow-y-auto" id="settingsTabContent">
 
-          <div class="tab-pane fade show active" id="general-pane" role="tabpanel" aria-labelledby="general-tab" tabindex="0">
-            <h6 class="text-body-secondary text-uppercase small mb-3">Torrent Client</h6>
+          <div class="tab-pane fade show active" id="general-pane" role="tabpanel" aria-labelledby="general-tab"
+            tabindex="0">
+            <h6 class="text-uppercase mb-3">Torrent Client</h6>
             <div class="card card-body border-secondary-subtle mb-4">
               <div class="mb-3">
                 <label for="TORRENT_CLIENT_TYPE" class="form-label">Client Type</label>
                 <select class="form-select" id="TORRENT_CLIENT_TYPE" name="TORRENT_CLIENT_TYPE">
-                  <option value="qbittorrent" {% if (TORRENT_CLIENT_TYPE or 'qbittorrent') == 'qbittorrent' %}selected{% endif %}>qBittorrent</option>
+                  <option value="qbittorrent" {% if (TORRENT_CLIENT_TYPE or 'qbittorrent' )=='qbittorrent' %}selected{%
+                    endif %}>qBittorrent</option>
                 </select>
               </div>
               <div class="mb-3">
                 <label for="TORRENT_CLIENT_URL" class="form-label">Client URL</label>
-                <input type="text" class="form-control" id="TORRENT_CLIENT_URL" name="TORRENT_CLIENT_URL" value="{{ TORRENT_CLIENT_URL }}" required />
+                <input type="text" class="form-control" id="TORRENT_CLIENT_URL" name="TORRENT_CLIENT_URL"
+                  value="{{ TORRENT_CLIENT_URL }}" required />
               </div>
               <div class="row">
                 <div class="col-6 mb-3">
                   <label for="TORRENT_CLIENT_USERNAME" class="form-label">Username</label>
-                  <input type="text" class="form-control" id="TORRENT_CLIENT_USERNAME" name="TORRENT_CLIENT_USERNAME" value="{{ TORRENT_CLIENT_USERNAME }}" required />
+                  <input type="text" class="form-control" id="TORRENT_CLIENT_USERNAME" name="TORRENT_CLIENT_USERNAME"
+                    value="{{ TORRENT_CLIENT_USERNAME }}" required />
                 </div>
                 <div class="col-6 mb-3">
                   <label for="TORRENT_CLIENT_PASSWORD" class="form-label">Password</label>
-                  <input type="password" class="form-control" id="TORRENT_CLIENT_PASSWORD" name="TORRENT_CLIENT_PASSWORD" value="{{ TORRENT_CLIENT_PASSWORD }}" required autocomplete="off" />
+                  <input type="password" class="form-control" id="TORRENT_CLIENT_PASSWORD"
+                    name="TORRENT_CLIENT_PASSWORD" value="{{ TORRENT_CLIENT_PASSWORD }}" required autocomplete="off" />
                 </div>
               </div>
               <div class="mb-0">
                 <label for="TORRENT_CLIENT_CATEGORY" class="form-label">Default category</label>
-                <select class="form-select" id="TORRENT_CLIENT_CATEGORY" name="TORRENT_CLIENT_CATEGORY" data-current-value="{{ TORRENT_CLIENT_CATEGORY }}">
-                   <option value="{{ TORRENT_CLIENT_CATEGORY }}" selected>{{ TORRENT_CLIENT_CATEGORY }}</option>
+                <select class="form-select" id="TORRENT_CLIENT_CATEGORY" name="TORRENT_CLIENT_CATEGORY"
+                  data-current-value="{{ TORRENT_CLIENT_CATEGORY }}">
+                  <option value="{{ TORRENT_CLIENT_CATEGORY }}" selected>{{ TORRENT_CLIENT_CATEGORY }}</option>
                 </select>
               </div>
             </div>
 
-            <h6 class="text-body-secondary text-uppercase small mb-3">MyAnonaMouse Auth</h6>
+            <h6 class=" text-uppercase mb-3">MyAnonaMouse Auth</h6>
             <div class="mb-3">
               <label for="MAM_ID" class="form-label">MAM Session ID</label>
-              <input type="text" class="form-control font-monospace" id="MAM_ID" name="MAM_ID" value="{{ MAM_ID }}" required />
-              <div class="form-text">The <code class="text-primary">mam_id</code> value from MyAnonaMouse <a href="https://www.myanonamouse.net/preferences/index.php?view=security">Settings</a>.</div>
+              <input type="text" class="form-control font-monospace" id="MAM_ID" name="MAM_ID" value="{{ MAM_ID }}"
+                required />
+              <div class="form-text">The <code class="text-primary">mam_id</code> value from MyAnonaMouse <a
+                  href="https://www.myanonamouse.net/preferences/index.php?view=security">Settings</a>.</div>
             </div>
           </div>
 
           <div class="tab-pane fade" id="organize-pane" role="tabpanel" aria-labelledby="organize-tab" tabindex="0">
-            <h6 class="text-body-secondary text-uppercase small mb-3">Triggers</h6>
-            <div class="form-check form-switch mb-3">
-              <input class="form-check-input" type="checkbox" id="AUTO_ORGANIZE_ON_ADD" name="AUTO_ORGANIZE_ON_ADD" {% if AUTO_ORGANIZE_ON_ADD %}checked{% endif %}>
-              <label class="form-check-label" for="AUTO_ORGANIZE_ON_ADD">Organize immediately on download</label>
-            </div>
-            <div class="form-check form-switch mb-2">
-              <input class="form-check-input" type="checkbox" id="AUTO_ORGANIZE_ON_SCHEDULE" name="AUTO_ORGANIZE_ON_SCHEDULE" {% if AUTO_ORGANIZE_ON_SCHEDULE %}checked{% endif %}>
-              <label class="form-check-label" for="AUTO_ORGANIZE_ON_SCHEDULE">Enable Scheduled Scan</label>
-            </div>
-            <div class="mb-0">
-              <label for="AUTO_ORGANIZE_INTERVAL_HOURS" class="form-label small">Scan Interval (hours)</label>
-              <input type="number" class="form-control " id="AUTO_ORGANIZE_INTERVAL_HOURS" name="AUTO_ORGANIZE_INTERVAL_HOURS" min="1" value="{{ AUTO_ORGANIZE_INTERVAL_HOURS }}">
+            <h6 class=" text-uppercase mb-3 d-flex align-items-center gap-1">
+              Triggers
+              <i class="bi bi-info-circle-fill text-secondary ms-1" 
+                data-bs-html="true" 
+                data-bs-toggle="tooltip" 
+                data-bs-placement="top" 
+                title="<div class='text-start'>
+                          <div class='fw-bold mb-1'>When should auto-organize be run?</div>
+                          <ul class='list-unstyled mb-0'>
+                            <li>- immediately after download?</li>
+                            <li>- on a set schedule?</li>
+                          </ul>
+                        </div>">
+              </i>
+            </h6>
+            <div class="card card-body border-secondary-subtle mb-4">
+              <div class="form-check form-switch mb-3">
+                <input class="form-check-input" type="checkbox" id="AUTO_ORGANIZE_ON_ADD" name="AUTO_ORGANIZE_ON_ADD" {%
+                  if AUTO_ORGANIZE_ON_ADD %}checked{% endif %}>
+                <label class="form-check-label" for="AUTO_ORGANIZE_ON_ADD">Organize immediately on download</label>
+              </div>
+              <div class="form-check form-switch mb-2">
+                <input class="form-check-input" type="checkbox" id="AUTO_ORGANIZE_ON_SCHEDULE"
+                  name="AUTO_ORGANIZE_ON_SCHEDULE" {% if AUTO_ORGANIZE_ON_SCHEDULE %}checked{% endif %}>
+                <label class="form-check-label" for="AUTO_ORGANIZE_ON_SCHEDULE">Enable Scheduled Scan</label>
+              </div>
+              <div class="mb-0">
+                <label for="AUTO_ORGANIZE_INTERVAL_HOURS" class="form-label small">Scan Interval (hours)</label>
+                <input type="number" class="form-control " id="AUTO_ORGANIZE_INTERVAL_HOURS"
+                  name="AUTO_ORGANIZE_INTERVAL_HOURS" min="1" value="{{ AUTO_ORGANIZE_INTERVAL_HOURS }}">
+              </div>
             </div>
 
-            <hr class="border-secondary-subtle my-3">
-            
-            <h6 class="text-body-secondary text-uppercase small mb-3">Path Configuration</h6>
-            <div class="mb-3">
-              <label for="TORRENT_DOWNLOAD_PATH" class="form-label small">Download Source Path</label>
-              <input type="text" class="form-control font-monospace" id="TORRENT_DOWNLOAD_PATH" name="TORRENT_DOWNLOAD_PATH" value="{{ TORRENT_DOWNLOAD_PATH }}">
-            </div>
 
-            <div class="mb-4">
-              <label for="ORGANIZED_PATH" class="form-label small">Organized Destination Path</label>
-              <input type="text" class="form-control font-monospace" id="ORGANIZED_PATH" name="ORGANIZED_PATH" value="{{ ORGANIZED_PATH }}">
+            <h6 class="text-uppercase mb-3 d-flex align-items-center gap-1">
+              Path Configuration
+              <i class="bi bi-info-circle-fill text-secondary ms-1" 
+                data-bs-html="true" 
+                data-bs-toggle="tooltip" 
+                data-bs-placement="top" 
+                title="only used if auto-organize is enabled">
+              </i>
+            </h6>
+            <div class="card card-body border-secondary-subtle mb-4">
+              <div class="mb-3">
+                <label for="TORRENT_DOWNLOAD_PATH" class="form-label small d-flex align-items-center gap-1">
+                  Download Source Path
+                  <i class="bi bi-info-circle-fill text-secondary ms-1" data-bs-toggle="tooltip" data-bs-placement="top"
+                    title="Where your completed torrents are stored."></i>
+                </label>
+                <input type="text" class="form-control font-monospace" id="TORRENT_DOWNLOAD_PATH"
+                  name="TORRENT_DOWNLOAD_PATH" value="{{ TORRENT_DOWNLOAD_PATH }}">
+              </div>
+
+              <div class="mb-4">
+                <label for="ORGANIZED_PATH" class="form-label small d-flex align-items-center gap-1">
+                  Organized Destination Path
+                  <i class="bi bi-info-circle-fill text-secondary ms-1" data-bs-toggle="tooltip" data-bs-placement="top"
+                    title="Where you would like your organized torrents to be stored."></i>
+                </label>
+                <input type="text" class="form-control font-monospace" id="ORGANIZED_PATH" name="ORGANIZED_PATH"
+                  value="{{ ORGANIZED_PATH }}">
+              </div>
             </div>
           </div>
+
 
           <div class="tab-pane fade" id="helpers-pane" role="tabpanel" aria-labelledby="helpers-tab" tabindex="0">
 
             <div class="card mb-3 border-secondary-subtle">
               <div class="card-header bg-transparent d-flex justify-content-between align-items-center py-2">
                 <span class="small fw-bold">
-                  <i class="bi bi-hdd-network me-1"></i> Dynamic IP
+                  <i class="bi bi-hdd-network me-1"></i> Auto-Update IP
                 </span>
                 <div class="form-check form-switch m-0">
-                  <input class="form-check-input" type="checkbox" id="ENABLE_DYNAMIC_IP_UPDATE" name="ENABLE_DYNAMIC_IP_UPDATE" {% if ENABLE_DYNAMIC_IP_UPDATE %}checked{% endif %}>
+                  <input class="form-check-input" type="checkbox" id="ENABLE_DYNAMIC_IP_UPDATE"
+                    name="ENABLE_DYNAMIC_IP_UPDATE" {% if ENABLE_DYNAMIC_IP_UPDATE %}checked{% endif %}>
                 </div>
               </div>
               <div class="card-body pt-2 pb-2">
-                 <label for="DYNAMIC_IP_UPDATE_INTERVAL_HOURS" class="form-label small mb-1">
-                   Update Interval (hours)
-                   <i class="bi bi-info-circle-fill text-secondary ms-1" 
-                      data-bs-toggle="tooltip" data-bs-placement="top" 
-                      title="How often to sync your IP address with MAM (to keep MouseSearch and your torrents running!)."></i>
-                 </label>
-                 <input type="number" class="form-control " id="DYNAMIC_IP_UPDATE_INTERVAL_HOURS" name="DYNAMIC_IP_UPDATE_INTERVAL_HOURS" min="1" value="{{ DYNAMIC_IP_UPDATE_INTERVAL_HOURS }}">
+                <label for="DYNAMIC_IP_UPDATE_INTERVAL_HOURS" class="form-label small mb-1 d-flex align-items-center gap-1">
+                  Update Interval (hours)
+                  <i class="bi bi-info-circle-fill text-secondary ms-1" data-bs-toggle="tooltip" data-bs-placement="top"
+                    title="How often to sync your IP address with MAM (to keep MouseSearch and your torrents running!)."></i>
+                </label>
+                <input type="number" class="form-control " id="DYNAMIC_IP_UPDATE_INTERVAL_HOURS"
+                  name="DYNAMIC_IP_UPDATE_INTERVAL_HOURS" min="1" value="{{ DYNAMIC_IP_UPDATE_INTERVAL_HOURS }}">
               </div>
             </div>
 
             <div class="card mb-3 border-secondary-subtle">
               <div class="card-header bg-transparent d-flex justify-content-between align-items-center py-2">
-                <span class="small fw-bold"><i class="bi bi-star-fill me-1"></i> Auto-Buy VIP</span>
+                <span class="small fw-bold"><i class="bi bi-star-fill me-1"></i> Auto-Max VIP</span>
                 <div class="form-check form-switch m-0">
-                  <input class="form-check-input" type="checkbox" id="AUTO_BUY_VIP" name="AUTO_BUY_VIP" {% if AUTO_BUY_VIP %}checked{% endif %}>
+                  <input class="form-check-input" type="checkbox" id="AUTO_BUY_VIP" name="AUTO_BUY_VIP" {% if
+                    AUTO_BUY_VIP %}checked{% endif %}>
                 </div>
               </div>
               <div class="card-body pt-2 pb-2">
-                 <label for="AUTO_BUY_VIP_INTERVAL_HOURS" class="form-label small mb-1">
-                   Top-up Interval (hours)
-                   <i class="bi bi-info-circle-fill text-secondary ms-1" 
-                      data-bs-toggle="tooltip" 
-                      title="Keeps your VIP time topped up to the maximum allowed (1250 BP/week)."></i>
-                 </label>
-                 <input type="number" class="form-control " id="AUTO_BUY_VIP_INTERVAL_HOURS" name="AUTO_BUY_VIP_INTERVAL_HOURS" min="1" value="{{ AUTO_BUY_VIP_INTERVAL_HOURS }}">
+                <label for="AUTO_BUY_VIP_INTERVAL_HOURS" class="form-label small mb-1 d-flex align-items-center gap-1">
+                  Top-up Interval (hours)
+                  <i class="bi bi-info-circle-fill text-secondary ms-1" data-bs-toggle="tooltip"
+                    title="Keeps your VIP time topped up to the maximum allowed (1250 BP/week)."></i>
+                </label>
+                <input type="number" class="form-control " id="AUTO_BUY_VIP_INTERVAL_HOURS"
+                  name="AUTO_BUY_VIP_INTERVAL_HOURS" min="1" value="{{ AUTO_BUY_VIP_INTERVAL_HOURS }}">
               </div>
             </div>
 
             <hr class="border-secondary-subtle my-4">
-            
-            <h6 class="text-body-secondary text-uppercase small mb-3">Upload Credit Automation</h6>
-            
+
+            <h6 class="text-uppercase mb-3">Upload Credit Automation</h6>
+
             <div class="row g-3 mb-3">
               <div class="col-12">
-                 <div class="card h-100 border-secondary-subtle">
-                    <div class="card-header bg-transparent py-2 d-flex justify-content-between align-items-center">
-                       <span class="small fw-bold">Ratio Watch</span>
-                       <div class="form-check form-switch m-0">
-                          <input class="form-check-input" type="checkbox" id="AUTO_BUY_UPLOAD_ON_RATIO" name="AUTO_BUY_UPLOAD_ON_RATIO" {% if AUTO_BUY_UPLOAD_ON_RATIO %}checked{% endif %}>
-                       </div>
+                <div class="card h-100 border-secondary-subtle">
+                  <div class="card-header bg-transparent py-2 d-flex justify-content-between align-items-center">
+                    <span><span class="small fw-bold">Auto Buy</span> (for low ratio)</span>
+                    <div class="form-check form-switch m-0">
+                      <input class="form-check-input" type="checkbox" id="AUTO_BUY_UPLOAD_ON_RATIO"
+                        name="AUTO_BUY_UPLOAD_ON_RATIO" {% if AUTO_BUY_UPLOAD_ON_RATIO %}checked{% endif %}>
                     </div>
-                    <div class="card-body p-2">
-                       <div class="row g-2">
-                          <div class="col-6">
-                             <label class="small text-body-secondary d-block">
-                               Threshold
-                               <i class="bi bi-info-circle-fill text-secondary ms-1" 
-                                  data-bs-toggle="tooltip" 
-                                  title="Triggers purchase if your MAM ratio falls below this value. MAM requires > 1.0."></i>
-                             </label>
-                             <input type="number" step="0.1" class="form-control " id="AUTO_BUY_UPLOAD_RATIO_THRESHOLD" name="AUTO_BUY_UPLOAD_RATIO_THRESHOLD" min="1.0" value="{{ AUTO_BUY_UPLOAD_RATIO_THRESHOLD }}">
-                          </div>
-                          <div class="col-6">
-                             <label class="small text-body-secondary d-block">
-                               Buy (GB)
-                               <i class="bi bi-info-circle-fill text-secondary ms-1" 
-                                  data-bs-toggle="tooltip" 
-                                  title="Amount of credit to buy when triggered. 500 BP per GB."></i>
-                             </label>
-                             <input type="number" step="0.5" class="form-control  upload-amount-input" id="AUTO_BUY_UPLOAD_RATIO_AMOUNT" name="AUTO_BUY_UPLOAD_RATIO_AMOUNT" min="1" value="{{ AUTO_BUY_UPLOAD_RATIO_AMOUNT }}">
-                          </div>
-                       </div>
+                  </div>
+                  <div class="card-body p-2">
+                    <div class="row g-2">
+                      <div class="col-6">
+                        <label class="small text-body-secondary d-block d-flex align-items-center gap-1">
+                          Threshold
+                          <i class="bi bi-info-circle-fill text-secondary ms-1" data-bs-toggle="tooltip"
+                            title="Triggers purchase if your MAM ratio falls below this value. MAM requires > 1.0."></i>
+                        </label>
+                        <input type="number" step="0.1" class="form-control " id="AUTO_BUY_UPLOAD_RATIO_THRESHOLD"
+                          name="AUTO_BUY_UPLOAD_RATIO_THRESHOLD" min="1.0"
+                          value="{{ AUTO_BUY_UPLOAD_RATIO_THRESHOLD }}">
+                      </div>
+                      <div class="col-6">
+                        <label class="small text-body-secondary d-block d-flex align-items-center gap-1">
+                          Buy (GB)
+                          <i class="bi bi-info-circle-fill text-secondary ms-1" data-bs-toggle="tooltip"
+                            title="Amount of credit to buy when triggered. 500 BP per GB."></i>
+                        </label>
+                        <input type="number" step="0.5" class="form-control  upload-amount-input"
+                          id="AUTO_BUY_UPLOAD_RATIO_AMOUNT" name="AUTO_BUY_UPLOAD_RATIO_AMOUNT" min="1"
+                          value="{{ AUTO_BUY_UPLOAD_RATIO_AMOUNT }}">
+                      </div>
                     </div>
-                 </div>
+                  </div>
+                </div>
               </div>
 
               <div class="col-12">
-                 <div class="card h-100 border-secondary-subtle">
-                    <div class="card-header bg-transparent py-2 d-flex justify-content-between align-items-center">
-                       <span class="small fw-bold">Buffer Watch</span>
-                       <div class="form-check form-switch m-0">
-                          <input class="form-check-input" type="checkbox" id="AUTO_BUY_UPLOAD_ON_BUFFER" name="AUTO_BUY_UPLOAD_ON_BUFFER" {% if AUTO_BUY_UPLOAD_ON_BUFFER %}checked{% endif %}>
-                       </div>
+                <div class="card h-100 border-secondary-subtle">
+                  <div class="card-header bg-transparent py-2 d-flex justify-content-between align-items-center">
+                    <span><span class="small fw-bold">Auto Buy</span> (for low upload credit)</span>
+                    <div class="form-check form-switch m-0">
+                      <input class="form-check-input" type="checkbox" id="AUTO_BUY_UPLOAD_ON_BUFFER"
+                        name="AUTO_BUY_UPLOAD_ON_BUFFER" {% if AUTO_BUY_UPLOAD_ON_BUFFER %}checked{% endif %}>
                     </div>
-                    <div class="card-body p-2">
-                       <div class="row g-2">
-                          <div class="col-6">
-                             <label class="small text-body-secondary d-block">
-                               Threshold (GB)
-                               <i class="bi bi-info-circle-fill text-secondary ms-1" 
-                                  data-bs-toggle="tooltip" 
-                                  title="Triggers purchase if your buffer (Uploaded - Downloaded) drops below this GB amount."></i>
-                             </label>
-                             <input type="number" step="0.5" class="form-control " id="AUTO_BUY_UPLOAD_BUFFER_THRESHOLD" name="AUTO_BUY_UPLOAD_BUFFER_THRESHOLD" min="0" value="{{ AUTO_BUY_UPLOAD_BUFFER_THRESHOLD }}">
-                          </div>
-                          <div class="col-6">
-                             <label class="small text-body-secondary d-block">
-                              Buy (GB)
-                                  <i class="bi bi-info-circle-fill text-secondary ms-1" 
-                                  data-bs-toggle="tooltip" 
-                                  title="Amount of credit to buy when triggered. 500 BP per GB."></i>
-                            </label>
-                             <input type="number" step="0.5" class="form-control  upload-amount-input" id="AUTO_BUY_UPLOAD_BUFFER_AMOUNT" name="AUTO_BUY_UPLOAD_BUFFER_AMOUNT" min="1" value="{{ AUTO_BUY_UPLOAD_BUFFER_AMOUNT }}" list="upload-amounts-list">
-                          </div>
-                       </div>
+                  </div>
+                  <div class="card-body p-2">
+                    <div class="row g-2">
+                      <div class="col-6">
+                        <label class="small text-body-secondary d-block d-flex align-items-center gap-1">
+                          Threshold (GB)
+                          <i class="bi bi-info-circle-fill text-secondary ms-1" data-bs-toggle="tooltip"
+                            title="Triggers purchase if your buffer (Uploaded - Downloaded) drops below this GB amount."></i>
+                        </label>
+                        <input type="number" step="0.5" class="form-control " id="AUTO_BUY_UPLOAD_BUFFER_THRESHOLD"
+                          name="AUTO_BUY_UPLOAD_BUFFER_THRESHOLD" min="0"
+                          value="{{ AUTO_BUY_UPLOAD_BUFFER_THRESHOLD }}">
+                      </div>
+                      <div class="col-6">
+                        <label class="small text-body-secondary d-block d-flex align-items-center gap-1">
+                          Buy (GB)
+                          <i class="bi bi-info-circle-fill text-secondary ms-1" data-bs-toggle="tooltip"
+                            title="Amount of credit to buy when triggered. 500 BP per GB."></i>
+                        </label>
+                        <input type="number" step="0.5" class="form-control  upload-amount-input"
+                          id="AUTO_BUY_UPLOAD_BUFFER_AMOUNT" name="AUTO_BUY_UPLOAD_BUFFER_AMOUNT" min="1"
+                          value="{{ AUTO_BUY_UPLOAD_BUFFER_AMOUNT }}" list="upload-amounts-list">
+                      </div>
                     </div>
-                 </div>
+                  </div>
+                </div>
               </div>
             </div>
-            
+
             <div class="mb-3">
-               <label for="AUTO_BUY_UPLOAD_CHECK_INTERVAL_HOURS" class="form-label small">
+              <label for="AUTO_BUY_UPLOAD_CHECK_INTERVAL_HOURS" class="form-label small d-flex align-items-center gap-1">
                 Check Interval (hours)
-                <i class="bi bi-info-circle-fill text-secondary ms-1" 
-                  data-bs-toggle="tooltip" 
+                <i class="bi bi-info-circle-fill text-secondary ms-1" data-bs-toggle="tooltip"
                   title="How often to check against these thresholds."></i>
               </label>
-               <input type="number" class="form-control " id="AUTO_BUY_UPLOAD_CHECK_INTERVAL_HOURS" name="AUTO_BUY_UPLOAD_CHECK_INTERVAL_HOURS" min="1" value="{{ AUTO_BUY_UPLOAD_CHECK_INTERVAL_HOURS }}">
+              <input type="number" class="form-control " id="AUTO_BUY_UPLOAD_CHECK_INTERVAL_HOURS"
+                name="AUTO_BUY_UPLOAD_CHECK_INTERVAL_HOURS" min="1" value="{{ AUTO_BUY_UPLOAD_CHECK_INTERVAL_HOURS }}">
             </div>
 
-             <datalist id="upload-amounts-list">
-               {% for amount in UPLOAD_OPTIONS.keys() | sort %}
-               <option value="{{ amount }}"></option>
-               {% endfor %}
-             </datalist>
+            <datalist id="upload-amounts-list">
+              {% for amount in UPLOAD_OPTIONS.keys() | sort %}
+              <option value="{{ amount }}"></option>
+              {% endfor %}
+            </datalist>
 
           </div>
         </div>
@@ -782,7 +917,7 @@
       aria-live="assertive" aria-atomic="true">
       <div class="d-flex">
         <div class="toast-body" id="toast-message">
-          </div>
+        </div>
         <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"
           aria-label="Close"></button>
       </div>
