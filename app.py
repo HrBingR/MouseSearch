@@ -43,12 +43,14 @@ connected_websockets = set()
 
 @app.before_serving
 async def startup():
-    # Only start cache cleanup if thumbnail caching is enabled
-    if initial_config.get("ENABLE_FILESYSTEM_THUMBNAIL_CACHE", True):
+    # 1. Load the configuration FIRST
+    await load_new_app_config()
+
+    # 2. Use app.config (instead of initial_config) to check settings
+    if app.config.get("ENABLE_FILESYSTEM_THUMBNAIL_CACHE", True):
         app.logger.debug("Cache cleanup task started")
         app.add_background_task(cleanup_cache_task)
     
-    await load_new_app_config()
     if not scheduler.running:
         scheduler.start()
         app.logger.debug("AsyncIOScheduler started")
