@@ -670,12 +670,17 @@ document.addEventListener("DOMContentLoaded", function () {
         });
     }
 
-    // Search and Download Logic
+    // ============================================================
+    //  SEARCH HISTORY & LOGIC (REPLACES OLD SEARCH BLOCK)
+    // ============================================================
+
     const searchForm = document.getElementById("search-form");
     const resultsContainer = document.getElementById("results-container");
     const searchButton = document.getElementById("searchButton");
     const wrapper = document.getElementById('results-container-wrapper');
     const resultsTitle = document.getElementById('results-title');
+    
+    // Global variables for the confirmation modal
     let pendingDownloadData = null;
     let pendingButton = null;
     const confirmModalEl = document.getElementById('downloadConfirmModal');
@@ -684,6 +689,141 @@ document.addEventListener("DOMContentLoaded", function () {
     const previewSpan = document.getElementById('full-path-preview');
 
     if (confirmInput && previewSpan) confirmInput.addEventListener('input', function () { previewSpan.textContent = this.value; });
+
+    // --- A. Reusable Search Function ---
+    // This function runs the actual fetch. We need this so we can call it 
+    // from the Submit button AND from the Back button.
+    function performSearch(queryString, isHistoryNavigation = false) {
+        if (!queryString) return;
+
+        searchButton.disabled = true;
+        searchButton.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Searching...`;
+        if (resultsTitle) resultsTitle.textContent = 'Results';
+        hashToElementMap.clear();
+
+        fetch(`/mam/search?${queryString}`)
+            .then(response => response.text())
+            .then(html => {
+                wrapper.style.display = 'block';
+                resultsContainer.innerHTML = html;
+                
+                // Update Title
+                const count = resultsContainer.querySelectorAll('.result-item').length;
+                if (resultsTitle) resultsTitle.textContent = `Results (${count})`;
+                
+                // Only scroll if this was a new search, not a Back button press
+                if (!isHistoryNavigation) {
+                    wrapper.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+                
+                refreshCategories();
+                initializeSnatchedTorrents();
+            })
+            .catch(error => {
+                wrapper.style.display = 'block';
+                resultsContainer.innerHTML = `<div class="alert alert-danger">Search failed.</div>`;
+            })
+            .finally(() => { 
+                searchButton.disabled = false; 
+                searchButton.innerHTML = "Search"; 
+            });
+    }
+
+    // --- B. Helper: Sync Form UI to URL ---
+    // If user hits Back, we need to make the checkboxes/inputs match the URL
+    function restoreFormFromURL(params) {
+        document.getElementById('query').value = params.get('query') || '';
+        
+        // Restore Checkboxes
+        ['search_in_title', 'search_in_author', 'search_in_narrator', 'search_in_series'].forEach(id => {
+            const el = document.getElementById(id);
+            if(el) el.checked = params.has(id); // Checkbox is checked if param exists
+        });
+
+        // Restore Selects
+        if(params.get('media_type')) document.getElementById('media_type').value = params.get('media_type');
+        if(params.get('language')) document.getElementById('language').value = params.get('language');
+    }
+
+
+    // --- C. Event Listener: Form Submit ---
+    if (searchForm) {
+        searchForm.addEventListener("submit", function (e) {
+            e.preventDefault();
+            
+            // 1. Get Data
+            const formData = new FormData(searchForm);
+            const queryParams = new URLSearchParams(formData);
+            const queryString = queryParams.toString();
+
+            // 2. Push State (Update Browser URL without reloading)
+            // We save the query string into the history state object
+            const newUrl = `${window.location.pathname}?${queryString}`;
+            history.pushState({ type: 'search', query: queryString }, '', newUrl);
+
+            // 3. Run Search
+            performSearch(queryString);
+        });
+    }
+
+    // --- D. Event Listener: Browser Navigation (Back/Forward) ---
+    window.addEventListener('popstate', (event) => {
+        // Handle "Back" logic
+        
+        if (event.state && event.state.type === 'search') {
+            // Case 1: We are going back to a search result
+            restoreFormFromURL(new URLSearchParams(event.state.query));
+            performSearch(event.state.query, true); // true = don't auto-scroll
+        } else {
+            // Case 2: We went back to the "Home" state (empty)
+            // If the URL has params (e.g. user refreshed on a search page then hit back), use URL
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.has('query')) {
+                 performSearch(urlParams.toString(), true);
+            } else {
+                // Clear the screen
+                wrapper.style.display = 'none';
+                resultsContainer.innerHTML = '';
+                document.getElementById('query').value = '';
+                if (resultsTitle) resultsTitle.textContent = 'Results';
+            }
+        }
+    });
+
+    // --- E. Initial Load (Deep Linking) ---
+    // If user refreshes the page or pastes a link with ?query=..., run it immediately
+    const initialParams = new URLSearchParams(window.location.search);
+    if (initialParams.has('query')) {
+        restoreFormFromURL(initialParams);
+        performSearch(initialParams.toString());
+    }
+
+    // --- F. Settings Panel "Back Button" Logic (Optional) ---
+    // This makes the Settings Offcanvas close when you hit Back
+    const settingsOffcanvas = document.getElementById('settingsOffcanvas');
+    if (settingsOffcanvas) {
+        settingsOffcanvas.addEventListener('shown.bs.offcanvas', () => {
+            // When settings open, add a fake history entry
+            history.pushState({ type: 'settings' }, '', '#settings');
+        });
+
+        settingsOffcanvas.addEventListener('hidden.bs.offcanvas', () => {
+            // If we closed settings manually (clicked X), remove the hash if it exists
+            if (window.location.hash === '#settings') {
+                history.back();
+            }
+        });
+        
+        // Add to the global popstate listener (logic merged above conceptually, 
+        // but here is the specific handler for the offcanvas closing)
+        window.addEventListener('popstate', (event) => {
+            const openedCanvas = document.querySelector('.offcanvas.show');
+            if (openedCanvas) {
+                const bsCanvas = bootstrap.Offcanvas.getInstance(openedCanvas);
+                if (bsCanvas) bsCanvas.hide();
+            }
+        });
+    }
 
     function sanitizeFilename(name) {
         if (!name) return "Unknown";

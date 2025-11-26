@@ -1549,7 +1549,7 @@ async def proxy_thumbnail():
             if time.time() - os.path.getmtime(cache_path) < 2592000:
                 response = await send_file(cache_path)
                 response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
-                response.headers["X-Cache-Status"] = "HIT"
+                response.headers["X-mousesearch-Cache-Status"] = "HIT"
                 return response
             
     # --- Upstream Fetch ---
@@ -1586,7 +1586,7 @@ async def proxy_thumbnail():
                 await r.aclose()
 
         response = Response(body(), status=r.status_code, headers=passthrough)
-        response.headers["X-Cache-Status"] = "MISS" if cache_enabled else "DISABLED"
+        response.headers["X-mousesearch-Cache-Status"] = "MISS" if cache_enabled else "DISABLED"
         return response
 
 @app.route("/update_settings", methods=["POST"])
