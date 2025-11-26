@@ -330,13 +330,43 @@ async function fetchAndUpdateTorrentStatus(hash, resultItem) {
     } catch (error) { console.error(`Error fetching hash ${hash}:`, error); }
 }
 
+async function fetchPublicIP() {
+    fetch('/system/public_ip')
+        .then(r => r.json())
+        .then(data => {
+            if (data.ip) {
+                // Update all IP display fields
+                document.querySelectorAll('.backend-ip-display').forEach(el => el.textContent = data.ip);
+                // Show the badge in the helpers tab
+                document.querySelectorAll('.backend-ip-display-badge').forEach(el => el.style.display = 'inline-block');
+
+                // Setup Copy Buttons
+                document.querySelectorAll('.copy-ip-btn').forEach(btn => {
+                    btn.onclick = (e) => {
+                        navigator.clipboard.writeText(data.ip);
+                        // Visual feedback
+                        const originalIcon = btn.innerHTML;
+                        btn.innerHTML = '<i class="bi bi-check2 text-success"></i>';
+                        setTimeout(() => btn.innerHTML = originalIcon, 2000);
+                    };
+                });
+            } else {
+                document.querySelectorAll('.backend-ip-display').forEach(el => el.textContent = "Error");
+            }
+        })
+        .catch(err => {
+            console.error("Failed to fetch IP", err);
+            document.querySelectorAll('.backend-ip-display').forEach(el => el.textContent = "Unavailable");
+        });
+}
+
 // --- Main Event Listeners ---
 document.addEventListener("DOMContentLoaded", function () {
     initializeEventStream();
 
     // Init Tooltips
     [...document.querySelectorAll('[data-bs-toggle="tooltip"]')].map(el => new bootstrap.Tooltip(el));
-
+    fetchPublicIP()
     checkClientStatus();
     loadMamUserData();
 
@@ -478,7 +508,7 @@ document.addEventListener("DOMContentLoaded", function () {
     //  BUTTON HANDLERS
     // ============================================================
 
-document.getElementById('save-settings-button')?.addEventListener('click', function () {
+    document.getElementById('save-settings-button')?.addEventListener('click', function () {
         fetch('/update_settings', { method: 'POST', body: new FormData(document.getElementById('settings-form')) })
             .then(response => response.json())
             .then(data => {
