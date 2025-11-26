@@ -1,5 +1,5 @@
 # app.py - Quart (async) version
-from quart import Quart, request, render_template, Response, jsonify, session, send_file
+from quart import Quart, request, render_template, Response, jsonify, send_file
 import httpx
 import json
 import argparse
