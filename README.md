@@ -84,7 +84,7 @@ The application will be available at `http://<your-server-ip>:5000`.
 
 ### Setup Steps
 
-1.  Clone this repository:
+1.  Fork or Clone this repository:
     ```bash
     git clone https://github.com/sevenlayercookie/MouseSearch.git
     cd MouseSearch
