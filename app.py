@@ -222,23 +222,28 @@ async def load_new_app_config():
         "CF-Access-Client-Id": new_config.get("CF_ACCESS_CLIENT_ID"),
         "CF-Access-Client-Secret": new_config.get("CF_ACCESS_CLIENT_SECRET"),
     }
+    # Remove None values
     app.config["BASE_HEADERS"] = {k: v for k, v in app.config["BASE_HEADERS"].items() if v is not None}
     
-    # Load the pre-calculated upload options
+    # Load upload options
     app.config["UPLOAD_OPTIONS"] = load_upload_options()
-    app.logger.debug(f"Loaded {len(app.config['UPLOAD_OPTIONS'])} valid upload purchase options.")
     
-    # Update path globals from config
+    # Update path globals
     global ORGANIZED_PATH, TORRENT_DOWNLOAD_PATH
     ORGANIZED_PATH = Path(new_config.get("ORGANIZED_PATH", FALLBACK_CONFIG["ORGANIZED_PATH"])).resolve()
     TORRENT_DOWNLOAD_PATH = Path(new_config.get("TORRENT_DOWNLOAD_PATH", FALLBACK_CONFIG["TORRENT_DOWNLOAD_PATH"])).resolve()
-    app.logger.debug(f"Paths updated - ORGANIZED: {ORGANIZED_PATH}, DOWNLOAD: {TORRENT_DOWNLOAD_PATH}")
     
     global mam_session_cookies
     mam_session_cookies = {"mam_id": app.config.get("MAM_ID")}
     
-
-    global torrent_client
+    # --- CRITICAL FIX HERE ---
+    global torrent_client 
+    try:
+        torrent_client = get_torrent_client(app.config)
+        app.logger.info(f"Initialized torrent client: {app.config.get('TORRENT_CLIENT_TYPE', 'qbittorrent')}")
+    except Exception as e:
+        app.logger.error(f"Failed to initialize torrent client: {e}")
+        torrent_client = None
 
 # --- ACTIVE MONITORING & CACHING LOGIC ---
 
