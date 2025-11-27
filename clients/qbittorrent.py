@@ -9,7 +9,6 @@ class QBittorrentClient(TorrentClient):
         self.base_url = config.get("TORRENT_CLIENT_URL")
         self.username = config.get("TORRENT_CLIENT_USERNAME")
         self.password = config.get("TORRENT_CLIENT_PASSWORD")
-        self.headers = config.get("BASE_HEADERS", {})
 
     @property
     def display_name(self) -> str:

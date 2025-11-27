@@ -127,8 +127,6 @@ FALLBACK_CONFIG = {
     "TORRENT_CLIENT_PASSWORD": "",
     "TORRENT_CLIENT_CATEGORY": "",
     "MAM_ID": "",
-    "CF_ACCESS_CLIENT_ID": None,
-    "CF_ACCESS_CLIENT_SECRET": None,
     "DATA_PATH": "./data",
     "ORGANIZED_PATH": "/downloads/organized",
     "TORRENT_DOWNLOAD_PATH": "/downloads/torrents",
@@ -217,13 +215,6 @@ async def load_new_app_config():
     new_config = load_config()
     app.secret_key = new_config["QUART_SECRET_KEY"]
     app.config.update(new_config)
-    
-    app.config["BASE_HEADERS"] = {
-        "CF-Access-Client-Id": new_config.get("CF_ACCESS_CLIENT_ID"),
-        "CF-Access-Client-Secret": new_config.get("CF_ACCESS_CLIENT_SECRET"),
-    }
-    # Remove None values
-    app.config["BASE_HEADERS"] = {k: v for k, v in app.config["BASE_HEADERS"].items() if v is not None}
     
     # Load upload options
     app.config["UPLOAD_OPTIONS"] = load_upload_options()
