@@ -1,19 +1,26 @@
 // main.js
 
-// --- Global Helpers ---
+// ============================================================
+//  1. GLOBAL HELPERS & STATE
+// ============================================================
+
+// Icon definitions
+const greenCheckIcon = `<img src="/static/icons/check_circle.svg" alt="connected" style="height: 16px; width: 16px;">`;
+const redXIcon = `<img src="/static/icons/x_circle.svg" alt="not connected" style="height: 16px; width: 16px;">`;
+
+// Global State
+const torrentHashMap = {};
+const hashToElementMap = new Map();
+let lastClientStatus = null;
+window.currentVipUntil = null;
+window.currentBonusPoints = 0;
+// Validation for upload purchase amounts
+window.VALID_UPLOAD_AMOUNTS = [10, 50, 100, 500, 1000]; 
 
 /**
  * Global helper to toggle switch when header is clicked.
- * This is called by the HTML onclick attribute.
+ * Exposed to window for HTML onclick attributes.
  */
-function toggleCardSwitch(checkboxId) {
-    const checkbox = document.getElementById(checkboxId);
-    if (checkbox) {
-        // This triggers the 'change' event listener defined in DOMContentLoaded
-        checkbox.click();
-    }
-}
-
 window.toggleCardSwitch = function (checkboxId) {
     const checkbox = document.getElementById(checkboxId);
     if (checkbox) checkbox.click();
@@ -58,19 +65,28 @@ function formatDuration(seconds) {
     return result.slice(0, 2).join(' ');
 }
 
-// Icon definitions
-const greenCheckIcon = `<img src="/static/icons/check_circle.svg" alt="connected" style="height: 16px; width: 16px;">`;
-const redXIcon = `<img src="/static/icons/x_circle.svg" alt="not connected" style="height: 16px; width: 16px;">`;
+function sanitizeFilename(name) {
+    if (!name) return "Unknown";
+    return name.replace(/[<>:"/\\|?*]/g, '').trim();
+}
 
-// Global State
-const pollingIntervals = {};
-const torrentHashMap = {};
-const hashToElementMap = new Map();
-let lastClientStatus = null;
-let lastMamStats = null;
-window.currentVipUntil = null;
-window.currentBonusPoints = 0;
+function getSeriesName(seriesJsonStr) {
+    try {
+        if (!seriesJsonStr) return null;
+        const data = JSON.parse(seriesJsonStr);
+        const values = Object.values(data);
+        if (values.length > 0 && Array.isArray(values[0])) {
+            return values[0][0];
+        }
+    } catch (e) {
+        console.error("Error parsing series info:", e);
+    }
+    return null;
+}
 
+// ============================================================
+//  2. SERVER COMMUNICATION (SSE & FETCH)
+// ============================================================
 
 /**
  * Initializes Server-Sent Events (SSE)
@@ -335,23 +351,17 @@ async function fetchPublicIP() {
         .then(r => r.json())
         .then(data => {
             if (data.ip) {
-                // Update all IP display fields
                 document.querySelectorAll('.backend-ip-display').forEach(el => el.textContent = data.ip);
-                // Show the badge in the helpers tab
                 document.querySelectorAll('.backend-ip-display-badge').forEach(el => el.style.display = 'inline-block');
-                // Setup Copy Buttons
                 document.querySelectorAll('.copy-ip-btn').forEach(btn => {
-                    // Check if Clipboard API is supported/allowed
                     if (navigator.clipboard) {
                         btn.onclick = (e) => {
                             navigator.clipboard.writeText(data.ip);
-                            // Visual feedback
                             const originalIcon = btn.innerHTML;
                             btn.innerHTML = '<i class="bi bi-check2 text-success"></i>';
                             setTimeout(() => btn.innerHTML = originalIcon, 2000);
                         };
                     } else {
-                        // If API is missing (e.g. HTTP), hide the button entirely
                         btn.style.display = 'none';
                     }
                 });
@@ -365,21 +375,22 @@ async function fetchPublicIP() {
         });
 }
 
-// --- Main Event Listeners ---
+// ============================================================
+//  3. MAIN DOM EVENT LISTENERS
+// ============================================================
+
 document.addEventListener("DOMContentLoaded", function () {
     initializeEventStream();
 
     // Init Tooltips
     [...document.querySelectorAll('[data-bs-toggle="tooltip"]')].map(el => new bootstrap.Tooltip(el));
-    fetchPublicIP()
+    
+    // Initial Fetches
+    fetchPublicIP();
     checkClientStatus();
     loadMamUserData();
 
-    // ============================================================
-    //  --- 2. PASTE THIS SECTION HERE (REPLACING OLD SETTINGS LOGIC) ---
-    // ============================================================
-
-    // A. Main Toggle Logic Loop
+    // --- A. Settings & Toggle Logic ---
     const toggleInputs = document.querySelectorAll('.form-check-input[data-collapse-target]');
 
     toggleInputs.forEach(input => {
@@ -388,29 +399,23 @@ document.addEventListener("DOMContentLoaded", function () {
 
         if (!targetEl) return;
 
-        // 1. PREVENT DOUBLE CLICK (LOCK)
+        // Prevent double click during animation
         input.addEventListener('click', function (e) {
-            e.stopPropagation(); // Stop bubbling to header
-            // If animation is running, STOP the user from clicking again
+            e.stopPropagation();
             if (targetEl.classList.contains('collapsing')) {
                 e.preventDefault();
-                console.log('Toggle blocked: Animation in progress');
                 return false;
             }
         });
 
-        // 2. SYNC ACCORDION TO CHECKBOX
+        // Sync Accordion
         input.addEventListener('change', function () {
             const bsCollapse = bootstrap.Collapse.getOrCreateInstance(targetEl, { toggle: false });
-            if (this.checked) {
-                bsCollapse.show();
-            } else {
-                bsCollapse.hide();
-            }
+            this.checked ? bsCollapse.show() : bsCollapse.hide();
             updateDependentFields();
         });
 
-        // 3. SAFETY NET (AUTO-CORRECT)
+        // Safety net (Auto-correct state)
         targetEl.addEventListener('shown.bs.collapse', () => {
             if (!input.checked) { input.checked = true; updateDependentFields(); }
         });
@@ -419,11 +424,10 @@ document.addEventListener("DOMContentLoaded", function () {
         });
     });
 
-    // B. Dependent Fields Logic
+    // Dependent Fields Logic
     function updateDependentFields() {
         const isChecked = (id) => document.getElementById(id)?.checked || false;
 
-        // --- 1. EXISTING ENABLE/DISABLE LOGIC ---
         const config = [
             { trigger: 'ENABLE_DYNAMIC_IP_UPDATE', target: 'DYNAMIC_IP_UPDATE_INTERVAL_HOURS' },
             { trigger: 'AUTO_BUY_VIP', target: 'AUTO_BUY_VIP_INTERVAL_HOURS' },
@@ -440,55 +444,34 @@ document.addEventListener("DOMContentLoaded", function () {
             });
         });
 
-        // --- 2. HIDE LOGIC: UPLOAD CHECK INTERVAL ---
+        // Upload Check Interval Logic
         const ratioOn = isChecked('AUTO_BUY_UPLOAD_ON_RATIO');
         const bufferOn = isChecked('AUTO_BUY_UPLOAD_ON_BUFFER');
         const uploadContainer = document.getElementById('upload-check-interval-container');
         const uploadInput = document.getElementById('AUTO_BUY_UPLOAD_CHECK_INTERVAL_HOURS');
 
         if (uploadContainer) {
-            // Hide if BOTH are off
-            if (!ratioOn && !bufferOn) {
-                uploadContainer.classList.add('d-none');
-            } else {
-                uploadContainer.classList.remove('d-none');
-            }
+            uploadContainer.classList.toggle('d-none', !ratioOn && !bufferOn);
         }
         if (uploadInput) uploadInput.disabled = (!ratioOn && !bufferOn);
 
-        // --- 3. NEW HIDE LOGIC: AUTO ORGANIZE ---
+        // Auto Organize Path Logic
         const organizeOnAdd = isChecked('AUTO_ORGANIZE_ON_ADD');
         const organizeOnSchedule = isChecked('AUTO_ORGANIZE_ON_SCHEDULE');
-
-        // [DELETED] Section A (Interval) is gone. 
-        // The "data-collapse-target" logic handles the animation automatically now.
-
-        // B. Path Config: Keep this (because it depends on TWO toggles, animation is harder)
         const pathContainer = document.getElementById('path-configuration-container');
         if (pathContainer) {
-            if (!organizeOnAdd && !organizeOnSchedule) {
-                pathContainer.classList.add('d-none');
-            } else {
-                pathContainer.classList.remove('d-none');
-            }
+            pathContainer.classList.toggle('d-none', !organizeOnAdd && !organizeOnSchedule);
         }
     }
 
-    // --- ENSURE TRIGGERS ---
-    // Make sure the Auto-Organize checkboxes trigger the update, 
-    // even if they don't have the 'data-collapse-target' attribute.
     ['AUTO_ORGANIZE_ON_ADD', 'AUTO_ORGANIZE_ON_SCHEDULE'].forEach(id => {
         const el = document.getElementById(id);
-        if (el) {
-            el.addEventListener('change', updateDependentFields);
-        }
+        if (el) el.addEventListener('change', updateDependentFields);
     });
 
-    // Initial run
     updateDependentFields();
 
-
-    // --- UPLOAD AMOUNT VALIDATION ---
+    // Upload Amount Validation
     function findNearestValidAmount(value) {
         if (!window.VALID_UPLOAD_AMOUNTS || window.VALID_UPLOAD_AMOUNTS.length === 0) return value;
         const numValue = parseFloat(value);
@@ -509,22 +492,17 @@ document.addEventListener("DOMContentLoaded", function () {
         });
     });
 
-    // ============================================================
-    //  BUTTON HANDLERS
-    // ============================================================
+    // --- B. Button Handlers (Save, VIP, Upload) ---
 
+    // Save Settings
     document.getElementById('save-settings-button')?.addEventListener('click', function () {
         fetch('/update_settings', { method: 'POST', body: new FormData(document.getElementById('settings-form')) })
             .then(response => response.json())
             .then(data => {
                 showToast(data.message, data.status === 'success' ? 'success' : 'danger');
                 if (data.status === 'success') {
-
-                    // Update the data attribute to the new value so refreshCategories doesn't revert it
                     const catDropdown = document.getElementById('TORRENT_CLIENT_CATEGORY');
-                    if (catDropdown) {
-                        catDropdown.dataset.currentValue = catDropdown.value;
-                    }
+                    if (catDropdown) catDropdown.dataset.currentValue = catDropdown.value;
 
                     const clientLink = document.getElementById('clientLink');
                     const clientUrl = document.getElementById('TORRENT_CLIENT_URL').value;
@@ -671,7 +649,7 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     // ============================================================
-    //  SEARCH HISTORY & LOGIC (REPLACES OLD SEARCH BLOCK)
+    //  C. SEARCH & DOWNLOAD LOGIC
     // ============================================================
 
     const searchForm = document.getElementById("search-form");
@@ -680,7 +658,7 @@ document.addEventListener("DOMContentLoaded", function () {
     const wrapper = document.getElementById('results-container-wrapper');
     const resultsTitle = document.getElementById('results-title');
     
-    // Global variables for the confirmation modal
+    // Download Confirmation & Modal Variables
     let pendingDownloadData = null;
     let pendingButton = null;
     const confirmModalEl = document.getElementById('downloadConfirmModal');
@@ -690,9 +668,6 @@ document.addEventListener("DOMContentLoaded", function () {
 
     if (confirmInput && previewSpan) confirmInput.addEventListener('input', function () { previewSpan.textContent = this.value; });
 
-    // --- A. Reusable Search Function ---
-    // This function runs the actual fetch. We need this so we can call it 
-    // from the Submit button AND from the Back button.
     function performSearch(queryString, isHistoryNavigation = false) {
         if (!queryString) return;
 
@@ -706,16 +681,11 @@ document.addEventListener("DOMContentLoaded", function () {
             .then(html => {
                 wrapper.style.display = 'block';
                 resultsContainer.innerHTML = html;
-                
-                // Update Title
                 const count = resultsContainer.querySelectorAll('.result-item').length;
                 if (resultsTitle) resultsTitle.textContent = `Results (${count})`;
-                
-                // Only scroll if this was a new search, not a Back button press
                 if (!isHistoryNavigation) {
                     wrapper.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 }
-                
                 refreshCategories();
                 initializeSnatchedTorrents();
             })
@@ -729,163 +699,79 @@ document.addEventListener("DOMContentLoaded", function () {
             });
     }
 
-    // --- B. Helper: Sync Form UI to URL ---
-    // If user hits Back, we need to make the checkboxes/inputs match the URL
     function restoreFormFromURL(params) {
         document.getElementById('query').value = params.get('query') || '';
-        
-        // Restore Checkboxes
         ['search_in_title', 'search_in_author', 'search_in_narrator', 'search_in_series'].forEach(id => {
             const el = document.getElementById(id);
-            if(el) el.checked = params.has(id); // Checkbox is checked if param exists
+            if(el) el.checked = params.has(id);
         });
-
-        // Restore Selects
         if(params.get('media_type')) document.getElementById('media_type').value = params.get('media_type');
         if(params.get('language')) document.getElementById('language').value = params.get('language');
     }
 
-
-    // --- C. Event Listener: Form Submit ---
     if (searchForm) {
         searchForm.addEventListener("submit", function (e) {
             e.preventDefault();
-            
-            // 1. Get Data
             const formData = new FormData(searchForm);
             const queryParams = new URLSearchParams(formData);
             const queryString = queryParams.toString();
-
-            // 2. Push State (Update Browser URL without reloading)
-            // We save the query string into the history state object
             const newUrl = `${window.location.pathname}?${queryString}`;
+            
             history.pushState({ type: 'search', query: queryString }, '', newUrl);
-
-            // 3. Run Search
             performSearch(queryString);
         });
     }
 
-    // --- D. Event Listener: Browser Navigation (Back/Forward) ---
+    // Handle Browser Back/Forward
     window.addEventListener('popstate', (event) => {
-        // Handle "Back" logic
-        
         if (event.state && event.state.type === 'search') {
-            // Case 1: We are going back to a search result
             restoreFormFromURL(new URLSearchParams(event.state.query));
-            performSearch(event.state.query, true); // true = don't auto-scroll
+            performSearch(event.state.query, true);
         } else {
-            // Case 2: We went back to the "Home" state (empty)
-            // If the URL has params (e.g. user refreshed on a search page then hit back), use URL
             const urlParams = new URLSearchParams(window.location.search);
             if (urlParams.has('query')) {
                  performSearch(urlParams.toString(), true);
             } else {
-                // Clear the screen
                 wrapper.style.display = 'none';
                 resultsContainer.innerHTML = '';
                 document.getElementById('query').value = '';
                 if (resultsTitle) resultsTitle.textContent = 'Results';
             }
         }
+        
+        // Handle Settings Offcanvas via History
+        const openedCanvas = document.querySelector('.offcanvas.show');
+        if (openedCanvas) {
+            const bsCanvas = bootstrap.Offcanvas.getInstance(openedCanvas);
+            if (bsCanvas) bsCanvas.hide();
+        }
     });
 
-    // --- E. Initial Load (Deep Linking) ---
-    // If user refreshes the page or pastes a link with ?query=..., run it immediately
+    // Deep Linking (Load search on refresh)
     const initialParams = new URLSearchParams(window.location.search);
     if (initialParams.has('query')) {
         restoreFormFromURL(initialParams);
         performSearch(initialParams.toString());
     }
 
-    // --- F. Settings Panel "Back Button" Logic (Optional) ---
-    // This makes the Settings Offcanvas close when you hit Back
+    // Settings Offcanvas History Support
     const settingsOffcanvas = document.getElementById('settingsOffcanvas');
     if (settingsOffcanvas) {
-        settingsOffcanvas.addEventListener('shown.bs.offcanvas', () => {
-            // When settings open, add a fake history entry
-            history.pushState({ type: 'settings' }, '', '#settings');
-        });
-
+        settingsOffcanvas.addEventListener('shown.bs.offcanvas', () => history.pushState({ type: 'settings' }, '', '#settings'));
         settingsOffcanvas.addEventListener('hidden.bs.offcanvas', () => {
-            // If we closed settings manually (clicked X), remove the hash if it exists
-            if (window.location.hash === '#settings') {
-                history.back();
-            }
-        });
-        
-        // Add to the global popstate listener (logic merged above conceptually, 
-        // but here is the specific handler for the offcanvas closing)
-        window.addEventListener('popstate', (event) => {
-            const openedCanvas = document.querySelector('.offcanvas.show');
-            if (openedCanvas) {
-                const bsCanvas = bootstrap.Offcanvas.getInstance(openedCanvas);
-                if (bsCanvas) bsCanvas.hide();
-            }
+            if (window.location.hash === '#settings') history.back();
         });
     }
 
-    function sanitizeFilename(name) {
-        if (!name) return "Unknown";
-        return name.replace(/[<>:"/\\|?*]/g, '').trim();
-    }
-
-    function getSeriesName(seriesJsonStr) {
-        try {
-            if (!seriesJsonStr) return null;
-            // The format is usually "{\"ID\":[\"Name\",\"BookNum\",count]}"
-            const data = JSON.parse(seriesJsonStr);
-            const values = Object.values(data);
-            // We want the first item of the first array value
-            if (values.length > 0 && Array.isArray(values[0])) {
-                return values[0][0];
-            }
-        } catch (e) {
-            console.error("Error parsing series info:", e);
-        }
-        return null;
-    }
-
-    if (searchForm) {
-        searchForm.addEventListener("submit", function (e) {
-            e.preventDefault();
-            searchButton.disabled = true;
-            searchButton.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Searching...`;
-            if (resultsTitle) resultsTitle.textContent = 'Results';
-            hashToElementMap.clear();
-
-            const queryParams = new URLSearchParams(new FormData(searchForm)).toString();
-            fetch(`/mam/search?${queryParams}`)
-                .then(response => response.text())
-                .then(html => {
-                    wrapper.style.display = 'block';
-                    resultsContainer.innerHTML = html;
-                    const count = resultsContainer.querySelectorAll('.result-item').length;
-                    if (resultsTitle) resultsTitle.textContent = `Results (${count})`;
-                    wrapper.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                    refreshCategories();
-                    initializeSnatchedTorrents();
-                })
-                .catch(error => {
-                    wrapper.style.display = 'block';
-                    resultsContainer.innerHTML = `<div class="alert alert-danger">Search failed.</div>`;
-                })
-                .finally(() => { searchButton.disabled = false; searchButton.innerHTML = "Search"; });
-        });
-    }
-
-    // Result Click Handling
+    // Result Click Handling (Download/Series)
     if (resultsContainer) {
         resultsContainer.addEventListener('click', function (event) {
             const button = event.target.closest('.add-to-client-button');
             if (button) {
                 event.preventDefault();
                 const resultItem = button.closest('.result-item');
-
-                // --- EXTRACT SERIES INFO HERE ---
                 const rawSeries = button.dataset.seriesInfo;
                 const seriesName = getSeriesName(rawSeries);
-                // -------------------------------
 
                 const downloadData = {
                     torrent_url: button.dataset.torrentUrl,
@@ -895,7 +781,7 @@ document.addEventListener("DOMContentLoaded", function () {
                     title: button.dataset.title || "Unknown",
                     size: button.dataset.size || '0 GiB',
                     main_cat: button.dataset.mainCat || '',
-                    series_info: rawSeries // Pass this along just in case
+                    series_info: rawSeries
                 };
 
                 const autoOrganizeEnabled = document.getElementById('AUTO_ORGANIZE_ON_ADD')?.checked;
@@ -904,33 +790,25 @@ document.addEventListener("DOMContentLoaded", function () {
                     const cleanAuthor = sanitizeFilename(downloadData.author);
                     const cleanTitle = sanitizeFilename(downloadData.title);
 
-                    // 1. Reset Input
                     confirmInput.value = `${cleanAuthor}/${cleanTitle}`;
                     previewSpan.textContent = confirmInput.value;
+                    document.getElementById('path-format-hint').textContent = "Format: Author / Title";
 
-                    // 2. Reset Hint
-                    const hintEl = document.getElementById('path-format-hint');
-                    if (hintEl) hintEl.textContent = "Format: Author / Title";
-
-                    // 3. Button & Series Preview Logic
                     const addSeriesBtn = document.getElementById('add-series-btn');
-                    const seriesPreviewEl = document.getElementById('series-name-preview'); // <--- Select the new span
+                    const seriesPreviewEl = document.getElementById('series-name-preview');
 
                     if (addSeriesBtn) {
-                        // Reset button state
                         addSeriesBtn.dataset.cleanAuthor = cleanAuthor;
                         addSeriesBtn.dataset.cleanTitle = cleanTitle;
                         addSeriesBtn.dataset.active = "false";
-                        addSeriesBtn.classList.remove('btn-secondary', 'text-white');
-                        addSeriesBtn.classList.add('btn-outline-secondary');
+                        addSeriesBtn.classList.replace('btn-secondary', 'btn-outline-secondary');
+                        addSeriesBtn.classList.remove('text-white');
                         addSeriesBtn.innerHTML = '<i class="bi bi-plus-lg"></i> Series';
 
                         if (seriesName) {
                             const cleanSeries = sanitizeFilename(seriesName);
                             addSeriesBtn.dataset.cleanSeries = cleanSeries;
                             addSeriesBtn.disabled = false;
-
-                            // Show series name next to button
                             if (seriesPreviewEl) {
                                 seriesPreviewEl.textContent = `"${cleanSeries}"`;
                                 seriesPreviewEl.style.display = 'inline';
@@ -938,11 +816,7 @@ document.addEventListener("DOMContentLoaded", function () {
                         } else {
                             addSeriesBtn.dataset.cleanSeries = "";
                             addSeriesBtn.disabled = true;
-
-                            // Hide series name
-                            if (seriesPreviewEl) {
-                                seriesPreviewEl.style.display = 'none';
-                            }
+                            if (seriesPreviewEl) seriesPreviewEl.style.display = 'none';
                         }
                     }
 
@@ -956,6 +830,7 @@ document.addEventListener("DOMContentLoaded", function () {
         });
     }
 
+    // Confirm Download Modal Action
     document.getElementById('confirm-download-btn')?.addEventListener('click', function () {
         if (!pendingDownloadData) return;
         pendingDownloadData.custom_relative_path = confirmInput.value;
@@ -963,54 +838,28 @@ document.addEventListener("DOMContentLoaded", function () {
         performDownload(pendingDownloadData, pendingButton);
     });
 
+    // Toggle Series in Path Button
     document.getElementById('add-series-btn')?.addEventListener('click', function () {
         const input = document.getElementById('confirm-path-input');
         const hintEl = document.getElementById('path-format-hint');
-
-        // Retrieve stored components
-        const author = this.dataset.cleanAuthor;
-        const title = this.dataset.cleanTitle;
-        const series = this.dataset.cleanSeries;
-
-        // Check current state (default is false/undefined)
-        const isActive = this.dataset.active === "true";
+        const { cleanAuthor, cleanTitle, cleanSeries, active } = this.dataset;
+        const isActive = active === "true";
 
         if (!isActive) {
-            // === STATE: TURN ON (+ Series -> - Series) ===
-
-            // 1. Update Input
-            input.value = `${author}/${series}/${title}`;
-
-            // 2. Update Hint
+            input.value = `${cleanAuthor}/${cleanSeries}/${cleanTitle}`;
             if (hintEl) hintEl.textContent = "Format: Author / Series / Title";
-
-            // 3. Update Button Visuals
             this.innerHTML = '<i class="bi bi-dash-lg"></i> Series';
-            this.classList.remove('btn-outline-secondary');
-            this.classList.add('btn-secondary', 'text-white');
-
-            // 4. Update State
+            this.classList.replace('btn-outline-secondary', 'btn-secondary');
+            this.classList.add('text-white');
             this.dataset.active = "true";
-
         } else {
-            // === STATE: TURN OFF (- Series -> + Series) ===
-
-            // 1. Update Input
-            input.value = `${author}/${title}`;
-
-            // 2. Update Hint
+            input.value = `${cleanAuthor}/${cleanTitle}`;
             if (hintEl) hintEl.textContent = "Format: Author / Title";
-
-            // 3. Update Button Visuals
             this.innerHTML = '<i class="bi bi-plus-lg"></i> Series';
-            this.classList.remove('btn-secondary', 'text-white');
-            this.classList.add('btn-outline-secondary');
-
-            // 4. Update State
+            this.classList.replace('btn-secondary', 'btn-outline-secondary');
+            this.classList.remove('text-white');
             this.dataset.active = "false";
         }
-
-        // Trigger input event so the full path preview (blue text) updates
         input.dispatchEvent(new Event('input'));
     });
 
@@ -1066,6 +915,7 @@ document.addEventListener("DOMContentLoaded", function () {
             });
     }
 
+    // Modal: Buy Recommended Buffer Action
     document.getElementById('modal-buy-recommended')?.addEventListener('click', function () {
         const amount = parseFloat(this.dataset.amount);
         this.disabled = true;

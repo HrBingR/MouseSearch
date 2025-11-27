@@ -23,7 +23,7 @@ class QBittorrentClient(TorrentClient):
                 response = await client.post(
                     f"{self.base_url}/api/v2/auth/login",
                     data={'username': self.username, 'password': self.password},
-                    headers=self.headers
+
                 )
                 if "Ok" in response.text:
                     self.session_cookies = dict(response.cookies)
@@ -38,7 +38,7 @@ class QBittorrentClient(TorrentClient):
             async with httpx.AsyncClient(cookies=self.session_cookies) as client:
                 response = await client.get(
                     f"{self.base_url}/api/v2/app/version",
-                    headers=self.headers
+
                 )
                 # If 403/401, try re-login
                 if response.status_code in [401, 403]:
@@ -62,7 +62,7 @@ class QBittorrentClient(TorrentClient):
             async with httpx.AsyncClient(cookies=self.session_cookies) as client:
                 response = await client.get(
                     f"{self.base_url}/api/v2/torrents/categories",
-                    headers=self.headers
+
                 )
                 return response.json() if response.status_code == 200 else {}
         except RequestError:
@@ -71,15 +71,14 @@ class QBittorrentClient(TorrentClient):
     async def add_torrent(self, torrent_url: str, category: str, is_auto_organize: bool = False) -> dict:
         """Adds a torrent to qBittorrent."""
         payload = {'urls': torrent_url, 'category': category}
-        custom_headers = self.headers.copy()
-        custom_headers['Referer'] = self.base_url
+        request_headers = {'Referer': self.base_url}
 
         try:
             async with httpx.AsyncClient(cookies=self.session_cookies) as client:
                 response = await client.post(
                     f"{self.base_url}/api/v2/torrents/add",
                     data=payload,
-                    headers=custom_headers
+                    headers=request_headers
                 )
                 response.raise_for_status()
                 if "Ok." in response.text:
@@ -95,7 +94,7 @@ class QBittorrentClient(TorrentClient):
                 response = await client.get(
                     f"{self.base_url}/api/v2/torrents/info",
                     params={'hashes': hash_val},
-                    headers=self.headers
+
                 )
                 response.raise_for_status()
                 data = response.json()
@@ -113,7 +112,7 @@ class QBittorrentClient(TorrentClient):
                 response = await client.get(
                     f"{self.base_url}/api/v2/torrents/info",
                     params={'hashes': hashes_param},
-                    headers=self.headers
+
                 )
                 response.raise_for_status()
                 torrent_list = response.json()
@@ -133,7 +132,7 @@ class QBittorrentClient(TorrentClient):
             async with httpx.AsyncClient(cookies=self.session_cookies) as client:
                 response = await client.get(
                     f"{self.base_url}/api/v2/torrents/info",
-                    headers=self.headers
+
                 )
                 response.raise_for_status()
                 torrent_list = response.json()
