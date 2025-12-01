@@ -32,6 +32,19 @@ class QBittorrentClient(TorrentClient):
             pass
         return False
 
+    async def get_files(self, hash_val: str) -> list:
+        """Returns the file list for a specific torrent hash."""
+        try:
+            async with httpx.AsyncClient(cookies=self.session_cookies) as client:
+                response = await client.get(
+                    f"{self.base_url}/api/v2/torrents/files",
+                    params={'hash': hash_val}
+                )
+                response.raise_for_status()
+                return response.json()
+        except RequestError as e:
+            return [f"Error fetching files: {e}"]
+
     async def get_status(self) -> dict:
         """Returns connection status and version info."""
         try:
