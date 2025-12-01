@@ -164,12 +164,18 @@ class TransmissionClient(TorrentClient):
             # Fallback if group-get fails entirely
             return {'default': {'name': 'Default', 'savePath': ''}}
 
-    async def add_torrent(self, torrent_url: str, category: str, is_auto_organize: bool = False) -> dict:
-        """Adds a torrent to Transmission."""
+    async def add_torrent(self, torrent_url: str, category: str, is_auto_organize: bool = False, **kwargs) -> dict:
+        """
+        Adds a torrent to Transmission.
+        accepts **kwargs to gracefully handle 'mid' argument without crashing.
+        """
         arguments = {
             'filename': torrent_url,
             'labels': [category] if category else []
         }
+        
+        # NOTE: Transmission doesn't support setting comments/tags specifically during add 
+        # easily via RPC in all versions, so ignoring 'mid' is the safest path here.
         
         try:
             result = await self._rpc_request("torrent-add", arguments)

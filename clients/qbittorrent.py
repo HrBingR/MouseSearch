@@ -81,10 +81,18 @@ class QBittorrentClient(TorrentClient):
         except RequestError:
             return {}
 
-    async def add_torrent(self, torrent_url: str, category: str, is_auto_organize: bool = False) -> dict:
-        """Adds a torrent to qBittorrent."""
+    async def add_torrent(self, torrent_url: str, category: str, is_auto_organize: bool = False, **kwargs) -> dict:
+        """
+        Adds a torrent to qBittorrent.
+        accepts **kwargs to gracefully handle 'mid' argument without crashing.
+        """
         payload = {'urls': torrent_url, 'category': category}
         request_headers = {'Referer': self.base_url}
+
+        # NOTE: If you ever wanted to support MID in qBittorrent, 
+        # you could map it to tags here:
+        # if kwargs.get('mid'):
+        #     payload['tags'] = f"mid-{kwargs['mid']}"
 
         try:
             async with httpx.AsyncClient(cookies=self.session_cookies) as client:
