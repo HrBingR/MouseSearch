@@ -256,7 +256,9 @@ function refreshCategories() {
         .then(data => {
             const resultDropdowns = document.querySelectorAll('.category-dropdown');
             const defaultCategory = document.getElementById('TORRENT_CLIENT_CATEGORY')?.value || '';
+            
             resultDropdowns.forEach(dropdown => {
+                dropdown.disabled = false; // <--- ADD THIS
                 const currentVal = dropdown.value;
                 dropdown.innerHTML = '<option value="">Category</option>';
                 if (data && typeof data === 'object') {
@@ -264,8 +266,10 @@ function refreshCategories() {
                 }
                 dropdown.value = currentVal || defaultCategory;
             });
+
             const settingsDropdown = document.getElementById('TORRENT_CLIENT_CATEGORY');
             if (settingsDropdown) {
+                settingsDropdown.disabled = false; // <--- ADD THIS
                 const currentValue = settingsDropdown.dataset.currentValue || '';
                 settingsDropdown.innerHTML = '<option value="">None</option>';
                 if (data && typeof data === 'object') {
@@ -463,6 +467,7 @@ document.addEventListener("DOMContentLoaded", function () {
             pathContainer.classList.toggle('d-none', !organizeOnAdd && !organizeOnSchedule);
         }
     }
+    
 
     ['AUTO_ORGANIZE_ON_ADD', 'AUTO_ORGANIZE_ON_SCHEDULE'].forEach(id => {
         const el = document.getElementById(id);
@@ -470,6 +475,28 @@ document.addEventListener("DOMContentLoaded", function () {
     });
 
     updateDependentFields();
+
+    // --- Client Type Change Listener ---
+    const clientTypeSelect = document.getElementById('TORRENT_CLIENT_TYPE');
+    const settingsCatSelect = document.getElementById('TORRENT_CLIENT_CATEGORY');
+
+    if (clientTypeSelect) {
+        clientTypeSelect.addEventListener('change', function() {
+            const tempMsg = '<option value="">Save settings to load...</option>';
+            
+            // 1. Disable and reset Settings dropdown
+            if (settingsCatSelect) {
+                settingsCatSelect.innerHTML = tempMsg;
+                settingsCatSelect.disabled = true;
+            }
+
+            // 2. Disable and reset all Result card dropdowns 
+            document.querySelectorAll('.category-dropdown').forEach(dd => {
+                dd.innerHTML = tempMsg;
+                dd.disabled = true;
+            });
+        });
+    }
 
     // Upload Amount Validation
     function findNearestValidAmount(value) {
