@@ -2,12 +2,14 @@
 from .qbittorrent import QBittorrentClient
 from .transmission import TransmissionClient
 from .rtorrent import RTorrentClient # NEW
+from .deluge import DelugeClient  # NEW
 
 # Registry mapping config strings to Client Classes
 CLIENT_MAP = {
     "qbittorrent": QBittorrentClient,
     "transmission": TransmissionClient,
     "rtorrent": RTorrentClient, # NEW
+    "deluge": DelugeClient, # NEW
 }
 
 def get_torrent_client(config):
