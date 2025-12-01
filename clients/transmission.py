@@ -188,12 +188,18 @@ class TransmissionClient(TorrentClient):
 
     async def get_torrent_info(self, hash_val: str) -> dict:
         """Returns specific torrent info."""
-        # Note: Transmission 4.0 uses 'percentDone', 4.1 might use 'percentComplete'
-        # We request both to be safe, though RPC usually ignores unknown fields.
-        fields = ["hashString", "name", "downloadDir", "totalSize", "comment", "percentDone", "rateDownload", "rateUpload", "status", "errorString"]
+        # 1. We MUST explicitly ask for 'eta' and 'queuePosition'
+        fields = [
+            "hashString", "name", "downloadDir", "totalSize", "comment", 
+            "percentDone", "rateDownload", "rateUpload", "status", 
+            "errorString", "eta", "queuePosition"
+        ]
         
         try:
+            # Note: We do NOT send "format": "table" like the WebUI does.
+            # By omitting it, we get the default "objects" format, which returns a nice dictionary.
             result = await self._rpc_request("torrent-get", {"ids": [hash_val], "fields": fields})
+            
             torrents = result.get('torrents', [])
             if torrents:
                 info = torrents[0]
@@ -204,12 +210,46 @@ class TransmissionClient(TorrentClient):
                     'total_size': info.get('totalSize'),
                     'comment': info.get('comment'),
                     'progress': info.get('percentDone', 0),
-                    'eta': info.get('eta', -1), # Note: might require 'eta' in fields if you want it
+                    # Now 'eta' will be present in the response dict
+                    'eta': info.get('eta', -1), 
                     'state': self._map_status(info.get('status', 0)),
                 }
             return {}
         except Exception:
             return {}
+    
+    async def get_torrent_info_batch(self, hash_list: list) -> dict:
+        """Optimized batch fetch for multiple torrents."""
+        fields = [
+            "hashString", "name", "downloadDir", "totalSize", "comment", 
+            "percentDone", "rateDownload", "rateUpload", "status", 
+            "errorString", "eta", "queuePosition"
+        ]
+        
+        try:
+            # Transmission accepts a list of hashes directly in 'ids'
+            result = await self._rpc_request("torrent-get", {"ids": hash_list, "fields": fields})
+            
+            torrents = result.get('torrents', [])
+            torrents_by_hash = {}
+            
+            for t in torrents:
+                h = t.get('hashString')
+                if h:
+                    torrents_by_hash[h] = {
+                        'hash': h,
+                        'name': t.get('name'),
+                        'save_path': t.get('downloadDir'),
+                        'total_size': t.get('totalSize'),
+                        'comment': t.get('comment'),
+                        'progress': t.get('percentDone', 0),
+                        'eta': t.get('eta', -1),
+                        'state': self._map_status(t.get('status', 0)),
+                    }
+            
+            return {'torrents': torrents_by_hash}
+        except Exception as e:
+            return {'error': f'Batch fetch failed: {e}'}
             
     def _map_status(self, status_code: int) -> str:
         """Maps Transmission numeric status to human-readable string."""
