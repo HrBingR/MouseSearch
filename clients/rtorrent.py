@@ -1,6 +1,7 @@
 import httpx
 import xml.etree.ElementTree as ET
 from clients.base import TorrentClient
+from urllib.parse import unquote
 
 class RTorrentClient(TorrentClient):
     display_name = "rTorrent"
@@ -232,11 +233,30 @@ class RTorrentClient(TorrentClient):
             return {"torrents": {}}
 
     async def get_torrents_with_metadata(self):
-        # Fetch hash and comment (d.custom2 is often used for comments in rTorrent setups)
+        """
+        Returns list of all torrents with metadata.
+        Decodes URL-encoded comments common in ruTorrent (e.g., MID%3D123 -> MID=123).
+        """
         try:
+            # Fetch hash and comment (d.custom2)
             data = await self._request("d.multicall2", ["", "main", "d.hash=", "d.custom2="])
-            return [{"hash": r[0], "comment": r[1]} for r in data]
-        except:
+            
+            results = []
+            for r in data:
+                raw_hash = r[0]
+                raw_comment = r[1] or ""
+                
+                # FIX: Unquote the comment to handle URL-encoded characters
+                # 'MID%3D123' becomes 'MID=123'
+                clean_comment = unquote(raw_comment)
+                
+                results.append({
+                    "hash": raw_hash, 
+                    "comment": clean_comment
+                })
+            
+            return results
+        except Exception:
             return []
 
     def _format_data(self, hash_val, name, down_rate, done, size, label, is_open, is_active, is_hashing, is_complete):
