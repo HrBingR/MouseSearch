@@ -146,7 +146,11 @@ class RTorrentClient(TorrentClient):
                 "display_name": self.display_name
             }
         except Exception as e:
-            return {"status": "error", "message": str(e)}
+            return {
+                "status": "error", 
+                "message": str(e),
+                "display_name": self.display_name # <--- ADDED
+            }
 
     async def get_categories(self):
         try:

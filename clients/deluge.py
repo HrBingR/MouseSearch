@@ -121,16 +121,23 @@ class DelugeClient(TorrentClient):
             # Implicit check: if we have no cookies, we aren't logged in
             if not self.session_cookies:
                 if not await self.login():
-                    return {"status": "error", "message": "Authentication failed"}
+                    return {
+                        "status": "error", 
+                        "message": "Authentication failed",
+                        "display_name": self.display_name # <--- ADDED
+                    }
 
             # Double check daemon connection
             connected = await self._request("web.connected")
             if not connected:
                 await self._ensure_daemon_connection()
                 if not await self._request("web.connected"):
-                    return {"status": "error", "message": "Deluge WebUI is online, but not connected to Daemon"}
+                    return {
+                        "status": "error", 
+                        "message": "Deluge WebUI online, but daemon disconnected",
+                        "display_name": self.display_name # <--- ADDED
+                    }
 
-            # FIX: Use 'daemon.get_version' instead of 'daemon.info'
             version = await self._request("daemon.get_version")
             
             return {
@@ -140,7 +147,11 @@ class DelugeClient(TorrentClient):
                 "display_name": self.display_name
             }
         except Exception as e:
-            return {"status": "error", "message": f"Connection failed: {e}"}
+            return {
+                "status": "error", 
+                "message": f"Connection failed: {e}",
+                "display_name": self.display_name # <--- ADDED
+            }
 
     async def get_categories(self) -> dict:
         try:

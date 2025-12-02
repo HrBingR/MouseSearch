@@ -120,10 +120,7 @@ class TransmissionClient(TorrentClient):
     async def get_status(self) -> dict:
         """Returns connection status and version info."""
         try:
-            # _rpc_request now returns the dictionary inside 'arguments' (Legacy) or 'result' (Modern)
             data = await self._rpc_request("session-get", {"fields": ["version"]})
-            
-            # Since 'data' is now guaranteed to be a dict (e.g. {"version": "4.0.6..."}), this works:
             version = data.get('version', 'Unknown')
             
             return {
@@ -133,7 +130,11 @@ class TransmissionClient(TorrentClient):
                 "display_name": self.display_name
             }
         except Exception as e:
-            return {"status": "error", "message": f"Connection failed: {e}", "display_name": self.display_name}
+            return {
+                "status": "error", 
+                "message": f"Connection failed: {e}", 
+                "display_name": self.display_name # <--- ADDED
+            }
 
     async def get_categories(self) -> dict:
         """

@@ -115,12 +115,17 @@ function initializeEventStream() {
                     const statusIconSpan = document.getElementById("client-status-icon");
                     const clientTypeDisplay = document.getElementById('client-type-display');
                     const isConnected = data.status === "connected";
+                    
                     if (statusSpan) {
                         statusSpan.textContent = isConnected ? "CONNECTED" : "NOT CONNECTED";
                         statusSpan.className = isConnected ? "text-success" : "text-danger";
                     }
                     if (statusIconSpan) statusIconSpan.innerHTML = isConnected ? greenCheckIcon : redXIcon;
-                    if (isConnected && data.display_name && clientTypeDisplay) clientTypeDisplay.textContent = data.display_name;
+                    
+                    // FIX: Update display name regardless of connection status
+                    if (data.display_name && clientTypeDisplay) {
+                        clientTypeDisplay.textContent = data.display_name;
+                    }
                     break;
                 case 'mam-stats':
                     const userData = data.data || {};
@@ -236,12 +241,18 @@ function checkClientStatus() {
         .then(response => response.json())
         .then(data => {
             const isSuccess = data.status === "success";
+            
             if (statusSpan) {
                 statusSpan.textContent = isSuccess ? "CONNECTED" : "NOT CONNECTED";
                 statusSpan.className = isSuccess ? "text-success" : "text-danger";
             }
             if (statusIconSpan) statusIconSpan.innerHTML = isSuccess ? greenCheckIcon : redXIcon;
-            if (isSuccess && data.display_name && clientTypeDisplay) clientTypeDisplay.textContent = data.display_name;
+
+            // FIX: Always update the name if the server sends it, even on error
+            if (data.display_name && clientTypeDisplay) {
+                clientTypeDisplay.textContent = data.display_name;
+            }
+
             if (isSuccess) refreshCategories();
         })
         .catch(error => {
