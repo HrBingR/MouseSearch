@@ -956,7 +956,6 @@ document.addEventListener("DOMContentLoaded", function () {
 
     // Function to Populate and Show Modal
     function openBookDetailsModal(data, originElement) {
-        // Elements
         const modalEl = document.getElementById('bookDetailsModal');
         const modal = new bootstrap.Modal(modalEl);
 
@@ -966,7 +965,7 @@ document.addEventListener("DOMContentLoaded", function () {
         const series = parseMamJson(data.series_info);
 
         // Populate Text
-        document.getElementById('detail-title').innerHTML = data.title; // InnerHTML to decode entities
+        document.getElementById('detail-title').innerHTML = data.title;
         document.getElementById('detail-subtitle').innerHTML = series ? `<span class="badge bg-secondary opacity-50">Series</span> ${series}` : '';
         document.getElementById('detail-authors').textContent = authors;
         document.getElementById('detail-narrators').textContent = narrators;
@@ -974,37 +973,40 @@ document.addEventListener("DOMContentLoaded", function () {
         
         // Populate Image
         const coverImg = document.getElementById('detail-cover');
-        // Use the same proxy logic as the list view, or fallback
         coverImg.src = originElement.querySelector('img')?.src || '/static/icons/no_cover.png';
 
-        // Hero Background Color (Simulated dynamic color)
+        // Dynamic Hero Background (Random hue for visual variety)
         const hue = Math.floor(Math.random() * 360);
-        document.getElementById('detail-hero-bg').style.background = `linear-gradient(135deg, hsl(${hue}, 40%, 20%) 0%, #1a1a1a 100%)`;
+        document.getElementById('detail-hero-bg').style.background = `linear-gradient(135deg, hsl(${hue}, 40%, 20%) 0%, #000 100%)`;
 
         // Populate Metadata Sidebar
         document.getElementById('detail-category').innerHTML = data.catname;
-        document.getElementById('detail-language').textContent = getLanguageName(data.lang_code);
+        
+        // --- UPDATED LANGUAGE LOGIC ---
+        // Use lang_code from JSON (e.g., "ENG") -> Convert to "English"
+        document.getElementById('detail-language').textContent = getLanguageName(data.lang_code); 
+        
         document.getElementById('detail-filetype').textContent = data.filetype;
         document.getElementById('detail-size').textContent = data.size;
-        document.getElementById('detail-added').textContent = data.added.split(' ')[0]; // Just date, no time
+        document.getElementById('detail-added').textContent = data.added.split(' ')[0];
         document.getElementById('detail-seeders').textContent = data.seeders;
         document.getElementById('detail-leechers').textContent = data.leechers;
 
-        // Populate Tags
+        // Populate Tags (Theming updated in HTML)
         const tagsContainer = document.getElementById('detail-tags');
         tagsContainer.innerHTML = '';
         if(data.tags) {
             data.tags.split(',').forEach(tag => {
                 const badge = document.createElement('span');
-                badge.className = 'badge bg-secondary bg-opacity-25 text-body-emphasis border border-secondary-subtle fw-normal';
+                // Adaptive badge styling
+                badge.className = 'badge bg-body-secondary text-body-emphasis border border-secondary-subtle fw-normal';
                 badge.textContent = tag.trim();
                 tagsContainer.appendChild(badge);
             });
         }
 
-        // Setup Download Button in Modal
+        // Setup Download Button
         const dlBtn = document.getElementById('detail-download-btn');
-        // Copy data attributes from the object to the button so our helper works
         dlBtn.dataset.torrentUrl = data.download_link;
         dlBtn.dataset.id = data.id;
         dlBtn.dataset.author = authors;
@@ -1013,17 +1015,14 @@ document.addEventListener("DOMContentLoaded", function () {
         dlBtn.dataset.mainCat = data.main_cat;
         dlBtn.dataset.seriesInfo = data.series_info;
 
-        // Remove old listeners to prevent stacking
         const newDlBtn = dlBtn.cloneNode(true);
         dlBtn.parentNode.replaceChild(newDlBtn, dlBtn);
-        
         newDlBtn.addEventListener('click', function() {
-             initiateDownloadFlow(this, originElement); // Use originElement to get category dropdown
+             initiateDownloadFlow(this, originElement);
         });
 
-        // Setup Save .torrent link
-        const torrentLink = document.getElementById('detail-torrent-link');
-        torrentLink.href = data.download_link;
+        // Setup .torrent link
+        document.getElementById('detail-torrent-link').href = data.download_link;
 
         modal.show();
     }
