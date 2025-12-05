@@ -745,14 +745,15 @@ document.addEventListener("DOMContentLoaded", function () {
     if (confirmInput && previewSpan) confirmInput.addEventListener('input', function () { previewSpan.textContent = this.value; });
 
     function performSearch(queryString, isHistoryNavigation = false) {
-        if (!queryString) return;
+        if (!queryString) return Promise.resolve(); // Return resolved promise if no query
 
         searchButton.disabled = true;
         searchButton.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Searching...`;
         if (resultsTitle) resultsTitle.textContent = 'Results';
         hashToElementMap.clear();
 
-        fetch(`/mam/search?${queryString}`)
+        // ADD 'return' HERE
+        return fetch(`/mam/search?${queryString}`)
             .then(response => response.text())
             .then(html => {
                 wrapper.style.display = 'block';
@@ -769,9 +770,9 @@ document.addEventListener("DOMContentLoaded", function () {
                 wrapper.style.display = 'block';
                 resultsContainer.innerHTML = `<div class="alert alert-danger">Search failed.</div>`;
             })
-            .finally(() => { 
-                searchButton.disabled = false; 
-                searchButton.innerHTML = "Search"; 
+            .finally(() => {
+                searchButton.disabled = false;
+                searchButton.innerHTML = "Search";
             });
     }
 
@@ -871,9 +872,44 @@ document.addEventListener("DOMContentLoaded", function () {
 
     // Deep Linking (Load search on refresh)
     const initialParams = new URLSearchParams(window.location.search);
+    
+    // Check if we have a book hash (#book=12345)
+    const hash = window.location.hash;
+    const deepLinkID = hash.startsWith('#book=') ? hash.split('=')[1] : null;
+
     if (initialParams.has('query')) {
+        // SCENARIO 1: We have a search query (Standard Refresh)
         restoreFormFromURL(initialParams);
-        performSearch(initialParams.toString());
+        performSearch(initialParams.toString()).then(() => {
+            if (deepLinkID) openDeepLink(deepLinkID);
+        });
+    } 
+    else if (deepLinkID) {
+        // SCENARIO 2: We have NO search query, but we have a Book ID (Direct Link)
+        // We artificially create a search for this specific ID to get the data
+        const fakeQuery = new URLSearchParams();
+        fakeQuery.set('query', deepLinkID); // Searching the ID usually works on trackers
+        
+        // Update the search bar visually so the user knows what happened
+        document.getElementById('query').value = deepLinkID;
+        
+        performSearch(fakeQuery.toString()).then(() => {
+            openDeepLink(deepLinkID);
+        });
+    }
+
+    // Helper to find the row and open the modal
+    function openDeepLink(id) {
+        const targetRow = document.querySelector(`.result-item[data-torrent-id="${id}"]`);
+        if (targetRow) {
+            const rawJson = targetRow.dataset.json;
+            if (rawJson) {
+                try {
+                    const data = JSON.parse(rawJson);
+                    openBookDetailsModal(data, targetRow);
+                } catch (e) { console.error("Deep link parse error", e); }
+            }
+        }
     }
 
     // Settings Offcanvas History Support

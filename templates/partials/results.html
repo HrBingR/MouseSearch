@@ -8,24 +8,18 @@
 </div>
 {% else %}
 {% for result in results %}
-<div class="row my-3 mx-0 py-2 pe-lg-0 rounded-1 border shadow-sm result-item cursor-pointer" 
-     data-torrent-id="{{ result.id }}"
-     data-snatched="{{ result.my_snatched }}" 
-     data-torrent-url="{{ result.download_link | safe }}"
-     data-json="{{ result | tojson | forceescape }}">
+<div class="row my-3 mx-0 py-2 pe-lg-0 rounded-1 border shadow-sm result-item cursor-pointer"
+    data-torrent-id="{{ result.id }}" data-snatched="{{ result.my_snatched }}"
+    data-torrent-url="{{ result.download_link | safe }}" data-json="{{ result | tojson | forceescape }}">
     <div class="col-6 col-md-4 d-flex justify-content-center align-items-center">
-        <a href="https://www.myanonamouse.net/t/{{ result.id }}" target="_blank">
-            <img class="img-fluid me-2 rounded" src="{{ url_for('proxy_thumbnail', url=result.thumbnail) }}"
-                alt="Thumbnail" loading="lazy" style="object-fit: contain;"
-                onerror="this.onerror=null; this.src='/static/icons/no_cover.png';">
-        </a>
+        <img class="img-fluid me-2 rounded" src="{{ url_for('proxy_thumbnail', url=result.thumbnail) }}" alt="Thumbnail"
+            loading="lazy" style="object-fit: contain;"
+            onerror="this.onerror=null; this.src='/static/icons/no_cover.png';">
     </div>
 
     <div class="col-6 col-md-5 pb-3 mb-0 small lh-sm">
         <div class="d-flex justify-content-between">
-            <a href="https://www.myanonamouse.net/t/{{ result.id }}" target="_blank">
-                <strong class="text-gray-dark">{{ result.title | safe }}</strong>
-            </a>
+            <strong class="text-gray-dark">{{ result.title | safe }}</strong>
         </div>
 
         <div class="my-2">
@@ -96,7 +90,7 @@
             <label for="catSelect{{ result.id }}">Torrent Category</label>
         </div>
 
-                <div class="text-center mt-1 lh-1">
+        <div class="text-center mt-1 lh-1">
             <a href="{{ result.download_link | safe }}" class="small text-muted text-decoration-none" target="_blank">
                 <i class="bi bi-download" style="font-size: 0.8rem;"></i> Save .torrent file
             </a>
