@@ -798,30 +798,76 @@ document.addEventListener("DOMContentLoaded", function () {
         });
     }
 
-    // Handle Browser Back/Forward
+    // ============================================================
+    //  UNIFIED HISTORY & NAVIGATION MANAGER
+    // ============================================================
+
+    // 1. Central History Listener
     window.addEventListener('popstate', (event) => {
-        if (event.state && event.state.type === 'search') {
-            restoreFormFromURL(new URLSearchParams(event.state.query));
-            performSearch(event.state.query, true);
+        // UI Elements
+        const bookModalEl = document.getElementById('bookDetailsModal');
+        const bookModal = bootstrap.Modal.getOrCreateInstance(bookModalEl);
+        
+        const settingsEl = document.getElementById('settingsOffcanvas');
+        const settingsOffcanvas = bootstrap.Offcanvas.getOrCreateInstance(settingsEl);
+
+        // Close everything first (clean slate)
+        bookModal.hide();
+        settingsOffcanvas.hide();
+
+        if (event.state) {
+            // --- STATE: BOOK DETAILS ---
+            if (event.state.type === 'book_details') {
+                renderBookDetails(event.state.bookData, event.state.coverSrc);
+                bookModal.show();
+            } 
+            // --- STATE: SETTINGS ---
+            else if (event.state.type === 'settings') {
+                settingsOffcanvas.show();
+            }
+            // --- STATE: SEARCH RESULTS ---
+            else if (event.state.type === 'search') {
+                restoreFormFromURL(new URLSearchParams(event.state.query));
+                performSearch(event.state.query, true);
+            }
         } else {
+            // --- STATE: LANDING PAGE (No state) ---
+            // If there are query params in URL (e.g. refresh), load search
             const urlParams = new URLSearchParams(window.location.search);
             if (urlParams.has('query')) {
-                 performSearch(urlParams.toString(), true);
-            } else {
-                wrapper.style.display = 'none';
-                resultsContainer.innerHTML = '';
-                document.getElementById('query').value = '';
-                if (resultsTitle) resultsTitle.textContent = 'Results';
+                performSearch(urlParams.toString(), true);
             }
         }
-        
-        // Handle Settings Offcanvas via History
-        const openedCanvas = document.querySelector('.offcanvas.show');
-        if (openedCanvas) {
-            const bsCanvas = bootstrap.Offcanvas.getInstance(openedCanvas);
-            if (bsCanvas) bsCanvas.hide();
+    });
+
+    // 2. Book Modal: Sync History on Manual Close
+    document.getElementById('bookDetailsModal')?.addEventListener('hide.bs.modal', function() {
+        // Only go back if we are currently IN the book_details state.
+        // This prevents a double-back loop if the user pressed the Browser Back button.
+        if (history.state && history.state.type === 'book_details') {
+            history.back();
         }
     });
+
+    // 3. Settings Offcanvas: Sync History on Manual Close/Open
+    const settingsEl = document.getElementById('settingsOffcanvas');
+    if (settingsEl) {
+        // When manually OPENED (clicked the gear icon)
+        settingsEl.addEventListener('show.bs.offcanvas', function(e) {
+            // Prevent pushing state if we are just restoring it from history (popstate)
+            if (!e.relatedTarget) return; // bootstrap sets relatedTarget to null if triggered via JS (.show())
+            
+            // Push state
+            history.pushState({ type: 'settings' }, '', '#settings');
+        });
+
+        // When manually CLOSED (clicked X or backdrop)
+        settingsEl.addEventListener('hide.bs.offcanvas', function() {
+            if (history.state && history.state.type === 'settings') {
+                history.back();
+            }
+        });
+    }
 
     // Deep Linking (Load search on refresh)
     const initialParams = new URLSearchParams(window.location.search);
@@ -954,11 +1000,39 @@ document.addEventListener("DOMContentLoaded", function () {
         }
     }
 
-    // Function to Populate and Show Modal
-    function openBookDetailsModal(data, originElement) {
-        const modalEl = document.getElementById('bookDetailsModal');
-        const modal = new bootstrap.Modal(modalEl);
+    // ============================================================
+    //  MODAL RENDERING LOGIC
+    // ============================================================
 
+    /**
+     * 1. OPEN FUNCTION
+     * Called when you CLICK a row.
+     * Pushes state to history -> Renders content -> Shows Modal.
+     */
+    function openBookDetailsModal(data, originElement) {
+        // Get Cover Source (fallback to placeholder if missing)
+        const coverSrc = originElement.querySelector('img')?.src || '/static/icons/no_cover.png';
+
+        // Push History State so the "Back" button works
+        const newUrl = window.location.pathname + window.location.search + `#book=${data.id}`;
+        history.pushState({ 
+            type: 'book_details', 
+            bookData: data, 
+            coverSrc: coverSrc 
+        }, '', newUrl);
+
+        // Render & Show
+        renderBookDetails(data, coverSrc);
+        const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('bookDetailsModal'));
+        modal.show();
+    }
+
+    /**
+     * 2. RENDER FUNCTION
+     * Called by openBookDetailsModal AND by the History Manager (popstate).
+     * Updates the DOM elements inside the modal.
+     */
+    function renderBookDetails(data, coverSrc) {
         // Parse Complex Fields
         const authors = parseMamJson(data.author_info);
         const narrators = parseMamJson(data.narrator_info) || "N/A";
@@ -972,12 +1046,9 @@ document.addEventListener("DOMContentLoaded", function () {
         document.getElementById('detail-description').innerHTML = data.description || "No description available.";
         
         // Populate Image
-        const coverImg = document.getElementById('detail-cover');
-        coverImg.src = originElement.querySelector('img')?.src || '/static/icons/no_cover.png';
+        document.getElementById('detail-cover').src = coverSrc;
 
-        // Dynamic Hero Background
-        // Use a darker luminosity (20%) so white text looks good, 
-        // but let it fade to transparent so the CSS Overlay controls the bottom edge.
+        // Dynamic Hero Background (Random hue for variety)
         const hue = Math.floor(Math.random() * 360);
         document.getElementById('detail-hero-bg').style.background = `
             linear-gradient(
@@ -990,11 +1061,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
         // Populate Metadata Sidebar
         document.getElementById('detail-category').innerHTML = data.catname;
-        
-        // --- UPDATED LANGUAGE LOGIC ---
-        // Use lang_code from JSON (e.g., "ENG") -> Convert to "English"
-        document.getElementById('detail-language').textContent = getLanguageName(data.lang_code); 
-        
+        document.getElementById('detail-language').textContent = getLanguageName(data.lang_code);
         document.getElementById('detail-filetype').textContent = data.filetype;
         document.getElementById('detail-size').textContent = data.size;
         document.getElementById('detail-added').textContent = data.added.split(' ')[0];
@@ -1006,16 +1073,9 @@ document.addEventListener("DOMContentLoaded", function () {
         tagsContainer.innerHTML = '';
         if(data.tags) {
             data.tags.split(',').forEach(tag => {
-                if (!tag.trim()) return; // Skip empty tags
-                
+                if (!tag.trim()) return;
                 const badge = document.createElement('span');
-                
-                // ADDED CLASSES: 
-                // text-wrap: Allows long text to wrap to the next line
-                // text-start: Aligns text to left (looks better for multi-line badges)
-                // lh-base: Fixes line height (badges usually have tight line height)
                 badge.className = 'badge bg-body-secondary text-body-emphasis border border-secondary-subtle fw-normal text-wrap text-start lh-base';
-                
                 badge.textContent = tag.trim();
                 tagsContainer.appendChild(badge);
             });
@@ -1023,6 +1083,8 @@ document.addEventListener("DOMContentLoaded", function () {
 
         // Setup Download Button
         const dlBtn = document.getElementById('detail-download-btn');
+        
+        // Copy data attributes to the button so initiateDownloadFlow can read them
         dlBtn.dataset.torrentUrl = data.download_link;
         dlBtn.dataset.id = data.id;
         dlBtn.dataset.author = authors;
@@ -1031,16 +1093,19 @@ document.addEventListener("DOMContentLoaded", function () {
         dlBtn.dataset.mainCat = data.main_cat;
         dlBtn.dataset.seriesInfo = data.series_info;
 
+        // Clone button to remove old event listeners (prevents multiple clicks firing)
         const newDlBtn = dlBtn.cloneNode(true);
         dlBtn.parentNode.replaceChild(newDlBtn, dlBtn);
+        
+        // Add Click Listener
         newDlBtn.addEventListener('click', function() {
-             initiateDownloadFlow(this, originElement);
+            // Pass null for resultItem because the modal doesn't have the category dropdown
+            // The initiateDownloadFlow function handles null gracefully
+            initiateDownloadFlow(this, null);
         });
 
         // Setup .torrent link
         document.getElementById('detail-torrent-link').href = data.download_link;
-
-        modal.show();
     }
 
     // Confirm Download Modal Action
