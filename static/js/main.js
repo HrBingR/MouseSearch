@@ -26,6 +26,29 @@ window.toggleCardSwitch = function (checkboxId) {
     if (checkbox) checkbox.click();
 };
 
+/**
+ * Handle broken images in the modal.
+ * 1. Swaps broken img -> placeholder
+ * 2. Swaps broken/empty background -> nice generic gradient
+ */
+function handleBookCoverError(imgElement) {
+    // 1. Prevent infinite loop if placeholder is also missing
+    imgElement.onerror = null; 
+    imgElement.src = '/static/icons/no_cover.png';
+
+    // 2. Set a fallback background for the hero
+    // (Blurring the "no_cover.png" usually looks bad, so we use a gradient instead)
+    const heroBg = document.getElementById('detail-hero-bg');
+    if (heroBg) {
+        // A neutral, deep purple/blue gradient that looks premium
+        heroBg.style.backgroundImage = 'linear-gradient(135deg, rgb(59 114 193) 0%, rgb(86 49 91) 100%)';
+        // Remove the filter so it looks clean, not blurry mud
+        heroBg.style.filter = 'none'; 
+        heroBg.style.transform = 'none';
+        heroBg.style.opacity = '1';
+    }
+}
+
 // 1. Language Helper (Simplified)
 // We initialize with 'en' so the resulting names are in English (e.g. outputs "German" instead of "Deutsch")
 // const languageNames = new Intl.DisplayNames(['en'], { type: 'language' });
@@ -1082,12 +1105,19 @@ document.addEventListener("DOMContentLoaded", function () {
         document.getElementById('detail-description').innerHTML = data.description || "No description available.";
         
         // Populate Image
-        document.getElementById('detail-cover').src = coverSrc;
+        const imgEl = document.getElementById('detail-cover');
+        // Reset the error handler (in case it was nulled out previously)
+        imgEl.onerror = function() { handleBookCoverError(this); };
+        imgEl.src = coverSrc;
 
-        // --- UPDATED: Dynamic Hero Background (Blurred Image) ---
-        // Instead of a random color, we set the background to the cover image.
-        // The CSS (.book-hero-bg) handles the blurring and scaling.
-        document.getElementById('detail-hero-bg').style.backgroundImage = `url('${coverSrc}')`;
+        // Dynamic Hero Background (Blurred Image)
+        const heroBg = document.getElementById('detail-hero-bg');
+        heroBg.style.backgroundImage = `url('${coverSrc}')`;
+        
+        // RESET styles in case previous book triggered the error handler
+        heroBg.style.filter = 'blur(50px)';
+        heroBg.style.transform = 'scale(1.2)';
+        heroBg.style.opacity = '0.5';
 
         // Populate Metadata Sidebar
         document.getElementById('detail-category').innerHTML = data.catname;
