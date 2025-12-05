@@ -123,3 +123,42 @@ input:disabled, select:disabled {
       user-select: none;
       -webkit-user-select: none;
     }
+
+    /* --- Audible Style Book Details --- */
+
+.book-hero-container {
+    background-color: #1a1a1a;
+    min-height: 400px;
+    box-shadow: inset 0 -50px 50px -20px #212529; /* Fade into body */
+}
+
+/* Dynamically colored background based on cover (set via JS or generic gradient) */
+.book-hero-bg {
+    background: linear-gradient(135deg, #2b3035 0%, #4a192c 100%);
+    filter: blur(60px);
+    opacity: 0.6;
+    transform: scale(1.2); /* Prevent white edges from blur */
+}
+
+.book-hero-overlay {
+    background: linear-gradient(to bottom, rgba(0,0,0,0.2) 0%, rgba(33,37,41,1) 100%);
+}
+
+.book-cover-lg {
+    width: 100%;
+    max-width: 300px;
+    border-radius: 8px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+}
+
+/* Custom Scrollbar for the modal */
+.custom-scrollbar::-webkit-scrollbar {
+    width: 8px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+    background: #212529;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+    background-color: #555;
+    border-radius: 4px;
+}

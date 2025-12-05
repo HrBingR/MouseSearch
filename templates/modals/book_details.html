@@ -1,0 +1,98 @@
+<div class="modal fade" id="bookDetailsModal" tabindex="-1" aria-labelledby="bookDetailsModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-fullscreen">
+    <div class="modal-content bg-dark text-white">
+      
+      <div class="modal-header border-0 position-absolute w-100 p-4" style="z-index: 1050; background: transparent;">
+        <button type="button" class="btn-close btn-close-white ms-auto" data-bs-dismiss="modal" aria-label="Close" style="filter: invert(1); opacity: 0.8;"></button>
+      </div>
+
+      <div class="modal-body p-0 overflow-y-auto custom-scrollbar">
+        
+        <div class="book-hero-container position-relative overflow-hidden">
+          <div class="book-hero-bg position-absolute top-0 start-0 w-100 h-100" id="detail-hero-bg"></div>
+          <div class="book-hero-overlay position-absolute top-0 start-0 w-100 h-100"></div>
+
+          <div class="container position-relative" style="z-index: 2; padding-top: 80px; padding-bottom: 40px;">
+            <div class="row">
+              <div class="col-12 col-md-4 col-lg-3 mb-4 mb-md-0 text-center text-md-start">
+                <img src="" id="detail-cover" class="img-fluid rounded shadow-lg book-cover-lg" alt="Cover" style="max-height: 400px;">
+              </div>
+
+              <div class="col-12 col-md-8 col-lg-9 d-flex flex-column justify-content-center">
+                <h1 class="display-5 fw-bold mb-2" id="detail-title">Title</h1>
+                <div class="fs-5 mb-3 text-white-50" id="detail-subtitle">
+                  </div>
+                
+                <div class="mb-1"><strong>By:</strong> <span id="detail-authors">Author Name</span></div>
+                <div class="mb-3"><strong>Narrated by:</strong> <span id="detail-narrators">Narrator Name</span></div>
+
+                <div class="d-flex gap-3 mt-3 flex-wrap">
+                    <button id="detail-download-btn" class="btn btn-warning btn-lg px-5 fw-bold rounded-pill text-dark">
+                        <i class="bi bi-play-fill me-1"></i> Download
+                    </button>
+                    
+                    <a id="detail-torrent-link" href="#" target="_blank" class="btn btn-outline-light btn-lg px-4 rounded-pill">
+                        <i class="bi bi-file-earmark-arrow-down"></i> Save .torrent
+                    </a>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="container py-5">
+            <div class="row">
+                <div class="col-12 col-lg-8 pe-lg-5">
+                    <h4 class="border-bottom pb-2 mb-3">Publisher's Summary</h4>
+                    <div id="detail-description" class="lead fs-6" style="line-height: 1.7;">
+                        </div>
+                    
+                    <div class="mt-4" id="detail-tags-container">
+                        <h5 class="mb-2 text-secondary small text-uppercase">Tags</h5>
+                        <div id="detail-tags" class="d-flex flex-wrap gap-2"></div>
+                    </div>
+                </div>
+
+                <div class="col-12 col-lg-4 mt-5 mt-lg-0">
+                    <div class="p-4 rounded-3 bg-body-tertiary border border-secondary-subtle">
+                        <h5 class="mb-3">Audiobook Details</h5>
+                        <ul class="list-unstyled mb-0 d-grid gap-2">
+                            <li class="d-flex justify-content-between">
+                                <span class="text-secondary">Category:</span>
+                                <span class="fw-medium text-end" id="detail-category">---</span>
+                            </li>
+                            <li class="d-flex justify-content-between">
+                                <span class="text-secondary">Language:</span>
+                                <span class="fw-medium text-end" id="detail-language">English</span>
+                            </li>
+                            <li class="d-flex justify-content-between">
+                                <span class="text-secondary">File Type:</span>
+                                <span class="fw-medium text-end" id="detail-filetype">MP3</span>
+                            </li>
+                            <li class="d-flex justify-content-between">
+                                <span class="text-secondary">Size:</span>
+                                <span class="fw-medium text-end" id="detail-size">0 MB</span>
+                            </li>
+                            <li class="d-flex justify-content-between">
+                                <span class="text-secondary">Release Date:</span>
+                                <span class="fw-medium text-end" id="detail-added">---</span>
+                            </li>
+                            <hr class="text-secondary">
+                            <li class="d-flex justify-content-between">
+                                <span class="text-secondary">Seeders:</span>
+                                <span class="fw-bold text-success text-end" id="detail-seeders">0</span>
+                            </li>
+                            <li class="d-flex justify-content-between">
+                                <span class="text-secondary">Leechers:</span>
+                                <span class="fw-bold text-danger text-end" id="detail-leechers">0</span>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>

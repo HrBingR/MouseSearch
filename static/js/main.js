@@ -26,6 +26,28 @@ window.toggleCardSwitch = function (checkboxId) {
     if (checkbox) checkbox.click();
 };
 
+// Helper to parse MAM specific JSON strings (e.g. "{\"91\":\"Douglas Adams\"}")
+function parseMamJson(jsonStr) {
+    if (!jsonStr) return null;
+    try {
+        const obj = typeof jsonStr === 'object' ? jsonStr : JSON.parse(jsonStr);
+        // MAM returns objects with IDs as keys, we just want the values joined by comma
+        // If it's an array (Series usually), handle that differently
+        if (Array.isArray(obj)) return obj.join(', ');
+        
+        // Handle Series Object format: {"id": ["Name", "", -1]}
+        const values = Object.values(obj);
+        if (values.length > 0 && Array.isArray(values[0])) {
+            return values.map(v => v[0]).join(', ');
+        }
+        
+        // Handle Standard Object format: {"id": "Name"}
+        return Object.values(obj).join(', ');
+    } catch (e) {
+        return jsonStr; // Return raw string if parse fails
+    }
+}
+
 /**
  * Displays a toast message on the screen.
  */
@@ -804,68 +826,190 @@ document.addEventListener("DOMContentLoaded", function () {
     // Result Click Handling (Download/Series)
     if (resultsContainer) {
         resultsContainer.addEventListener('click', function (event) {
+            
+            // CASE A: Clicked the "Download" button
             const button = event.target.closest('.add-to-client-button');
             if (button) {
                 event.preventDefault();
+                event.stopPropagation(); // Prevent opening the details modal
+                
                 const resultItem = button.closest('.result-item');
-                const rawSeries = button.dataset.seriesInfo;
-                const seriesName = getSeriesName(rawSeries);
+                initiateDownloadFlow(button, resultItem);
+                return; 
+            }
 
-                const downloadData = {
-                    torrent_url: button.dataset.torrentUrl,
-                    category: resultItem.querySelector('.category-dropdown')?.value || '',
-                    id: resultItem.dataset.torrentId,
-                    author: button.dataset.author || "Unknown",
-                    title: button.dataset.title || "Unknown",
-                    size: button.dataset.size || '0 GiB',
-                    main_cat: button.dataset.mainCat || '',
-                    series_info: rawSeries
-                };
+            // CASE B: Clicked a Dropdown or Link (e.g., Author link)
+            // We want default browser behavior, NOT opening the details modal
+            if (event.target.closest('select') || event.target.closest('a')) {
+                return; 
+            }
 
-                const autoOrganizeEnabled = document.getElementById('AUTO_ORGANIZE_ON_ADD')?.checked;
-
-                if (autoOrganizeEnabled && confirmModal) {
-                    const cleanAuthor = sanitizeFilename(downloadData.author);
-                    const cleanTitle = sanitizeFilename(downloadData.title);
-
-                    confirmInput.value = `${cleanAuthor}/${cleanTitle}`;
-                    previewSpan.textContent = confirmInput.value;
-                    document.getElementById('path-format-hint').textContent = "Format: Author / Title";
-
-                    const addSeriesBtn = document.getElementById('add-series-btn');
-                    const seriesPreviewEl = document.getElementById('series-name-preview');
-
-                    if (addSeriesBtn) {
-                        addSeriesBtn.dataset.cleanAuthor = cleanAuthor;
-                        addSeriesBtn.dataset.cleanTitle = cleanTitle;
-                        addSeriesBtn.dataset.active = "false";
-                        addSeriesBtn.classList.replace('btn-secondary', 'btn-outline-secondary');
-                        addSeriesBtn.classList.remove('text-white');
-                        addSeriesBtn.innerHTML = '<i class="bi bi-plus-lg"></i> Series';
-
-                        if (seriesName) {
-                            const cleanSeries = sanitizeFilename(seriesName);
-                            addSeriesBtn.dataset.cleanSeries = cleanSeries;
-                            addSeriesBtn.disabled = false;
-                            if (seriesPreviewEl) {
-                                seriesPreviewEl.textContent = `"${cleanSeries}"`;
-                                seriesPreviewEl.style.display = 'inline';
-                            }
-                        } else {
-                            addSeriesBtn.dataset.cleanSeries = "";
-                            addSeriesBtn.disabled = true;
-                            if (seriesPreviewEl) seriesPreviewEl.style.display = 'none';
-                        }
+            // CASE C: Clicked the Row (Result Item) -> Open Details Modal
+            const resultItem = event.target.closest('.result-item');
+            if (resultItem) {
+                // Retrieve the full JSON we injected into the HTML
+                const rawJson = resultItem.dataset.json;
+                if(rawJson) {
+                    try {
+                        const data = JSON.parse(rawJson);
+                        // Open the modal (make sure openBookDetailsModal is defined in main.js)
+                        openBookDetailsModal(data, resultItem); 
+                    } catch(e) { 
+                        console.error("Error parsing book data", e); 
                     }
-
-                    pendingDownloadData = downloadData;
-                    pendingButton = button;
-                    confirmModal.show();
-                } else {
-                    performDownload(downloadData, button);
                 }
             }
         });
+    }
+
+        /**
+     * REFACTORED: Handles the download logic. 
+     * Can be called from the main list OR the details modal.
+     * @param {HTMLElement} button - The button clicked (contains data attributes)
+     * @param {HTMLElement} resultItem - The row element (contains the category dropdown)
+     */
+    function initiateDownloadFlow(button, resultItem) {
+        const rawSeries = button.dataset.seriesInfo;
+        const seriesName = getSeriesName(rawSeries);
+        
+        // 1. Construct the download payload from the button's data attributes
+        const downloadData = {
+            torrent_url: button.dataset.torrentUrl,
+            // Try to find the dropdown in the resultItem; default to empty if not found
+            category: resultItem ? (resultItem.querySelector('.category-dropdown')?.value || '') : '',
+            id: button.dataset.id,
+            author: button.dataset.author || "Unknown",
+            title: button.dataset.title || "Unknown",
+            size: button.dataset.size || '0 GiB',
+            main_cat: button.dataset.mainCat || '',
+            series_info: rawSeries
+        };
+
+        // 2. Check if Auto-Organize is enabled
+        const autoOrganizeEnabled = document.getElementById('AUTO_ORGANIZE_ON_ADD')?.checked;
+
+        if (autoOrganizeEnabled && confirmModal) {
+            // --- Auto-Organize Logic (Populate Confirm Modal) ---
+            
+            const cleanAuthor = sanitizeFilename(downloadData.author);
+            const cleanTitle = sanitizeFilename(downloadData.title);
+
+            // Set default path: Author / Title
+            confirmInput.value = `${cleanAuthor}/${cleanTitle}`;
+            previewSpan.textContent = confirmInput.value;
+            document.getElementById('path-format-hint').textContent = "Format: Author / Title";
+
+            // Logic for the "+ Series" button inside the modal
+            const addSeriesBtn = document.getElementById('add-series-btn');
+            const seriesPreviewEl = document.getElementById('series-name-preview');
+
+            if (addSeriesBtn) {
+                // Reset button state
+                addSeriesBtn.dataset.cleanAuthor = cleanAuthor;
+                addSeriesBtn.dataset.cleanTitle = cleanTitle;
+                addSeriesBtn.dataset.active = "false";
+                addSeriesBtn.classList.replace('btn-secondary', 'btn-outline-secondary');
+                addSeriesBtn.classList.remove('text-white');
+                addSeriesBtn.innerHTML = '<i class="bi bi-plus-lg"></i> Series';
+
+                if (seriesName) {
+                    const cleanSeries = sanitizeFilename(seriesName);
+                    addSeriesBtn.dataset.cleanSeries = cleanSeries;
+                    addSeriesBtn.disabled = false;
+                    if (seriesPreviewEl) {
+                        seriesPreviewEl.textContent = `"${cleanSeries}"`;
+                        seriesPreviewEl.style.display = 'inline';
+                    }
+                } else {
+                    addSeriesBtn.dataset.cleanSeries = "";
+                    addSeriesBtn.disabled = true;
+                    if (seriesPreviewEl) seriesPreviewEl.style.display = 'none';
+                }
+            }
+
+            // Save data to global vars for the "Confirm" button to use later
+            pendingDownloadData = downloadData;
+            pendingButton = button;
+
+            confirmModal.show();
+        } else {
+            // --- Direct Download (No Confirm Modal) ---
+            performDownload(downloadData, button);
+        }
+    }
+
+    // Function to Populate and Show Modal
+    function openBookDetailsModal(data, originElement) {
+        // Elements
+        const modalEl = document.getElementById('bookDetailsModal');
+        const modal = new bootstrap.Modal(modalEl);
+
+        // Parse Complex Fields
+        const authors = parseMamJson(data.author_info);
+        const narrators = parseMamJson(data.narrator_info) || "N/A";
+        const series = parseMamJson(data.series_info);
+
+        // Populate Text
+        document.getElementById('detail-title').innerHTML = data.title; // InnerHTML to decode entities
+        document.getElementById('detail-subtitle').innerHTML = series ? `<span class="badge bg-secondary opacity-50">Series</span> ${series}` : '';
+        document.getElementById('detail-authors').textContent = authors;
+        document.getElementById('detail-narrators').textContent = narrators;
+        document.getElementById('detail-description').innerHTML = data.description || "No description available.";
+        
+        // Populate Image
+        const coverImg = document.getElementById('detail-cover');
+        // Use the same proxy logic as the list view, or fallback
+        coverImg.src = originElement.querySelector('img')?.src || '/static/icons/no_cover.png';
+
+        // Hero Background Color (Simulated dynamic color)
+        const hue = Math.floor(Math.random() * 360);
+        document.getElementById('detail-hero-bg').style.background = `linear-gradient(135deg, hsl(${hue}, 40%, 20%) 0%, #1a1a1a 100%)`;
+
+        // Populate Metadata Sidebar
+        document.getElementById('detail-category').innerHTML = data.catname;
+        document.getElementById('detail-language').textContent = data.lang_code || "ENG";
+        document.getElementById('detail-filetype').textContent = data.filetype;
+        document.getElementById('detail-size').textContent = data.size;
+        document.getElementById('detail-added').textContent = data.added.split(' ')[0]; // Just date, no time
+        document.getElementById('detail-seeders').textContent = data.seeders;
+        document.getElementById('detail-leechers').textContent = data.leechers;
+
+        // Populate Tags
+        const tagsContainer = document.getElementById('detail-tags');
+        tagsContainer.innerHTML = '';
+        if(data.tags) {
+            data.tags.split(',').forEach(tag => {
+                const badge = document.createElement('span');
+                badge.className = 'badge bg-secondary bg-opacity-25 text-body-emphasis border border-secondary-subtle fw-normal';
+                badge.textContent = tag.trim();
+                tagsContainer.appendChild(badge);
+            });
+        }
+
+        // Setup Download Button in Modal
+        const dlBtn = document.getElementById('detail-download-btn');
+        // Copy data attributes from the object to the button so our helper works
+        dlBtn.dataset.torrentUrl = data.download_link;
+        dlBtn.dataset.id = data.id;
+        dlBtn.dataset.author = authors;
+        dlBtn.dataset.title = data.title;
+        dlBtn.dataset.size = data.size;
+        dlBtn.dataset.mainCat = data.main_cat;
+        dlBtn.dataset.seriesInfo = data.series_info;
+
+        // Remove old listeners to prevent stacking
+        const newDlBtn = dlBtn.cloneNode(true);
+        dlBtn.parentNode.replaceChild(newDlBtn, dlBtn);
+        
+        newDlBtn.addEventListener('click', function() {
+             initiateDownloadFlow(this, originElement); // Use originElement to get category dropdown
+        });
+
+        // Setup Save .torrent link
+        const torrentLink = document.getElementById('detail-torrent-link');
+        torrentLink.href = data.download_link;
+
+        modal.show();
     }
 
     // Confirm Download Modal Action

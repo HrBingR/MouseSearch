@@ -8,8 +8,11 @@
 </div>
 {% else %}
 {% for result in results %}
-<div class="row my-3 mx-0 py-2 pe-lg-0 rounded-1 border shadow-sm result-item" data-torrent-id="{{ result.id }}"
-    data-snatched="{{ result.my_snatched }}" data-torrent-url="{{ result.download_link | safe }}">
+<div class="row my-3 mx-0 py-2 pe-lg-0 rounded-1 border shadow-sm result-item cursor-pointer" 
+     data-torrent-id="{{ result.id }}"
+     data-snatched="{{ result.my_snatched }}" 
+     data-torrent-url="{{ result.download_link | safe }}"
+     data-json="{{ result | tojson | forceescape }}">
     <div class="col-6 col-md-4 d-flex justify-content-center align-items-center">
         <a href="https://www.myanonamouse.net/t/{{ result.id }}" target="_blank">
             <img class="img-fluid me-2 rounded" src="{{ url_for('proxy_thumbnail', url=result.thumbnail) }}"
