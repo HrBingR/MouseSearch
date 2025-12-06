@@ -2,9 +2,26 @@ a {
   text-decoration: none;
 }
 
-body {
+/* body {
     padding-top: 56px;
-  }
+  } */
+
+   .navbar {
+    background-color: transparent !important; /* Force transparent container */
+    
+    /* PRO TIP: This allows you to click "through" the empty parts of the navbar 
+       so you can still click the search bar if it's near the top */
+    pointer-events: none; 
+}
+
+.navbar-toggler {
+    pointer-events: auto;
+    
+    /* Optional: Make it look like a nice floating chip */
+    border-radius: 8px; 
+    opacity: 1;
+}
+
   .bg-purple {
     background-color: #6f42c1;
   }
