@@ -2,24 +2,72 @@ a {
   text-decoration: none;
 }
 
-/* body {
-    padding-top: 56px;
-  } */
-
-   .navbar {
-    background-color: transparent !important; /* Force transparent container */
-    
-    /* PRO TIP: This allows you to click "through" the empty parts of the navbar 
-       so you can still click the search bar if it's near the top */
-    pointer-events: none; 
+/* --- GLOBAL SETTINGS --- */
+body {
+    padding-top: 0; /* Content goes to the very top behind the nav */
 }
 
-.navbar-toggler {
-    pointer-events: auto;
+/* --- MOBILE STYLES (Screen width < 992px) --- */
+@media (max-width: 991.98px) {
+    .responsive-navbar {
+        background-color: transparent; /* Invisible container */
+        pointer-events: none;          /* Lets you click "through" the empty space */
+    }
+
+    .responsive-navbar .navbar-toggler {
+        background-color: #212529;     /* Dark background for the button only */
+        pointer-events: auto;          /* Makes the button clickable */
+        border: 1px;
+        box-shadow: 0 .125rem .25rem rgba(0,0,0,.075); /* Optional shadow */
+    }
+}
+
+/* --- DESKTOP STYLES (Screen width >= 992px) --- */
+@media (min-width: 992px) {
+    .responsive-navbar {
+        background-color: #212529; /* Standard Dark Background */
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        padding-top: 10px;
+        padding-bottom: 10px;
+    }
     
-    /* Optional: Make it look like a nice floating chip */
-    border-radius: 8px; 
-    opacity: 1;
+    /* Since the bar is solid, we generally add body padding back 
+       ONLY on desktop so content doesn't get hidden behind the bar. 
+       If you prefer the purple header to still go behind the bar on desktop,
+       remove this block. */
+    body {
+        padding-top: 60px; 
+    }
+}
+
+/* --- UNIVERSAL TRANSITIONS --- */
+/* This ensures every change happens smoothly, not instantly */
+.navbar-toggler, 
+.navbar-toggler-icon {
+    transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+/* --- HOVER EFFECT 1: The "Lift" --- */
+/* When hovering the button, it grows slightly, lifts up, and brightens */
+.navbar-toggler:hover {
+    /* transform: translateY(-2px) scale(1.05); Moves up 2px and grows 5% */
+    box-shadow: 0 0.5rem 1rem rgba(0,0,0,0.3) !important; /* Deeper shadow */
+    background-color: #2b3035 !important; /* Slightly lighter than pure black */
+    border-color: #495057; /* Adds a subtle border highlight */
+}
+
+/* --- HOVER EFFECT 2: The "Active Press" --- */
+/* When you actually click/tap the button */
+.navbar-toggler:active {
+    transform: translateY(0) scale(0.95); /* Presses down slightly */
+    box-shadow: 0 0.125rem 0.25rem rgba(0,0,0,0.2) !important;
+}
+
+/* --- HOVER EFFECT 3: The Icon Pop --- */
+/* The lines inside the button zoom in slightly */
+.navbar-toggler:hover .navbar-toggler-icon {
+    /* transform: scale(1.15); */
+    filter: drop-shadow(0 0 2px rgba(255,255,255,0.4)); /* Subtle glow */
 }
 
   .bg-purple {
