@@ -1359,9 +1359,16 @@ async def mam_search():
             for item in results:
                 if dl_hash := item.get('dl'): item['download_link'] = base_dl_url + dl_hash
                 else: item['download_link'] = '' 
+
+                # Only set if thumbnail is missing
                 if not item.get('thumbnail'):
-                    cat = item.get('category', '')
-                    item['thumbnail'] = f"https://static.myanonamouse.net/pic/cats/3/{cat}.png"
+                    # Optimistically assume the CDN link works to save time
+                    # You can add logic here: if item['id'] is missing, go straight to category
+                    if item.get('id'):
+                        item['thumbnail'] = f"https://cdn.myanonamouse.net/t/p/small/{item['id']}.webp"
+                    else:
+                        cat = item.get('category', '')
+                        item['thumbnail'] = f"https://static.myanonamouse.net/pic/cats/3/{cat}.png"
 
             ranked = rank_results(results)
             client_status_data = await torrent_client.get_status() if torrent_client else {"status": "error"}
