@@ -11,13 +11,13 @@
 <div class="row my-3 mx-0 py-2 pe-lg-0 rounded-1 border shadow-sm result-item cursor-pointer"
     data-torrent-id="{{ result.id }}" data-snatched="{{ result.my_snatched }}"
     data-torrent-url="{{ result.download_link | safe }}" data-json="{{ result | tojson | forceescape }}">
-    <div class="col-6 col-md-4 d-flex justify-content-center align-items-center">
+    <div id="cover" class="col-6 col-md-4 d-flex justify-content-start justify-content-md-center align-items-center">
         <img class="img-fluid me-2 rounded" src="{{ url_for('proxy_thumbnail', url=result.thumbnail) }}" alt="Thumbnail"
             loading="lazy" style="object-fit: contain;"
             onerror="this.onerror=null; this.src='/static/icons/no_cover.png';">
     </div>
 
-    <div class="col-6 col-md-5 pb-3 mb-0 small lh-sm">
+    <div id="details" class="col-6 col-md-4 pb-3 mb-0 small lh-sm">
         <div class="d-flex justify-content-between">
             <strong class="text-gray-dark">{{ result.title | safe }}</strong>
         </div>
@@ -67,7 +67,7 @@
             </div>
         </div>
     </div>
-    <div class="col-12 col-md-3 py-2 d-flex flex-column justify-content-center">
+    <div id="actions" class="col-12 col-md-4 py-2 d-flex flex-column justify-content-center">
         {% if result.download_link %}
         <div class="d-grid gap-2 d-md-block" style="width:100%" {% if CLIENT_STATUS !='CONNECTED'
             %}title="Torrent client is not connected." {% endif %}>
