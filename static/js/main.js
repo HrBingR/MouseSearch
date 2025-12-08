@@ -129,6 +129,33 @@ function formatDuration(seconds) {
     return result.slice(0, 2).join(' ');
 }
 
+/**
+ * Converts UTC strings to the user's local date (No Time).
+ */
+function localizeDates(scope = document) {
+    scope.querySelectorAll('.render-local-date').forEach(el => {
+        const rawDate = el.getAttribute('data-date');
+        if (!rawDate || el.dataset.processed) return;
+
+        try {
+            // Standardize format: "2023-11-05 14:30:00" -> "2023-11-05T14:30:00Z"
+            let cleanDate = rawDate.trim().replace(" ", "T");
+            if (!cleanDate.endsWith('Z')) cleanDate += 'Z';
+
+            const dateObj = new Date(cleanDate);
+            if (!isNaN(dateObj)) {
+                // CHANGED: used toLocaleDateString() instead of toLocaleString()
+                // and removed hour/minute options.
+                el.textContent = dateObj.toLocaleDateString();
+                
+                el.dataset.processed = "true";
+            }
+        } catch (e) {
+            console.error("Date localization error:", e);
+        }
+    });
+}
+
 function sanitizeFilename(name) {
     if (!name) return "Unknown";
     return name.replace(/[<>:"/\\|?*]/g, '').trim();
@@ -464,6 +491,8 @@ document.addEventListener("DOMContentLoaded", function () {
     // Init Tooltips
     [...document.querySelectorAll('[data-bs-toggle="tooltip"]')].map(el => new bootstrap.Tooltip(el));
     
+    localizeDates();
+
     // Initial Fetches
     fetchPublicIP();
     checkClientStatus();
@@ -784,6 +813,7 @@ document.addEventListener("DOMContentLoaded", function () {
             .then(html => {
                 wrapper.style.display = 'block';
                 resultsContainer.innerHTML = html;
+                localizeDates(resultsContainer);
                 const count = resultsContainer.querySelectorAll('.result-item').length;
                 if (resultsTitle) resultsTitle.textContent = `Results (${count})`;
                 if (!isHistoryNavigation) {
@@ -1127,8 +1157,8 @@ document.addEventListener("DOMContentLoaded", function () {
         document.getElementById('detail-category').innerHTML = data.catname;
         document.getElementById('detail-language').textContent = getLanguageName(data.lang_code);
         document.getElementById('detail-filetype').textContent = data.filetype;
-        document.getElementById('detail-size').textContent = data.size;
-        document.getElementById('detail-added').textContent = data.added.split(' ')[0];
+        document.getElementById('detail-size').textContent = data.size.replace('iB', 'B');
+        document.getElementById('detail-added').textContent = new Date(data.added).toLocaleDateString();
         document.getElementById('detail-seeders').textContent = data.seeders;
         document.getElementById('detail-leechers').textContent = data.leechers;
 
