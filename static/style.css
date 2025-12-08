@@ -168,6 +168,10 @@ input:disabled, select:disabled {
       --bs-btn-active-color: var(--bs-btn-hover-color);
       --bs-btn-active-bg: #5a23c8;
       --bs-btn-active-border-color: #5a23c8;
+
+      background-color: var(--bs-btn-bg);
+      border-color: var(--bs-btn-border-color);
+      color: var(--bs-btn-color);
     }
 
     .bd-mode-toggle {
@@ -271,16 +275,16 @@ input:disabled, select:disabled {
     text-shadow: none !important;
     --bs-btn-bg: var(--bd-violet-bg);
     --bs-btn-color: var(--bs-body-color);
-    --bs-btn-border-color: var(--bs-body-color);
+    /* --bs-btn-border-color: var(--bs-body-color); */
     
     /* Hover State: Invert colors (Bg becomes Text Color, Text becomes Bg Color) */
     --bs-btn-hover-bg: var(--bs-body-color);
-    --bs-btn-hover-color: var(--bs-body-bg);
+    /* --bs-btn-hover-color: var(--bs-body-bg); */
     --bs-btn-hover-border-color: var(--bs-body-color);
     
     /* Active/Focus States */
     --bs-btn-focus-shadow-rgb: var(--bs-body-color-rgb);
-    --bs-btn-active-color: var(--bs-body-bg);
+    /* --bs-btn-active-color: var(--bs-body-bg); */
     --bs-btn-active-bg: var(--bs-body-color);
     --bs-btn-active-border-color: var(--bs-body-color);
     
