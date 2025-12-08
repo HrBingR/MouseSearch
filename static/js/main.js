@@ -27,6 +27,22 @@ window.toggleCardSwitch = function (checkboxId) {
 };
 
 /**
+ * Maps MAM poster_type mime to file extension.
+ * Defaults to 'jpeg' if unknown.
+ */
+function getPosterExtension(mimeType) {
+    if (!mimeType) return 'jpeg';
+    const map = {
+        'image/jpeg': 'jpeg',
+        'image/jpg': 'jpg',
+        'image/png': 'png',
+        'image/gif': 'gif',
+        'image/webp': 'webp'
+    };
+    return map[mimeType] || 'jpeg';
+}
+
+/**
  * Handle broken images in the modal.
  * 1. Swaps broken img -> placeholder
  * 2. Swaps broken/empty background -> nice generic gradient
@@ -1103,19 +1119,29 @@ document.addEventListener("DOMContentLoaded", function () {
      * Pushes state to history -> Renders content -> Shows Modal.
      */
     function openBookDetailsModal(data, originElement) {
-        // Get Cover Source (fallback to placeholder if missing)
-        const coverSrc = originElement.querySelector('img')?.src || '/static/icons/no_cover.png';
+        // 1. Calculate Extensions and URLs
+        const ext = getPosterExtension(data.poster_type);
+        
+        // Use '0' as timestamp to force CDN redirect to latest version
+        const highResUrl = `https://cdn.myanonamouse.net/t/p/0/large/${data.id}.${ext}`;
+        const lowResUrl = `https://cdn.myanonamouse.net/t/p/small/${data.id}.webp`;
 
-        // Push History State so the "Back" button works
+        // 2. Prepare Proxy URLs
+        const highResProxy = `/proxy_thumbnail?url=${encodeURIComponent(highResUrl)}`;
+        const lowResProxy = `/proxy_thumbnail?url=${encodeURIComponent(lowResUrl)}`;
+
+        // Push History State
         const newUrl = window.location.pathname + window.location.search + `#book=${data.id}`;
         history.pushState({ 
             type: 'book_details', 
-            bookData: data, 
-            coverSrc: coverSrc 
+            bookData: data,
+            // Store both so we can restore them on popstate if needed
+            hiResSrc: highResProxy,
+            lowResSrc: lowResProxy 
         }, '', newUrl);
 
         // Render & Show
-        renderBookDetails(data, coverSrc);
+        renderBookDetails(data, highResProxy, lowResProxy);
         const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('bookDetailsModal'));
         modal.show();
     }
@@ -1125,35 +1151,79 @@ document.addEventListener("DOMContentLoaded", function () {
      * Called by openBookDetailsModal AND by the History Manager (popstate).
      * Updates the DOM elements inside the modal.
      */
-    function renderBookDetails(data, coverSrc) {
-        // Parse Complex Fields
+    function renderBookDetails(data, hiResSrc, lowResSrc) {
+        // Fallback calculation if called via history popstate
+        if (!hiResSrc || !lowResSrc) {
+             const ext = getPosterExtension(data.poster_type);
+             const rawHi = `https://cdn.myanonamouse.net/t/p/0/large/${data.id}.${ext}`;
+             const rawLow = `https://cdn.myanonamouse.net/t/p/small/${data.id}.webp`;
+             hiResSrc = `/proxy_thumbnail?url=${encodeURIComponent(rawHi)}`;
+             lowResSrc = `/proxy_thumbnail?url=${encodeURIComponent(rawLow)}`;
+        }
+
+        // --- Standard Metadata Rendering ---
         const authors = parseMamJson(data.author_info);
         const narrators = parseMamJson(data.narrator_info) || "N/A";
         const series = parseMamJson(data.series_info);
 
-        // Populate Text
         document.getElementById('detail-title').innerHTML = data.title;
         document.getElementById('detail-subtitle').innerHTML = series ? `<span class="badge bg-secondary opacity-75">Series</span> ${series}` : '';
         document.getElementById('detail-authors').textContent = authors;
         document.getElementById('detail-narrators').textContent = narrators;
         document.getElementById('detail-description').innerHTML = data.description || "No description available.";
-        
-        // Populate Image
-        const imgEl = document.getElementById('detail-cover');
-        // Reset the error handler (in case it was nulled out previously)
-        imgEl.onerror = function() { handleBookCoverError(this); };
-        imgEl.src = coverSrc;
 
-        // Dynamic Hero Background (Blurred Image)
+        // --- PROGRESSIVE IMAGE LOGIC START ---
+        const imgEl = document.getElementById('detail-cover');
         const heroBg = document.getElementById('detail-hero-bg');
-        heroBg.style.backgroundImage = `url('${coverSrc}')`;
-        
-        // RESET styles in case previous book triggered the error handler
+
+        // 1. Reset Background Styles 
+        // (Important: If previous book triggered 'handleBookCoverError', these styles were removed. We must restore them.)
         heroBg.style.filter = 'blur(50px)';
         heroBg.style.transform = 'scale(1.2)';
         heroBg.style.opacity = '0.5';
+        
+        // 2. Attach Error Handler to Visible Image immediately
+        // If Low Res fails, this triggers your existing fallback logic (Placeholder + Gradient BG)
+        imgEl.onerror = function() { handleBookCoverError(this); };
 
-        // Populate Metadata Sidebar
+        // 3. Set Initial State: Use Low Res for BOTH Cover and Background
+        // This is instant if cached, or very fast if not.
+        imgEl.src = lowResSrc;
+        heroBg.style.backgroundImage = `url('${lowResSrc}')`;
+
+        // 4. Spin up High Res Loader in the background
+        const hiResLoader = new Image();
+        hiResLoader.src = hiResSrc;
+
+        hiResLoader.onload = function() {
+            // Ensure the modal is still open and showing THIS book
+            // (Checks if the low res currently displayed matches what we are trying to upgrade)
+            const currentSrc = imgEl.src;
+            
+            // Note: We check includes because the browser expands relative URLs to absolute
+            if (imgEl && (currentSrc.includes(lowResSrc) || currentSrc.includes('no_cover.png'))) {
+                // Swap the Cover Image
+                imgEl.src = hiResSrc;
+                
+                // Optional: Swap the Background too? 
+                // Usually keeping the Low Res BG is fine since it's blurred 50px, 
+                // but swapping ensures color accuracy if High Res is significantly different.
+                heroBg.style.backgroundImage = `url('${hiResSrc}')`;
+                
+                // If we recovered from a "no_cover" state (rare edge case), restore blur styles
+                if (currentSrc.includes('no_cover.png')) {
+                    heroBg.style.filter = 'blur(50px)';
+                    heroBg.style.transform = 'scale(1.2)';
+                    heroBg.style.opacity = '0.5';
+                }
+            }
+        };
+        // We do NOT need an onerror for hiResLoader. 
+        // If High Res fails, the user simply keeps seeing the Low Res version (which is already there).
+        // --- PROGRESSIVE IMAGE LOGIC END ---
+
+
+        // --- Rest of Rendering (Metadata, Tags, etc.) ---
         document.getElementById('detail-category').innerHTML = data.catname;
         document.getElementById('detail-language').textContent = getLanguageName(data.lang_code);
         document.getElementById('detail-filetype').textContent = data.filetype;
@@ -1162,7 +1232,6 @@ document.addEventListener("DOMContentLoaded", function () {
         document.getElementById('detail-seeders').textContent = data.seeders;
         document.getElementById('detail-leechers').textContent = data.leechers;
 
-        // Populate Tags
         const tagsContainer = document.getElementById('detail-tags');
         tagsContainer.innerHTML = '';
         if(data.tags) {
@@ -1175,10 +1244,7 @@ document.addEventListener("DOMContentLoaded", function () {
             });
         }
 
-        // Setup Download Button
         const dlBtn = document.getElementById('detail-download-btn');
-        
-        // Copy data attributes to the button so initiateDownloadFlow can read them
         dlBtn.dataset.torrentUrl = data.download_link;
         dlBtn.dataset.id = data.id;
         dlBtn.dataset.author = authors;
@@ -1187,18 +1253,13 @@ document.addEventListener("DOMContentLoaded", function () {
         dlBtn.dataset.mainCat = data.main_cat;
         dlBtn.dataset.seriesInfo = data.series_info;
 
-        // Clone button to remove old event listeners (prevents multiple clicks firing)
         const newDlBtn = dlBtn.cloneNode(true);
         dlBtn.parentNode.replaceChild(newDlBtn, dlBtn);
         
-        // Add Click Listener
         newDlBtn.addEventListener('click', function() {
-            // Pass null for resultItem because the modal doesn't have the category dropdown
-            // The initiateDownloadFlow function handles null gracefully
             initiateDownloadFlow(this, null);
         });
 
-        // Setup .torrent link
         document.getElementById('detail-torrent-link').href = data.download_link;
     }
 

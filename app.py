@@ -1537,26 +1537,54 @@ async def proxy_thumbnail():
     cache_enabled = app.config.get("ENABLE_FILESYSTEM_THUMBNAIL_CACHE", True)
     
     # --- Cache Read ---
+    # We cache based on the REQUESTED url (the one with the '0' timestamp).
+    # The content stored will be the final image.
     cache_key = hashlib.md5(url.encode()).hexdigest()
     cache_path = os.path.join(THUMB_CACHE_DIR, cache_key)
     
     if cache_enabled:
-        # Ensure cache directory exists only when caching is enabled
         os.makedirs(THUMB_CACHE_DIR, exist_ok=True)
-        
         if os.path.exists(cache_path):
-            # Check if younger than 30 days (2592000 seconds)
             if time.time() - os.path.getmtime(cache_path) < 2592000:
                 response = await send_file(cache_path)
                 response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
                 response.headers["X-mousesearch-Cache-Status"] = "HIT"
                 return response
             
-    # --- Upstream Fetch ---
+    # --- Upstream Fetch with Manual Redirect Handling ---
     fwd_headers = {h: request.headers.get(h) for h in ("If-None-Match", "If-Modified-Since", "Range") if request.headers.get(h)}
+    
     async with FETCH_SEMAPHORE:
-        req = UPSTREAM_CLIENT.build_request("GET", url, headers=fwd_headers, cookies=mam_session_cookies)
-        r = await UPSTREAM_CLIENT.send(req, stream=True)
+        # We allow up to 3 redirects manually to ensure we attach cookies every time
+        redirect_count = 0
+        current_url = url
+        
+        while redirect_count < 3:
+            req = UPSTREAM_CLIENT.build_request("GET", current_url, headers=fwd_headers, cookies=mam_session_cookies)
+            
+            # Disable auto-follow so we can inspect the headers ourselves
+            r = await UPSTREAM_CLIENT.send(req, stream=True, follow_redirects=False)
+            
+            if r.status_code in (301, 302, 303, 307, 308):
+                await r.aclose() # Close the stream for the redirect response
+                redirect_loc = r.headers.get('Location')
+                if not redirect_loc:
+                    break # Should not happen on valid redirect
+                
+                # Handle relative redirects if necessary (though MAM usually sends absolute)
+                if redirect_loc.startswith('/'):
+                    from urllib.parse import urljoin
+                    current_url = urljoin(current_url, redirect_loc)
+                else:
+                    current_url = redirect_loc
+                    
+                redirect_count += 1
+                continue # Loop again with new URL and FRESH cookies
+            else:
+                # We found the final destination (200 OK or 404, etc)
+                break
+
+        # --- Process Final Response (Standard Logic) ---
         passthrough = {h: r.headers.get(h) for h in ("Content-Type", "Content-Length", "Cache-Control", "ETag", "Last-Modified", "Accept-Ranges", "Content-Range") if r.headers.get(h)}
         passthrough.setdefault("Cache-Control", "public, max-age=31536000, immutable")
         
@@ -1576,7 +1604,6 @@ async def proxy_thumbnail():
                 
                 if file_handle:
                     file_handle.close()
-                    # Atomic move: prevents partial files if the script crashes mid-download
                     os.rename(temp_path, cache_path)
             except Exception:
                 if should_cache and os.path.exists(temp_path): 
