@@ -12,6 +12,7 @@ const redXIcon = `<img src="/static/icons/x_circle.svg" alt="not connected" styl
 const torrentHashMap = {};
 const hashToElementMap = new Map();
 let lastClientStatus = null;
+let lastPerformedQuery = null;
 window.currentVipUntil = null;
 window.currentBonusPoints = 0;
 // Validation for upload purchase amounts
@@ -829,6 +830,7 @@ document.addEventListener("DOMContentLoaded", function () {
             .then(html => {
                 wrapper.style.display = 'block';
                 resultsContainer.innerHTML = html;
+                lastPerformedQuery = queryString;
                 localizeDates(resultsContainer);
                 const count = resultsContainer.querySelectorAll('.result-item').length;
                 if (resultsTitle) resultsTitle.textContent = `Results (${count})`;
@@ -902,14 +904,27 @@ document.addEventListener("DOMContentLoaded", function () {
             // --- STATE: SEARCH RESULTS ---
             else if (event.state.type === 'search') {
                 restoreFormFromURL(new URLSearchParams(event.state.query));
-                performSearch(event.state.query, true);
+                
+                // Only perform search if the query has changed or results are missing
+                const resultsEmpty = !document.getElementById('results-container').innerHTML.trim();
+                
+                if (event.state.query !== lastPerformedQuery || resultsEmpty) {
+                    performSearch(event.state.query, true);
+                } else {
+                    // Results are already there (we just closed a modal), so just ensure they are visible
+                    document.getElementById('results-container-wrapper').style.display = 'block';
+                }
             }
         } else {
-            // --- STATE: LANDING PAGE (No state) ---
-            // If there are query params in URL (e.g. refresh), load search
+            // --- MODIFIED LANDING PAGE CHECK ---
             const urlParams = new URLSearchParams(window.location.search);
             if (urlParams.has('query')) {
-                performSearch(urlParams.toString(), true);
+                const queryStr = urlParams.toString();
+                const resultsEmpty = !document.getElementById('results-container').innerHTML.trim();
+
+                if (queryStr !== lastPerformedQuery || resultsEmpty) {
+                     performSearch(queryStr, true);
+                }
             }
         }
     });
