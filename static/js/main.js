@@ -1513,4 +1513,62 @@ document.addEventListener("DOMContentLoaded", function () {
             })
             .finally(() => { this.disabled = false; this.innerHTML = `Buy ${amount} GB`; });
     });
+
+    // --- D. Sticky Header Search Logic ---
+// Add this inside the document.addEventListener("DOMContentLoaded", function () { ... }) block
+
+    const navElement = document.getElementById('main-navbar');
+    const navSearchContainer = document.getElementById('nav-search-container');
+    const navSearchInput = document.getElementById('nav-search-input');
+    const navSearchForm = document.getElementById('nav-search-form');
+    
+    // 1. Scroll Listener (Show/Hide)
+    window.addEventListener('scroll', () => {
+        if (!searchForm) return;
+
+        // Calculate when the main search form leaves the screen
+        const mainFormBottom = searchForm.getBoundingClientRect().bottom;
+        const shouldShow = mainFormBottom < 0; // Negative means it scrolled up past the viewport top
+
+        if (shouldShow) {
+            navElement.classList.add('navbar-scrolled');
+            navSearchContainer.classList.remove('opacity-0');
+            navSearchContainer.style.pointerEvents = 'auto';
+        } else {
+            navElement.classList.remove('navbar-scrolled');
+            navSearchContainer.classList.add('opacity-0');
+            navSearchContainer.style.pointerEvents = 'none';
+            // Optional: Blur to hide mobile keyboard if they scroll back up quickly
+            if (document.activeElement === navSearchInput) navSearchInput.blur();
+        }
+    });
+
+    // 2. Submit Listener (Sync & Search)
+    if (navSearchForm) {
+        navSearchForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const val = navSearchInput.value.trim();
+            if (val) {
+                // Copy value to main search box
+                const mainInput = document.getElementById('query');
+                if (mainInput) {
+                    mainInput.value = val;
+                    // Trigger the main search button click to reuse all existing logic (filters, etc)
+                    searchButton.click();
+                    
+                    // Optional: Scroll slightly up so results aren't hidden behind the sticky header
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                }
+            }
+        });
+    }
+
+    // 3. Optional: Sync typing (If you want the main box to update as you type in the header)
+    if (navSearchInput) {
+        navSearchInput.addEventListener('input', function() {
+            const mainInput = document.getElementById('query');
+            if (mainInput) mainInput.value = this.value;
+        });
+    }
+    
 });

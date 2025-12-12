@@ -427,3 +427,26 @@ input:disabled, select:disabled {
     border-color: var(--bs-border-color);
     color: var(--bs-body-color);
 }
+
+/* --- Add to static/style.css --- */
+
+/* Helper for smooth background/padding transitions on the navbar itself */
+.transition-all {
+    transition: background-color 0.3s ease, padding 0.3s ease, box-shadow 0.3s ease;
+}
+
+/* State when user has scrolled down */
+.navbar-scrolled {
+    background-color: rgba(33, 37, 41, 0.95) !important; /* Dark background */
+    backdrop-filter: blur(10px); /* Glassmorphism effect */
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+    pointer-events: auto !important; /* Re-enable clicks on mobile */
+}
+
+/* Ensure the nav search input looks good */
+#nav-search-input:focus {
+    background-color: #2b3035 !important;
+    border-color: var(--bs-primary);
+    color: white !important;
+    box-shadow: none; 
+}

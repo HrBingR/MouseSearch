@@ -115,10 +115,22 @@
   </div>
 
 
-  <nav class="navbar fixed-top navbar-dark responsive-navbar" aria-label="Main navigation">
+  <nav class="navbar fixed-top navbar-dark responsive-navbar transition-all" id="main-navbar" aria-label="Main navigation">
     <div class="container-fluid">
 
       <a class="navbar-brand" href="#"></a>
+
+      <div id="nav-search-container" class="opacity-0 mx-3 flex-grow-1" style="max-width: 500px; transition: opacity 0.3s ease; pointer-events: none;">
+        <form id="nav-search-form" class="w-100" autocomplete="off">
+          <div class="input-group input-group-sm">
+            <span class="input-group-text bg-dark border-secondary text-secondary">
+              <i class="bi bi-search"></i>
+            </span>
+            <input type="text" id="nav-search-input" class="form-control bg-dark border-secondary text-light" 
+                   placeholder="Search books, authors..." aria-label="Search">
+          </div>
+        </form>
+      </div>
 
       <button class="navbar-toggler p-2 rounded" type="button" data-bs-toggle="offcanvas"
         data-bs-target="#settingsOffcanvas">
