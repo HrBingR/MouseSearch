@@ -1591,24 +1591,31 @@ function initAutosuggest(inputId) {
     // Create results dropdown container
     const container = document.createElement('div');
     container.className = 'autosuggest-results list-group shadow-sm';
-    // Position it immediately after the input
     input.parentNode.appendChild(container);
 
+    // State management for cancellation
+    let debounceTimer = null;
+    let abortController = null;
+
     const performSearch = async (val) => {
+        // 1. Cancel any previous in-flight request
+        if (abortController) {
+            abortController.abort();
+        }
+        abortController = new AbortController();
+
         if (val.length < 3) {
             container.style.display = 'none';
             return;
         }
 
         try {
-            // 1. Gather Filter Values from the DOM
-            // We look for the IDs used in your HTML templates
+            // Gather filters
             const getVal = (id) => document.getElementById(id)?.value || '';
             const getCheck = (id) => document.getElementById(id)?.checked ? 'true' : 'false';
 
             const params = new URLSearchParams({
                 q: val,
-                // Pass the filters exactly as the backend expects them
                 language: getVal('language') || 'English',
                 media_type: getVal('media_type') || '13',
                 search_in_title: getCheck('search_in_title'),
@@ -1617,10 +1624,13 @@ function initAutosuggest(inputId) {
                 search_in_series: getCheck('search_in_series')
             });
 
-            // 2. Fetch with dynamic filters
-            const res = await fetch(`/mam/autosuggest?${params.toString()}`);
+            // 2. Fetch with AbortSignal
+            const res = await fetch(`/mam/autosuggest?${params.toString()}`, {
+                signal: abortController.signal
+            });
             const data = await res.json();
 
+            // 3. Render
             container.innerHTML = '';
 
             if (data.length === 0) {
@@ -1633,11 +1643,10 @@ function initAutosuggest(inputId) {
                 a.className = 'list-group-item list-group-item-action d-flex align-items-center gap-3 py-2';
                 a.href = '#';
 
-                const seriesHtml = item.series
-                    ? `<div class="text-xs text-body-secondary text-truncate"><i class="bi bi-collection me-1"></i>${item.series}</div>`
+                const seriesHtml = item.series 
+                    ? `<div class="text-xs text-body-secondary text-truncate"><i class="bi bi-collection me-1"></i>${item.series}</div>` 
                     : '';
-
-                // NEW: Show seeder count (Tiny badge)
+                
                 const seederHtml = `<span class="badge bg-secondary-subtle text-secondary-emphasis rounded-pill ms-auto" style="font-size: 0.65rem;">${item.seeders} <i class="bi bi-arrow-up-short"></i></span>`;
 
                 a.innerHTML = `
@@ -1656,11 +1665,12 @@ function initAutosuggest(inputId) {
 
                 a.addEventListener('click', (e) => {
                     e.preventDefault();
+                    // Kill any pending requests since we made a choice
+                    if (abortController) abortController.abort();
+                    clearTimeout(debounceTimer);
 
-                    // Populate input
                     input.value = `${item.title} ${item.author}`;
-
-                    // Sync main search if needed
+                    
                     const mainQuery = document.getElementById('query');
                     if (mainQuery && input.id !== 'query') {
                         mainQuery.value = input.value;
@@ -1676,25 +1686,46 @@ function initAutosuggest(inputId) {
             container.style.display = 'block';
 
         } catch (e) {
-            console.error("Autosuggest error", e);
+            // Ignore AbortErrors (caused by new typing or hitting Enter)
+            if (e.name !== 'AbortError') {
+                console.error("Autosuggest error", e);
+            }
         }
     };
 
-    // Attach Debounce (300ms)
-    input.addEventListener('input', debounce((e) => {
-        performSearch(e.target.value.trim());
-    }, 300));
+    // --- Event Listeners ---
 
-    // Hide on click outside
-    document.addEventListener('click', (e) => {
-        if (!input.contains(e.target) && !container.contains(e.target)) {
+    // 1. Input: Debounce the search
+    input.addEventListener('input', (e) => {
+        clearTimeout(debounceTimer); // Clear previous timer
+        const val = e.target.value.trim();
+        
+        // Wait 300ms before searching
+        debounceTimer = setTimeout(() => {
+            performSearch(val);
+        }, 300);
+    });
+
+    // 2. Keydown: Check for Enter or Escape
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            // STOP everything:
+            clearTimeout(debounceTimer);      // 1. Stop the timer if it hasn't fired yet
+            if (abortController) {
+                abortController.abort();      // 2. Kill the fetch if it's currently running
+            }
+            container.style.display = 'none'; // 3. Hide the UI immediately
+        }
+        else if (e.key === 'Escape') {
             container.style.display = 'none';
         }
     });
 
-    // Hide on Escape
-    input.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') container.style.display = 'none';
+    // 3. Click Outside
+    document.addEventListener('click', (e) => {
+        if (!input.contains(e.target) && !container.contains(e.target)) {
+            container.style.display = 'none';
+        }
     });
 }
 
