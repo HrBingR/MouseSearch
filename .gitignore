@@ -8,6 +8,8 @@ reloadService.sh
 # Custom
 # buildImage.sh
 compose.yaml
+tools/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
