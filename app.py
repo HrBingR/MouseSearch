@@ -88,6 +88,21 @@ async def startup():
     if app.config.get("ENABLE_FILESYSTEM_THUMBNAIL_CACHE", True):
         app.logger.debug("Cache cleanup task started")
         app.add_background_task(cleanup_cache_task)
+        
+    if app.config.get("AUTO_ORGANIZE_ON_SCHEDULE"):
+        hours = int(app.config.get("AUTO_ORGANIZE_INTERVAL_HOURS", 1))
+        scheduler.add_job(check_for_unorganized_torrents, 'interval', hours=hours, id='organize_safety_net_job', replace_existing=True)
+
+    
+    if app.config.get("AUTO_BUY_UPLOAD_ON_RATIO") or app.config.get("AUTO_BUY_UPLOAD_ON_BUFFER"):
+        interval_hours = int(app.config.get("AUTO_BUY_UPLOAD_CHECK_INTERVAL_HOURS", 6))
+        scheduler.add_job(check_and_buy_upload, 'interval', hours=interval_hours, id='upload_check_job', replace_existing=True)
+        scheduler.add_job(check_and_buy_upload, 'date', run_date=datetime.now() + timedelta(seconds=15), id='initial_upload_check_job')
+
+    if app.config.get("ENABLE_DYNAMIC_IP_UPDATE"):
+        interval_hours = int(app.config.get("DYNAMIC_IP_UPDATE_INTERVAL_HOURS", 3))
+        scheduler.add_job(check_and_update_ip, 'interval', hours=interval_hours, id='ip_check_job', replace_existing=True)
+        scheduler.add_job(check_and_update_ip, 'date', run_date=datetime.now() + timedelta(seconds=5), id='initial_ip_check_job')
     
     if app.config.get("AUTO_BUY_VIP"):
         interval_hours = int(app.config.get("AUTO_BUY_VIP_INTERVAL_HOURS", 24))
@@ -271,6 +286,7 @@ def load_config():
         "BLOCK_DOWNLOAD_ON_LOW_BUFFER",
         "ENABLE_FILESYSTEM_THUMBNAIL_CACHE"
     ]:
+        config[key] = coerce_bool(config.get(key), FALLBACK_CONFIG[key])
         val = config[key]
         if not isinstance(val, bool):
             # Check against common string representations of True
@@ -635,10 +651,6 @@ async def check_and_update_ip():
         if current_ip != last_ip:
             await force_update_ip()
 
-if app.config.get("ENABLE_DYNAMIC_IP_UPDATE"):
-    interval_hours = int(app.config.get("DYNAMIC_IP_UPDATE_INTERVAL_HOURS", 3))
-    scheduler.add_job(check_and_update_ip, 'interval', hours=interval_hours, id='ip_check_job', replace_existing=True)
-    scheduler.add_job(check_and_update_ip, 'date', run_date=datetime.now() + timedelta(seconds=5), id='initial_ip_check_job')
 
 # --- VIP AUTO-BUY SCHEDULER ---
 async def auto_buy_vip():
@@ -769,10 +781,6 @@ async def check_and_buy_upload():
                 except Exception as e:
                     app.logger.error(f"[AUTO-UPLOAD-BUFFER] Error: {e}")
 
-if app.config.get("AUTO_BUY_UPLOAD_ON_RATIO") or app.config.get("AUTO_BUY_UPLOAD_ON_BUFFER"):
-    interval_hours = int(app.config.get("AUTO_BUY_UPLOAD_CHECK_INTERVAL_HOURS", 6))
-    scheduler.add_job(check_and_buy_upload, 'interval', hours=interval_hours, id='upload_check_job', replace_existing=True)
-    scheduler.add_job(check_and_buy_upload, 'date', run_date=datetime.now() + timedelta(seconds=15), id='initial_upload_check_job')
 
 # --- SESSION AND API HELPERS ---
 def update_cookies(response):
@@ -1079,6 +1087,56 @@ async def mam_buy_upload():
             'error': '; '.join(errors) if errors else "Purchase failed."
         }), 400
         
+
+def coerce_bool(val, default: bool) -> bool:
+    """
+    Converts a given value to a boolean, using a default if the value is ambiguous.
+
+    Parameters:
+        val: The value to coerce to a boolean. Can be of any type.
+        default (bool): The default boolean value to return if `val` cannot be clearly interpreted as True or False.
+
+    Returns:
+        bool: The coerced boolean value.
+
+    Behavior:
+        - If `val` is already a boolean, it is returned as-is.
+        - If `val` is None or an empty string, returns `default`.
+        - If `val` is an integer or float (but not a boolean), returns True for 1, False for 0, otherwise `default`.
+        - If `val` is a string, recognizes common true/false representations (e.g., "yes", "no", "on", "off", "1", "0").
+        - For any unrecognized value, returns `default`.
+    """
+    # Already a bool? Keep it.
+    if isinstance(val, bool):
+        return val
+
+    # None / empty string => use default (don’t silently flip off)
+    if val is None:
+        return default
+    if isinstance(val, str) and val.strip() == "":
+        return default
+
+    # Int-like values
+    if isinstance(val, (int, float)) and not isinstance(val, bool):
+        if val == 1:
+            return True
+        if val == 0:
+            return False
+        return default
+
+    # String values
+    s = str(val).strip().lower()
+    true_set = {"true", "1", "t", "yes", "y", "on"}
+    false_set = {"false", "0", "f", "no", "n", "off"}
+
+    if s in true_set:
+        return True
+    if s in false_set:
+        return False
+
+    # Unknown value => default
+    return default
+
 # Helper function to clean the specific MAM JSON format
 def parse_mam_metadata(json_str, is_series=False):
     if not json_str:
@@ -2110,9 +2168,6 @@ async def check_for_unorganized_torrents():
             except Exception as e:
                 app.logger.error(f"[SAFETY NET] Exception during organization of {h}: {e}", exc_info=True)
 
-if app.config.get("AUTO_ORGANIZE_ON_SCHEDULE"):
-    hours = int(app.config.get("AUTO_ORGANIZE_INTERVAL_HOURS", 1))
-    scheduler.add_job(check_for_unorganized_torrents, 'interval', hours=hours, id='organize_safety_net_job', replace_existing=True)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
