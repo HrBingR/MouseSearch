@@ -15,6 +15,7 @@ let lastClientStatus = null;
 let lastPerformedQuery = null;
 window.currentVipUntil = null;
 window.currentBonusPoints = 0;
+window.isVipActive = false;
 // Validation for upload purchase amounts
 window.VALID_UPLOAD_AMOUNTS = [10, 50, 100, 500, 1000];
 
@@ -462,6 +463,14 @@ function loadMamUserData() {
             window.currentVipUntil = data.vip_until;
             window.currentBonusPoints = parseFloat(data.seedbonus || 0);
 
+            // VIP status is used for VIP Freeleech (fl_vip) torrents.
+            window.isVipActive = false;
+            if (window.currentVipUntil) {
+                const now = new Date();
+                const vipDate = new Date(window.currentVipUntil.replace(' ', 'T'));
+                window.isVipActive = !isNaN(vipDate) && vipDate > now;
+            }
+
             const vipWeeksContainer = document.getElementById('vip-weeks-container');
             const vipWeeksSpan = document.getElementById('vip-weeks-remaining');
             if (data.vip_until && vipWeeksContainer && vipWeeksSpan) {
@@ -850,6 +859,87 @@ document.addEventListener("DOMContentLoaded", function () {
     const confirmInput = document.getElementById('confirm-path-input');
     const previewSpan = document.getElementById('full-path-preview');
 
+    const personalFlBtn = document.getElementById('use-personal-fl-btn');
+    const freeleechIndicator = document.getElementById('confirm-freeleech-indicator');
+
+    function refreshTooltip(el) {
+        if (!el) return;
+        const existing = bootstrap.Tooltip.getInstance(el);
+        if (existing) existing.dispose();
+        new bootstrap.Tooltip(el);
+    }
+
+    function computeTorrentFreeleechState(data) {
+        const free = parseInt(data?.free ?? 0) === 1;
+        const personal = parseInt(data?.personal_freeleech ?? 0) === 1;
+        const flVip = parseInt(data?.fl_vip ?? 0) === 1;
+        const vipFree = flVip && window.isVipActive === true;
+
+        if (free) return { isFreeleech: true, reason: 'Public Freeleech' };
+        if (personal) return { isFreeleech: true, reason: 'Personal Freeleech' };
+        if (vipFree) return { isFreeleech: true, reason: 'VIP Freeleech' };
+        return { isFreeleech: false, reason: null };
+    }
+
+    function updateConfirmModalFreeleechUI() {
+        if (!confirmModalEl) return;
+
+        const state = computeTorrentFreeleechState(pendingDownloadData);
+        if (freeleechIndicator) {
+            if (state.isFreeleech) {
+                freeleechIndicator.classList.remove('d-none');
+                freeleechIndicator.setAttribute('title', `This download will be Freeleech${state.reason ? ` (${state.reason})` : ''}`);
+                refreshTooltip(freeleechIndicator);
+            } else {
+                freeleechIndicator.classList.add('d-none');
+            }
+        }
+
+        if (personalFlBtn) {
+            const hasTorrentId = !!(pendingDownloadData && pendingDownloadData.id);
+            const canUsePersonal = hasTorrentId && !state.isFreeleech;
+
+            personalFlBtn.disabled = !canUsePersonal;
+            const tooltip = !hasTorrentId
+                ? 'Select a torrent first'
+                : state.isFreeleech
+                    ? 'Already Freeleech for you'
+                    : 'Spend one Freeleech Wedge on this torrent';
+            personalFlBtn.setAttribute('title', tooltip);
+            refreshTooltip(personalFlBtn);
+        }
+    }
+
+    personalFlBtn?.addEventListener('click', function () {
+        if (!pendingDownloadData?.id) return;
+        const originalHtml = this.innerHTML;
+        this.disabled = true;
+        this.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Applying...';
+
+        fetch('/mam/buy_personal_fl', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ torrentid: pendingDownloadData.id })
+        })
+            .then(r => r.json())
+            .then(data => {
+                if (data && data.success) {
+                    pendingDownloadData.personal_freeleech = 1;
+                    showToast(`Freeleech Wedge applied. FL left: ${data.FLleft ?? 'N/A'}`, 'success');
+                    loadMamUserData();
+                    updateConfirmModalFreeleechUI();
+                } else {
+                    showToast(data?.error || data?.message || 'Failed to apply Freeleech Wedge', 'danger');
+                }
+            })
+            .catch(() => showToast('Connection error', 'danger'))
+            .finally(() => {
+                this.innerHTML = originalHtml;
+                // Recompute enabled state after completion
+                updateConfirmModalFreeleechUI();
+            });
+    });
+
     if (confirmInput && previewSpan) confirmInput.addEventListener('input', function () { previewSpan.textContent = this.value; });
 
     function performSearch(queryString, isHistoryNavigation = false) {
@@ -868,6 +958,15 @@ document.addEventListener("DOMContentLoaded", function () {
                 resultsContainer.innerHTML = html;
                 lastPerformedQuery = queryString;
                 localizeDates(resultsContainer);
+
+                // Tooltips are created on DOMContentLoaded, but search results are injected later.
+                [...resultsContainer.querySelectorAll('[data-bs-toggle="tooltip"]')]
+                    .forEach(el => {
+                        const existing = bootstrap.Tooltip.getInstance(el);
+                        if (existing) existing.dispose();
+                        new bootstrap.Tooltip(el);
+                    });
+
                 const count = resultsContainer.querySelectorAll('.result-item').length;
                 if (resultsTitle) resultsTitle.textContent = `Results (${count})`;
                 if (!isHistoryNavigation) {
@@ -1104,7 +1203,12 @@ document.addEventListener("DOMContentLoaded", function () {
             title: button.dataset.title || "Unknown",
             size: button.dataset.size || '0 GiB',
             main_cat: button.dataset.mainCat || '',
-            series_info: rawSeries
+            series_info: rawSeries,
+
+            // Freeleech flags (used by confirm modal UI)
+            free: button.dataset.free ?? 0,
+            personal_freeleech: button.dataset.personalFreeleech ?? 0,
+            fl_vip: button.dataset.flVip ?? 0,
         };
 
         // 2. Check if Auto-Organize is enabled
@@ -1152,6 +1256,9 @@ document.addEventListener("DOMContentLoaded", function () {
             // Save data to global vars for the "Confirm" button to use later
             pendingDownloadData = downloadData;
             pendingButton = button;
+
+            // Sync Freeleech UI
+            updateConfirmModalFreeleechUI();
 
             confirmModal.show();
         } else {
@@ -1235,6 +1342,14 @@ document.addEventListener("DOMContentLoaded", function () {
         bVip.classList.add('d-none');
         bFree.classList.add('d-none');
 
+        // Reset tooltip content/state (Bootstrap caches title in data-bs-original-title)
+        if (bFree) {
+            const existing = bootstrap.Tooltip.getInstance(bFree);
+            if (existing) existing.dispose();
+            bFree.setAttribute('title', 'Freeleech');
+            bFree.setAttribute('data-bs-original-title', 'Freeleech');
+        }
+
         // 2. Show if data matches (coercing to int just in case)
         if (parseInt(data.my_snatched) === 1) {
             bDownloaded.classList.remove('d-none');
@@ -1242,8 +1357,17 @@ document.addEventListener("DOMContentLoaded", function () {
         if (parseInt(data.vip) === 1) {
             bVip.classList.remove('d-none');
         }
-        if (parseInt(data.free) === 1 || parseInt(data.personal_freeleech) === 1) {
+        const isPublicFree = parseInt(data.free) === 1;
+        const isPersonalFree = parseInt(data.personal_freeleech) === 1;
+        const isVipFree = parseInt(data.fl_vip) === 1 && window.isVipActive === true;
+        const isFreeleech = isPublicFree || isPersonalFree || isVipFree;
+
+        if (isFreeleech) {
             bFree.classList.remove('d-none');
+            const reason = isPublicFree ? 'Public Freeleech' : (isPersonalFree ? 'Personal Freeleech' : 'VIP Freeleech');
+            bFree.setAttribute('title', reason);
+            bFree.setAttribute('data-bs-original-title', reason);
+            new bootstrap.Tooltip(bFree);
         }
         // ============================================================
         // NEW: BADGE LOGIC END
@@ -1334,6 +1458,9 @@ document.addEventListener("DOMContentLoaded", function () {
         dlBtn.dataset.size = data.size;
         dlBtn.dataset.mainCat = data.main_cat;
         dlBtn.dataset.seriesInfo = data.series_info;
+        dlBtn.dataset.free = data.free;
+        dlBtn.dataset.personalFreeleech = data.personal_freeleech;
+        dlBtn.dataset.flVip = data.fl_vip;
 
         const newDlBtn = dlBtn.cloneNode(true);
         dlBtn.parentNode.replaceChild(newDlBtn, dlBtn);

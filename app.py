@@ -1120,6 +1120,50 @@ async def mam_buy_upload():
             'success': False, 
             'error': '; '.join(errors) if errors else "Purchase failed."
         }), 400
+
+
+@app.route('/mam/buy_personal_fl', methods=['POST'])
+async def mam_buy_personal_fl():
+    """Spend a personal freeleech token (wedge) on a specific torrent."""
+    if not await login_mam():
+        return jsonify({'success': False, 'error': 'Not logged into MAM'}), 401
+
+    try:
+        data = await request.get_json() or {}
+        torrentid = data.get('torrentid') or data.get('torrent_id') or data.get('id')
+        if torrentid is None:
+            return jsonify({'success': False, 'error': 'Missing torrentid'}), 400
+
+        try:
+            torrentid = int(torrentid)
+        except (ValueError, TypeError):
+            return jsonify({'success': False, 'error': 'Invalid torrentid'}), 400
+
+        epoch_ms = int(time.time() * 1000)
+
+        # MAM expects the timestamp in both the path and as a query arg.
+        api_url = f"{app.config.get('MAM_API_URL')}/json/bonusBuy.php/{epoch_ms}"
+        params = {
+            'spendtype': 'personalFL',
+            'torrentid': torrentid,
+            'timestamp': epoch_ms,
+        }
+
+        async with httpx.AsyncClient() as client:
+            response = await client.get(api_url, params=params, cookies=mam_session_cookies, timeout=10)
+            update_cookies(response)
+            response.raise_for_status()
+            result = response.json()
+
+        if result.get('success'):
+            await push_mam_stats()
+        else:
+            app.logger.warning(f"[BUY-PERSONAL-FL] Purchase failed: {result}")
+
+        return jsonify(result)
+    except Exception as e:
+        app.logger.error(f"Error buying personal freeleech: {e}")
+        return jsonify({'success': False, 'error': 'Failed to spend freeleech token'}), 503
         
 
 # Helper function to clean the specific MAM JSON format
@@ -1612,6 +1656,17 @@ async def mam_search():
     if not query: 
         return await render_template("partials/results.html", results=[])
 
+    # Used by templates to decide whether VIP Freeleech applies (fl_vip).
+    is_vip_active = False
+    try:
+        user_data = await fetch_mam_json_load()
+        vip_until = (user_data or {}).get('vip_until')
+        if vip_until:
+            vip_dt = datetime.fromisoformat(str(vip_until).strip().replace(' ', 'T'))
+            is_vip_active = vip_dt > datetime.utcnow()
+    except Exception:
+        is_vip_active = False
+
     params = {
         "tor[text]": query,
         "tor[sortType]": "default", "perpage": 50, "thumbnail": "true", "dlLink": "true",
@@ -1714,7 +1769,14 @@ async def mam_search():
             if any(item.get('my_snatched') == 1 for item in ranked):
                 save_database(metadata)
             
-            return await render_template("partials/results.html", results=ranked, CLIENT_STATUS="CONNECTED" if client_connected else "NOT CONNECTED", categories=categories, TORRENT_CLIENT_CATEGORY=app.config.get("TORRENT_CLIENT_CATEGORY", ""))
+            return await render_template(
+                "partials/results.html",
+                results=ranked,
+                CLIENT_STATUS="CONNECTED" if client_connected else "NOT CONNECTED",
+                categories=categories,
+                TORRENT_CLIENT_CATEGORY=app.config.get("TORRENT_CLIENT_CATEGORY", ""),
+                IS_VIP_ACTIVE=is_vip_active,
+            )
     except Exception as e:
         return await render_template("partials/results.html", error_message=f"Error: {e}")
 

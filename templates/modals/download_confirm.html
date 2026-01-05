@@ -40,8 +40,16 @@
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-outline-info" id="use-personal-fl-btn" data-bs-toggle="tooltip"
+            data-bs-placement="top" title="Spend one Freeleech Wedge on this torrent">
+            <i class="bi bi-ticket-perforated"></i> Use Freeleech Wedge
+          </button>
           <button type="button" class="btn btn-primary" id="confirm-download-btn">
             <i class="bi bi-download"></i> Start Download
+            <span id="confirm-freeleech-indicator" class="ms-2 d-none" data-bs-toggle="tooltip"
+              data-bs-placement="top" title="This download will be Freeleech">
+              <i class="bi bi-lightning-charge-fill"></i>
+            </span>
           </button>
         </div>
       </div>

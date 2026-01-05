@@ -71,8 +71,15 @@
 {% if result.vip == 1 %}
 <span class="badge bg-warning text-dark" style="font-size: 0.7rem;">VIP</span>
 {% endif %}
-{% if result.free == 1 or result.personal_freeleech == 1 %}
-<span class="badge bg-info text-dark" style="font-size: 0.7rem;">Freeleech</span>
+{% if result.free == 1 %}
+<span class="badge bg-info text-dark" style="font-size: 0.7rem;" data-bs-toggle="tooltip" data-bs-placement="left"
+    title="Public Freeleech">Freeleech</span>
+{% elif result.personal_freeleech == 1 %}
+<span class="badge bg-info text-dark" style="font-size: 0.7rem;" data-bs-toggle="tooltip" data-bs-placement="left"
+    title="Personal Freeleech">Freeleech</span>
+{% elif result.fl_vip == 1 and IS_VIP_ACTIVE %}
+<span class="badge bg-info text-dark" style="font-size: 0.7rem;" data-bs-toggle="tooltip" data-bs-placement="left"
+    title="VIP Freeleech">Freeleech</span>
 {% endif %}
 {% endmacro %}
 
@@ -150,8 +157,15 @@
                         {% if result.vip == 1 %}
                         <span class="badge bg-warning text-dark" style="font-size: 0.6rem;">VIP</span>
                         {% endif %}
-                        {% if result.free == 1 or result.personal_freeleech == 1 %}
-                        <span class="badge bg-info text-dark" style="font-size: 0.6rem;">Freeleech</span>
+                        {% if result.free == 1 %}
+                        <span class="badge bg-info text-dark" style="font-size: 0.6rem;" data-bs-toggle="tooltip"
+                            data-bs-placement="left" title="Public Freeleech">Freeleech</span>
+                        {% elif result.personal_freeleech == 1 %}
+                        <span class="badge bg-info text-dark" style="font-size: 0.6rem;" data-bs-toggle="tooltip"
+                            data-bs-placement="left" title="Personal Freeleech">Freeleech</span>
+                        {% elif result.fl_vip == 1 and IS_VIP_ACTIVE %}
+                        <span class="badge bg-info text-dark" style="font-size: 0.6rem;" data-bs-toggle="tooltip"
+                            data-bs-placement="left" title="VIP Freeleech">Freeleech</span>
                         {% endif %}
                     </div>
 
@@ -166,9 +180,15 @@
                         <span class="badge bg-warning text-dark" style="font-size: 0.6rem;">VIP</span>
                         {% endif %}
 
-                        {% if result.free == 1 or result.personal_freeleech == 1 %}
+                        {% if result.free == 1 %}
                         <span class="badge bg-info text-dark" style="font-size: 0.6rem;" data-bs-toggle="tooltip"
-                            data-bs-placement="left" title="Freeleech">FL</span>
+                            data-bs-placement="left" title="Public Freeleech">FL</span>
+                        {% elif result.personal_freeleech == 1 %}
+                        <span class="badge bg-info text-dark" style="font-size: 0.6rem;" data-bs-toggle="tooltip"
+                            data-bs-placement="left" title="Personal Freeleech">FL</span>
+                        {% elif result.fl_vip == 1 and IS_VIP_ACTIVE %}
+                        <span class="badge bg-info text-dark" style="font-size: 0.6rem;" data-bs-toggle="tooltip"
+                            data-bs-placement="left" title="VIP Freeleech">FL</span>
                         {% endif %}
 
                     </div>
@@ -187,6 +207,8 @@
                 <button type="button" class="btn btn-primary btn-sm w-100 shadow-sm fw-semibold add-to-client-button"
                     data-torrent-url="{{ result.download_link | safe }}" data-author="{{ result.author_info }}"
                     data-title="{{ result.title }}" data-id="{{ result.id }}" data-size="{{ result.size }}"
+                    data-free="{{ result.free }}" data-personal-freeleech="{{ result.personal_freeleech }}"
+                    data-fl-vip="{{ result.fl_vip }}"
                     data-main-cat="{{ result.main_cat }}" data-series-info="{{ result.series_info | escape }}" {% if
                     CLIENT_STATUS !='CONNECTED' %}disabled{% endif %}>
                     <i class="bi bi-cloud-arrow-down-fill me-1"></i> Download
