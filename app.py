@@ -88,6 +88,8 @@ RESULT_DISPLAY_FIELDS = [
     "seeders",
     "category",
     "language",
+    "narrator",
+    "series",
 ]
 LANGUAGE_BY_ID = {str(value): name for name, value in language_dict.items()}
 
@@ -267,7 +269,7 @@ FALLBACK_CONFIG = {
     "BLOCK_DOWNLOAD_ON_LOW_BUFFER": True,
     "ENABLE_FILESYSTEM_THUMBNAIL_CACHE": True,
     "THUMBNAIL_CACHE_MAX_SIZE_MB": 500,
-    "RESULTS_DISPLAY_FIELDS": ["file_size", "file_type", "seeders"]
+    "RESULTS_DISPLAY_FIELDS": ["narrator", "series", "file_size", "file_type", "seeders"]
 }
 
 # Set up data directory and paths

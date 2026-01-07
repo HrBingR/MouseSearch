@@ -898,7 +898,9 @@ document.addEventListener("DOMContentLoaded", function () {
         'snatches',
         'seeders',
         'category',
-        'language'
+        'language',
+        'narrator',
+        'series'
     ]);
 
     function getSelectedResultFields() {

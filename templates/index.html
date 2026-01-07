@@ -383,6 +383,16 @@
                 id="result-display-language" {% if 'language' in RESULTS_DISPLAY_FIELDS %}checked{% endif %}>
               <label class="form-check-label" for="result-display-language">Language</label>
             </div>
+            <div class="form-check">
+              <input class="form-check-input result-display-option" type="checkbox" value="narrator"
+                id="result-display-narrator" {% if 'narrator' in RESULTS_DISPLAY_FIELDS %}checked{% endif %}>
+              <label class="form-check-label" for="result-display-narrator">Narrator</label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input result-display-option" type="checkbox" value="series"
+                id="result-display-series" {% if 'series' in RESULTS_DISPLAY_FIELDS %}checked{% endif %}>
+              <label class="form-check-label" for="result-display-series">Series</label>
+            </div>
           </div>
         </div>
 
