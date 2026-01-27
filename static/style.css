@@ -531,3 +531,69 @@ input:disabled, select:disabled {
 .results-thumb {
     filter: drop-shadow(1px 2px 3px rgba(0, 0, 0, 1));
 }
+
+
+
+/* MediaInfo JSON Tree Styles */
+.json-tree {
+    font-family: 'SF Mono', SFMono-Regular, ui-monospace, 'DejaVu Sans Mono', monospace;
+    font-size: 0.8rem; /* Slightly smaller for technical data */
+    line-height: 1.6;
+}
+
+.json-tree details {
+    margin-left: 12px;
+}
+
+.json-tree summary {
+    cursor: pointer;
+    list-style: none; 
+    color: var(--bs-primary); 
+    font-weight: 600;
+    user-select: none;
+}
+
+/* Custom Arrow Indicator */
+.json-tree summary::-webkit-details-marker { display: none; }
+.json-tree summary::before {
+    content: "▶";
+    font-size: 0.65em;
+    margin-right: 6px;
+    display: inline-block;
+    transition: transform 0.15s ease;
+    color: var(--bs-secondary);
+    opacity: 0.7;
+}
+.json-tree details[open] > summary::before {
+    transform: rotate(90deg);
+}
+
+/* Key-Value Styles */
+.json-row {
+    margin-left: 24px;
+    display: flex;
+    flex-wrap: nowrap; /* Prevent wrapping to new lines */
+    align-items: center; /* Vertically center key and value */
+    min-width: max-content; /* Force row to be as wide as its content */
+}
+
+.json-key {
+    color: var(--bs-secondary);
+    margin-right: 6px;
+    opacity: 0.8;
+    white-space: nowrap; /* Keep keys on one line */
+    flex-shrink: 0; /* Prevent key from shrinking */
+}
+
+.json-val {
+    color: var(--bs-body-color);
+    white-space: nowrap; /* The magic sauce: forces horizontal expansion */
+}
+
+/* Rotate chevron when collapsed element is open */
+[aria-expanded="true"] .bi-chevron-down {
+    transform: rotate(180deg);
+}
+.transition-transform {
+    transition: transform 0.2s ease-in-out;
+}

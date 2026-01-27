@@ -310,6 +310,75 @@ function initializeEventStream() {
     eventSource.onerror = function (error) { console.error('[SSE] Error:', error); };
 }
 
+function renderJsonTree(data, containerId) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    
+    container.innerHTML = ''; // Clear previous
+
+    // 1. Safety Check & Parsing
+    let jsonData = data;
+    
+    // Handle "empty" cases
+    if (!data || data === "{}" || (typeof data === 'string' && data.trim() === "{}")) {
+        container.innerHTML = '<div class="text-secondary small fst-italic text-center py-2">No technical metadata available</div>';
+        return;
+    }
+
+    // Parse stringified JSON if needed
+    if (typeof data === 'string') {
+        try {
+            jsonData = JSON.parse(data);
+        } catch (e) {
+            console.error("JSON Parse Error:", e);
+            container.innerHTML = '<div class="alert alert-warning py-1 small mb-0">Error loading MediaInfo</div>';
+            return;
+        }
+    }
+
+    // 2. Recursive Tree Builder
+    function createTree(obj) {
+        const root = document.createElement('div');
+        
+        for (const [key, value] of Object.entries(obj)) {
+            // Case A: Value is an Object or Array (Accordion)
+            if (value !== null && typeof value === 'object') {
+                const details = document.createElement('details');
+                
+                // Auto-open "General" and "Audio" keys for better UX
+                if (key === 'General' || key.startsWith('Audio')) details.open = true;
+
+                const summary = document.createElement('summary');
+                const sizeLabel = Array.isArray(value) ? ` [${value.length}]` : '';
+                
+                // Styling the summary text
+                summary.innerHTML = `<span class="opacity-75">${key}</span><small class="text-muted ms-1">${sizeLabel}</small>`;
+                
+                details.appendChild(summary);
+                details.appendChild(createTree(value)); // Recursion
+                root.appendChild(details);
+            } 
+            // Case B: Value is Primitive (Row)
+            else {
+                const row = document.createElement('div');
+                row.className = 'json-row';
+                
+                let displayValue = value;
+                if (value === null) displayValue = 'null';
+                
+                row.innerHTML = `<span class="json-key">${key}:</span><span class="json-val">${displayValue}</span>`;
+                root.appendChild(row);
+            }
+        }
+        return root;
+    }
+
+    // 3. Render
+    const treeRoot = createTree(jsonData);
+    treeRoot.className = 'json-tree';
+    container.appendChild(treeRoot);
+}
+
 async function getTorrentHashByMID(torrentId) {
     if (torrentHashMap[torrentId]) return torrentHashMap[torrentId];
     try {
@@ -1594,6 +1663,7 @@ document.addEventListener("DOMContentLoaded", function () {
             // Fallback for older templates
             document.getElementById('detail-title').textContent = data.title || '';
         }
+        renderJsonTree(data.mediainfo, 'mediainfo-tree-container');
         document.getElementById('detail-subtitle').innerHTML = series ? `<span class="badge bg-secondary opacity-75">Series</span> ${series}` : '';
         document.getElementById('detail-authors').textContent = authors;
         document.getElementById('detail-narrators').textContent = narrators;
