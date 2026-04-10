@@ -22,7 +22,7 @@ from dotenv import load_dotenv, dotenv_values
 from httpx import Limits, Timeout, AsyncHTTPTransport
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-from urllib.parse import unquote, urlparse
+from urllib.parse import parse_qsl, unquote, urlparse
 
 import re
 from pathlib import Path
@@ -1269,6 +1269,226 @@ def calculate_vip_topup_weeks(user_data):
 
     weeks_to_cap = max(0.0, VIP_MAX_WEEKS - current_weeks)
     return min(weeks_affordable, weeks_to_cap)
+
+
+class SafeFormatDict(dict):
+    def __missing__(self, key):
+        return ""
+
+
+def _parse_auto_task_webhook_params(raw_value):
+    raw = str(raw_value or "").strip()
+    if not raw:
+        return None
+
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        parsed = dict(parse_qsl(raw, keep_blank_values=True))
+
+    if isinstance(parsed, dict):
+        return parsed
+
+    app.logger.warning("[AUTO-WEBHOOK] AUTO_TASK_WEBHOOK_PARAMS must be a JSON object or query string; ignoring value")
+    return None
+
+
+def _parse_auto_task_webhook_body(raw_value):
+    raw = str(raw_value or "").strip()
+    if not raw:
+        return None
+
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        return raw_value
+
+
+def _parse_auto_task_webhook_events(raw_value):
+    raw = str(raw_value or "").strip()
+    if not raw:
+        return None
+
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        parsed = [item.strip() for item in raw.split(",")]
+
+    if isinstance(parsed, str):
+        parsed = [parsed]
+
+    if isinstance(parsed, list):
+        events = {str(item).strip() for item in parsed if str(item).strip()}
+        return events or None
+
+    app.logger.warning("[AUTO-WEBHOOK] AUTO_TASK_WEBHOOK_EVENTS must be a JSON array or comma-separated list; ignoring value")
+    return None
+
+
+def _render_auto_task_webhook_template(value, context):
+    if isinstance(value, str):
+        return value.format_map(SafeFormatDict(context))
+    if isinstance(value, list):
+        return [_render_auto_task_webhook_template(item, context) for item in value]
+    if isinstance(value, dict):
+        return {key: _render_auto_task_webhook_template(val, context) for key, val in value.items()}
+    return value
+
+
+def _filter_none_values(payload):
+    if isinstance(payload, dict):
+        return {key: value for key, value in payload.items() if value is not None}
+    return payload
+
+
+def _normalize_webhook_query_value(value):
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (dict, list)):
+        return json.dumps(value, separators=(",", ":"))
+    return str(value)
+
+
+def _build_auto_task_summary(context):
+    label_map = {
+        "task": "Task",
+        "reason": "Reason",
+        "amount": "Amount",
+        "purchase_size": "Purchase Size",
+        "purchase_count": "Purchase Count",
+        "threshold": "Threshold",
+        "current_ratio": "Current Ratio",
+        "current_buffer_gb": "Current Buffer GB",
+        "starting_seedbonus": "Starting Seedbonus",
+        "seedbonus": "Seedbonus",
+        "previous_ip": "Previous IP",
+        "detected_ip": "Detected IP",
+        "updated_ip": "Updated IP",
+        "title": "Title",
+        "author": "Author",
+        "hash": "Hash",
+        "mid": "MID",
+        "pending_count": "Pending",
+        "organized_count": "Organized",
+        "failed_count": "Failed",
+        "message": "Message",
+        "error": "Error",
+    }
+    ordered_keys = [
+        "task",
+        "reason",
+        "amount",
+        "purchase_size",
+        "purchase_count",
+        "threshold",
+        "current_ratio",
+        "current_buffer_gb",
+        "starting_seedbonus",
+        "seedbonus",
+        "previous_ip",
+        "detected_ip",
+        "updated_ip",
+        "title",
+        "author",
+        "hash",
+        "mid",
+        "pending_count",
+        "organized_count",
+        "failed_count",
+        "message",
+        "error",
+    ]
+
+    parts = []
+    for key in ordered_keys:
+        value = context.get(key)
+        if value in (None, ""):
+            continue
+        parts.append(f"{label_map[key]}={value}")
+    return ". ".join(parts)
+
+
+def _get_torrent_metadata_summary(hash_val):
+    torrent_meta = load_database().get(hash_val, {})
+    return {
+        "hash": hash_val,
+        "title": torrent_meta.get("title"),
+        "author": torrent_meta.get("author"),
+        "mid": torrent_meta.get("mid"),
+    }
+
+
+async def send_auto_task_webhook_notification(event, success, **details):
+    webhook_url = str(os.getenv("AUTO_TASK_WEBHOOK_URL") or "").strip()
+    if not webhook_url:
+        return
+
+    enabled_events = _parse_auto_task_webhook_events(os.getenv("AUTO_TASK_WEBHOOK_EVENTS"))
+    if enabled_events is not None and event not in enabled_events:
+        return
+
+    method = str(os.getenv("AUTO_TASK_WEBHOOK_METHOD", "POST") or "POST").strip().upper()
+    if method not in {"GET", "POST"}:
+        app.logger.warning(f"[AUTO-WEBHOOK] Unsupported AUTO_TASK_WEBHOOK_METHOD '{method}', falling back to POST")
+        method = "POST"
+
+    query_template = _parse_auto_task_webhook_params(os.getenv("AUTO_TASK_WEBHOOK_PARAMS"))
+    body_template = _parse_auto_task_webhook_body(os.getenv("AUTO_TASK_WEBHOOK_BODY"))
+    status = "success" if success else "failure"
+    context = _filter_none_values({
+        "event": event,
+        "task": details.get("task"),
+        "status": status,
+        "success": success,
+        "timestamp": datetime.utcnow().replace(microsecond=0).isoformat() + "Z",
+        **details,
+    })
+    context["summary"] = _build_auto_task_summary(context)
+
+    request_kwargs = {
+        "params": None,
+        "json": None,
+        "content": None,
+    }
+
+    if query_template is None:
+        if method == "GET":
+            request_kwargs["params"] = {
+                key: _normalize_webhook_query_value(value)
+                for key, value in context.items()
+            }
+    else:
+        rendered_params = _render_auto_task_webhook_template(query_template, context)
+        request_kwargs["params"] = {
+            str(key): _normalize_webhook_query_value(value)
+            for key, value in rendered_params.items()
+            if value is not None
+        }
+
+    if method == "POST":
+        if body_template is None:
+            request_kwargs["json"] = context
+        else:
+            rendered_body = _render_auto_task_webhook_template(body_template, context)
+            if isinstance(rendered_body, (dict, list, int, float, bool)) or rendered_body is None:
+                request_kwargs["json"] = rendered_body
+            else:
+                request_kwargs["content"] = str(rendered_body)
+
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.request(
+                method,
+                webhook_url,
+                params=request_kwargs["params"],
+                json=request_kwargs["json"],
+                content=request_kwargs["content"],
+                timeout=10,
+            )
+            response.raise_for_status()
+        app.logger.info(f"[AUTO-WEBHOOK] Sent {event} {status} notification via {method}")
+    except Exception as e:
+        app.logger.warning(f"[AUTO-WEBHOOK] Failed to send {event} {status} notification: {e}")
     
 async def load_new_app_config():
     new_config = load_config()
@@ -1528,13 +1748,28 @@ async def monitor_downloads_loop():
 
                 if app.config.get("AUTO_ORGANIZE_ON_ADD"):
                     try:
+                        org_details = _get_torrent_metadata_summary(h)
                         success, msg = await _perform_organization(h)
                         if success:
                             app.logger.info(f"[MONITOR] Auto-organize succeeded for {h}: {msg}")
                         else:
                             app.logger.warning(f"[MONITOR] Auto-organize failed for {h}: {msg}")
+                        await send_auto_task_webhook_notification(
+                            "auto_organize_on_download",
+                            success,
+                            task="organize_on_download",
+                            message=msg,
+                            **org_details,
+                        )
                     except Exception as e:
                         app.logger.error(f"[MONITOR] Exception during auto-organize for {h}: {e}", exc_info=True)
+                        await send_auto_task_webhook_notification(
+                            "auto_organize_on_download",
+                            False,
+                            task="organize_on_download",
+                            error=str(e),
+                            **_get_torrent_metadata_summary(h),
+                        )
                 if h in monitoring_state:
                     del monitoring_state[h]
                 
@@ -1595,10 +1830,20 @@ def save_ip_state(ip):
     with open(IP_STATE_FILE, "w") as f:
         json.dump({"last_ip": ip}, f, indent=4)
 
-async def force_update_ip():
+async def force_update_ip(notify_event=False, previous_ip=None, detected_ip=None):
     async with app.app_context():
         app.logger.info("Forcing manual IP update for dynamic seedbox.")
-        if not app.config.get("MAM_ID"): return
+        if not app.config.get("MAM_ID"):
+            if notify_event:
+                await send_auto_task_webhook_notification(
+                    "auto_update_ip",
+                    False,
+                    task="dynamic_ip_update",
+                    error="MAM_ID is not configured",
+                    previous_ip=previous_ip,
+                    detected_ip=detected_ip,
+                )
+            return
         api_cookies = {"mam_id": app.config.get("MAM_ID")}
         try:
             update_url = "https://t.myanonamouse.net/json/dynamicSeedbox.php"
@@ -1608,12 +1853,46 @@ async def force_update_ip():
                 update_data = update_response.json()
                 if new_ip := update_data.get("ip"):
                     save_ip_state(new_ip)
+                    if notify_event:
+                        await send_auto_task_webhook_notification(
+                            "auto_update_ip",
+                            True,
+                            task="dynamic_ip_update",
+                            previous_ip=previous_ip,
+                            detected_ip=detected_ip,
+                            updated_ip=new_ip,
+                        )
+                elif notify_event:
+                    await send_auto_task_webhook_notification(
+                        "auto_update_ip",
+                        False,
+                        task="dynamic_ip_update",
+                        previous_ip=previous_ip,
+                        detected_ip=detected_ip,
+                        error="Update endpoint did not return an IP address",
+                    )
         except Exception as e:
             app.logger.error(f"Error calling dynamic seedbox update: {e}")
+            if notify_event:
+                await send_auto_task_webhook_notification(
+                    "auto_update_ip",
+                    False,
+                    task="dynamic_ip_update",
+                    previous_ip=previous_ip,
+                    detected_ip=detected_ip,
+                    error=str(e),
+                )
 
 async def check_and_update_ip():
     async with app.app_context():
-        if not app.config.get("MAM_ID"): return
+        if not app.config.get("MAM_ID"):
+            await send_auto_task_webhook_notification(
+                "auto_update_ip",
+                False,
+                task="dynamic_ip_update",
+                error="MAM_ID is not configured",
+            )
+            return
         api_cookies = {"mam_id": app.config.get("MAM_ID")}
         try:
             ip_check_url = f"{app.config.get('MAM_API_URL')}/json/jsonIp.php"
@@ -1622,12 +1901,18 @@ async def check_and_update_ip():
                 response.raise_for_status()
                 current_ip = response.json().get("ip")
                 if not current_ip: return
-        except Exception:
+        except Exception as e:
+            await send_auto_task_webhook_notification(
+                "auto_update_ip",
+                False,
+                task="dynamic_ip_update",
+                error=f"Could not fetch current IP: {e}",
+            )
             return
             
         last_ip = load_ip_state()
         if current_ip != last_ip:
-            await force_update_ip()
+            await force_update_ip(notify_event=True, previous_ip=last_ip, detected_ip=current_ip)
 
 
 # --- VIP AUTO-BUY SCHEDULER ---
@@ -1636,15 +1921,33 @@ async def auto_buy_vip():
     async with app.app_context():
         if not app.config.get("MAM_ID"):
             app.logger.warning("VIP auto-buy scheduled but MAM_ID not configured")
+            await send_auto_task_webhook_notification(
+                "auto_buy_vip",
+                False,
+                task="vip_topup",
+                error="MAM_ID is not configured",
+            )
             return
         
         if not await login_mam():
             app.logger.warning("VIP auto-buy failed: Could not log into MAM")
+            await send_auto_task_webhook_notification(
+                "auto_buy_vip",
+                False,
+                task="vip_topup",
+                error="Could not log into MAM",
+            )
             return
 
         user_data = await fetch_mam_json_load()
         if not user_data:
             app.logger.warning("[AUTO-VIP] Could not fetch user data")
+            await send_auto_task_webhook_notification(
+                "auto_buy_vip",
+                False,
+                task="vip_topup",
+                error="Could not fetch user data",
+            )
             return
         max_weeks = calculate_vip_topup_weeks(user_data)
         if max_weeks < VIP_MIN_WEEKS:
@@ -1674,10 +1977,35 @@ async def auto_buy_vip():
                         'amount': result.get('amount'),
                         'seedbonus': result.get('seedbonus')
                     })
+                    await send_auto_task_webhook_notification(
+                        "auto_buy_vip",
+                        True,
+                        task="vip_topup",
+                        amount=result.get('amount'),
+                        seedbonus=result.get('seedbonus'),
+                    )
                 else:
                     app.logger.warning(f"[AUTO-VIP] Purchase failed: {result}")
+                    await send_auto_task_webhook_notification(
+                        "auto_buy_vip",
+                        False,
+                        task="vip_topup",
+                        amount=result.get('amount'),
+                        seedbonus=result.get('seedbonus'),
+                        error=normalize_spaces(
+                            result.get('error')
+                            or result.get('message')
+                            or json.dumps(result, ensure_ascii=True)
+                        ),
+                    )
         except Exception as e:
             app.logger.error(f"[AUTO-VIP] Error during scheduled VIP purchase: {e}")
+            await send_auto_task_webhook_notification(
+                "auto_buy_vip",
+                False,
+                task="vip_topup",
+                error=str(e),
+            )
 
 
 
@@ -1708,8 +2036,15 @@ async def check_and_buy_upload():
         async def purchase_upload(amount, reason):
             _, chunks = build_upload_chunks(amount)
             if not chunks:
-                app.logger.warning(f"[AUTO-UPLOAD-{reason.upper()}] Invalid amount: {amount} GB (multiples of {UPLOAD_CREDIT_MIN_GB} only)")
-                return False, None
+                error = f"Invalid amount: {amount} GB (multiples of {UPLOAD_CREDIT_MIN_GB} only)"
+                app.logger.warning(f"[AUTO-UPLOAD-{reason.upper()}] {error}")
+                return {
+                    "success": False,
+                    "amount": 0,
+                    "seedbonus": None,
+                    "error": error,
+                    "reason": reason,
+                }
 
             total_purchased = 0
             final_seedbonus = None
@@ -1738,15 +2073,39 @@ async def check_and_buy_upload():
 
                             final_seedbonus = result.get('seedbonus')
                         else:
+                            error = normalize_spaces(
+                                result.get('error')
+                                or result.get('message')
+                                or json.dumps(result, ensure_ascii=True)
+                            )
                             app.logger.warning(f"[AUTO-UPLOAD-{reason.upper()}] Purchase failed: {result}")
-                            return False, None
+                            return {
+                                "success": False,
+                                "amount": total_purchased,
+                                "seedbonus": final_seedbonus,
+                                "error": error,
+                                "reason": reason,
+                            }
                     except Exception as e:
                         app.logger.error(f"[AUTO-UPLOAD-{reason.upper()}] Error: {e}")
-                        return False, None
+                        return {
+                            "success": False,
+                            "amount": total_purchased,
+                            "seedbonus": final_seedbonus,
+                            "error": str(e),
+                            "reason": reason,
+                        }
 
             if total_purchased <= 0:
-                app.logger.warning(f"[AUTO-UPLOAD-{reason.upper()}] Purchase failed: no upload credit added")
-                return False, None
+                error = "Purchase failed: no upload credit added"
+                app.logger.warning(f"[AUTO-UPLOAD-{reason.upper()}] {error}")
+                return {
+                    "success": False,
+                    "amount": 0,
+                    "seedbonus": final_seedbonus,
+                    "error": error,
+                    "reason": reason,
+                }
 
             app.logger.info(f"[AUTO-UPLOAD-{reason.upper()}] Purchase successful - {total_purchased} GB added")
             await broadcast_payload({
@@ -1756,7 +2115,13 @@ async def check_and_buy_upload():
                 'reason': reason,
                 'seedbonus': final_seedbonus
             })
-            return True, final_seedbonus
+            return {
+                "success": True,
+                "amount": total_purchased,
+                "seedbonus": final_seedbonus,
+                "error": None,
+                "reason": reason,
+            }
         
         # Check ratio threshold
         if ratio_check_enabled:
@@ -1765,11 +2130,23 @@ async def check_and_buy_upload():
                 amount = float(app.config.get("AUTO_BUY_UPLOAD_RATIO_AMOUNT", 50))
                 app.logger.info(f"[AUTO-UPLOAD] Ratio {stats['ratio']} below threshold {ratio_threshold}, purchasing {amount} GB")
                 
-                success, seedbonus = await purchase_upload(amount, "ratio")
-                if success:
+                purchase_result = await purchase_upload(amount, "ratio")
+                await send_auto_task_webhook_notification(
+                    "auto_buy_upload_ratio",
+                    purchase_result["success"],
+                    task="upload_credit_ratio",
+                    reason="ratio",
+                    threshold=ratio_threshold,
+                    current_ratio=stats.get("ratio"),
+                    purchase_size=amount,
+                    amount=round(float(purchase_result.get("amount") or 0), 2),
+                    seedbonus=purchase_result.get("seedbonus"),
+                    error=purchase_result.get("error"),
+                )
+                if purchase_result["success"]:
                     purchased = True
-                    if seedbonus is not None:
-                        current_seedbonus = seedbonus
+                    if purchase_result["seedbonus"] is not None:
+                        current_seedbonus = purchase_result["seedbonus"]
         
         # Check buffer threshold (only if we didn't already purchase)
         if buffer_check_enabled and not purchased:
@@ -1778,9 +2155,21 @@ async def check_and_buy_upload():
                 amount = float(app.config.get("AUTO_BUY_UPLOAD_BUFFER_AMOUNT", 50))
                 app.logger.info(f"[AUTO-UPLOAD] Buffer {stats['buffer_gb']:.2f} GB below threshold {buffer_threshold} GB, purchasing {amount} GB")
                 
-                success, seedbonus = await purchase_upload(amount, "buffer")
-                if success and seedbonus is not None:
-                    current_seedbonus = seedbonus
+                purchase_result = await purchase_upload(amount, "buffer")
+                await send_auto_task_webhook_notification(
+                    "auto_buy_upload_buffer",
+                    purchase_result["success"],
+                    task="upload_credit_buffer",
+                    reason="buffer",
+                    threshold=buffer_threshold,
+                    current_buffer_gb=stats.get("buffer_gb"),
+                    purchase_size=amount,
+                    amount=round(float(purchase_result.get("amount") or 0), 2),
+                    seedbonus=purchase_result.get("seedbonus"),
+                    error=purchase_result.get("error"),
+                )
+                if purchase_result["success"] and purchase_result["seedbonus"] is not None:
+                    current_seedbonus = purchase_result["seedbonus"]
 
         if bonus_check_enabled:
             bonus_threshold = float(app.config.get("AUTO_BUY_UPLOAD_BONUS_THRESHOLD", 5000))
@@ -1789,27 +2178,65 @@ async def check_and_buy_upload():
             if seedbonus is None:
                 refreshed = await get_user_stats()
                 if not refreshed:
-                    app.logger.warning("[AUTO-UPLOAD-BONUS] Could not refresh user stats before bonus check")
+                    error = "Could not refresh user stats before bonus check"
+                    app.logger.warning(f"[AUTO-UPLOAD-BONUS] {error}")
+                    await send_auto_task_webhook_notification(
+                        "auto_buy_upload_bonus",
+                        False,
+                        task="upload_credit_bonus",
+                        reason="bonus",
+                        threshold=bonus_threshold,
+                        purchase_size=amount,
+                        error=error,
+                    )
                     return
                 seedbonus = refreshed.get('seedbonus')
 
+            starting_seedbonus = seedbonus
+            purchase_count = 0
+            total_purchased = 0.0
+            failure_error = None
+
             while seedbonus is not None and seedbonus >= bonus_threshold:
                 app.logger.info(f"[AUTO-UPLOAD] Bonus points {seedbonus} >= threshold {bonus_threshold}, purchasing {amount} GB")
-                success, new_seedbonus = await purchase_upload(amount, "bonus")
-                if not success:
+                purchase_result = await purchase_upload(amount, "bonus")
+                if not purchase_result["success"]:
+                    failure_error = purchase_result.get("error") or "Purchase failed"
                     break
+                purchase_count += 1
+                total_purchased += float(purchase_result.get("amount") or 0)
+                new_seedbonus = purchase_result.get("seedbonus")
                 if new_seedbonus is None:
                     refreshed = await get_user_stats()
                     if not refreshed:
-                        app.logger.warning("[AUTO-UPLOAD-BONUS] Could not refresh user stats after purchase")
+                        failure_error = "Could not refresh user stats after purchase"
+                        app.logger.warning(f"[AUTO-UPLOAD-BONUS] {failure_error}")
                         break
                     new_seedbonus = refreshed.get('seedbonus')
                 if new_seedbonus is None:
+                    failure_error = "Could not determine remaining bonus points after purchase"
+                    app.logger.warning(f"[AUTO-UPLOAD-BONUS] {failure_error}")
                     break
                 if new_seedbonus >= seedbonus:
-                    app.logger.warning("[AUTO-UPLOAD-BONUS] Bonus points did not decrease after purchase; stopping loop")
+                    failure_error = "Bonus points did not decrease after purchase; stopping loop"
+                    app.logger.warning(f"[AUTO-UPLOAD-BONUS] {failure_error}")
                     break
                 seedbonus = new_seedbonus
+
+            if purchase_count > 0 or failure_error:
+                await send_auto_task_webhook_notification(
+                    "auto_buy_upload_bonus",
+                    failure_error is None and purchase_count > 0,
+                    task="upload_credit_bonus",
+                    reason="bonus",
+                    threshold=bonus_threshold,
+                    purchase_size=amount,
+                    purchase_count=purchase_count,
+                    amount=round(total_purchased, 2),
+                    starting_seedbonus=starting_seedbonus,
+                    seedbonus=seedbonus,
+                    error=failure_error,
+                )
 
 
 # --- SESSION AND API HELPERS ---
@@ -4109,13 +4536,32 @@ async def check_for_unorganized_torrents():
         app.logger.info("Running safety net organization job.")
         metadata = load_database()
         pending = [h for h, m in metadata.items() if m.get('status') == 'pending']
+        succeeded = 0
+        failed = 0
+        last_error = None
         for h in pending:
             try:
                 success, msg = await _perform_organization(h)
-                if not success:
+                if success:
+                    succeeded += 1
+                else:
+                    failed += 1
+                    last_error = msg
                     app.logger.warning(f"[SAFETY NET] Organization failed for {h}: {msg}")
             except Exception as e:
+                failed += 1
+                last_error = str(e)
                 app.logger.error(f"[SAFETY NET] Exception during organization of {h}: {e}", exc_info=True)
+        if pending:
+            await send_auto_task_webhook_notification(
+                "auto_organize_on_schedule",
+                failed == 0 and succeeded > 0,
+                task="organize_on_schedule",
+                pending_count=len(pending),
+                organized_count=succeeded,
+                failed_count=failed,
+                error=last_error,
+            )
 
 
 if __name__ == "__main__":

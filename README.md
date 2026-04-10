@@ -178,6 +178,11 @@ MouseSearch supports modular torrent clients. Currently supported: **qBittorrent
 | `AUTO_BUY_UPLOAD_BONUS_THRESHOLD` | No | If bonus points are at or above this value, auto-purchase upload credit until below threshold. Defaults to `5000`. |
 | `AUTO_BUY_UPLOAD_BONUS_AMOUNT` | No | Amount of upload credit (in GB) to purchase per bonus-threshold check (multiples of 50 only). Defaults to `50`. |
 | `AUTO_BUY_UPLOAD_CHECK_INTERVAL_HOURS` | No | Number of hours between ratio/buffer/bonus checks (only applies if auto-buy upload is enabled). Defaults to `6`. |
+| `AUTO_TASK_WEBHOOK_URL` | No | Optional webhook endpoint for auto-task notifications. When set, MouseSearch can notify on supported automatic task success/failure events. |
+| `AUTO_TASK_WEBHOOK_EVENTS` | No | Optional event allowlist for webhook notifications. Accepts a JSON array or comma-separated list such as `["auto_buy_vip"]` or `auto_buy_vip,auto_buy_upload_bonus`. If unset, all supported auto-task webhook events are sent. |
+| `AUTO_TASK_WEBHOOK_METHOD` | No | Webhook method: `POST` or `GET`. Defaults to `POST`. |
+| `AUTO_TASK_WEBHOOK_PARAMS` | No | Optional query parameters for the webhook. Accepts either a JSON object or a query-string template such as `source=mousesearch&event={event}&status={status}`. |
+| `AUTO_TASK_WEBHOOK_BODY` | No | Optional POST body template. Accepts JSON or raw text. Ignored for `GET` requests. |
 | `BLOCK_DOWNLOAD_ON_LOW_BUFFER` | No | Set to `true` to prevent downloads when torrent size exceeds available buffer (prompts user to purchase upload credit). Defaults to `true`. |
 | `AUTO_BUY_PERSONAL_FL_ON_DOWNLOAD` | No | Set to `true` to auto-attempt spending a personal Freeleech wedge before each download add. If purchase fails, the torrent is still added. Defaults to `false`. |
 | `HAPTICS_ENABLED` | No | Set to `true` to enable frontend haptic feedback where the browser/device supports it. Defaults to `true`. |
@@ -203,6 +208,46 @@ MouseSearch supports modular torrent clients. Currently supported: **qBittorrent
 | `PGID` | No | (Docker only) Group ID to run the container as. Set to your host user's GID for correct file permissions. |
 
 Legacy compatibility: `TORRENT_DOWNLOAD_PATH` is still accepted as an alias for `LOCAL_TORRENT_DOWNLOAD_PATH`, but new installs should use the new name.
+
+### Auto-Task Webhook Templates
+
+If `AUTO_TASK_WEBHOOK_URL` is set, MouseSearch sends webhook notifications for:
+
+* `auto_buy_vip`
+* `auto_buy_upload_ratio`
+* `auto_buy_upload_buffer`
+* `auto_buy_upload_bonus`
+* `auto_update_ip`
+* `auto_organize_on_download`
+* `auto_organize_on_schedule`
+
+Set `AUTO_TASK_WEBHOOK_EVENTS` if you only want a subset of those events.
+
+If you do not set `AUTO_TASK_WEBHOOK_PARAMS` or `AUTO_TASK_WEBHOOK_BODY`, MouseSearch sends a default structured payload:
+
+* `GET`: default event fields are sent as query parameters.
+* `POST`: default event fields are sent as a JSON body.
+
+Templates may use placeholders such as `{event}`, `{task}`, `{status}`, `{success}`, `{timestamp}`, `{amount}`, `{seedbonus}`, `{error}`, `{reason}`, `{threshold}`, `{purchase_size}`, `{purchase_count}`, `{starting_seedbonus}`, and `{summary}`. Missing fields render as empty strings.
+
+Example `POST` webhook:
+
+```env
+AUTO_TASK_WEBHOOK_URL=https://hooks.example.com/mousesearch
+AUTO_TASK_WEBHOOK_EVENTS=["auto_buy_vip","auto_buy_upload_ratio","auto_buy_upload_buffer","auto_buy_upload_bonus","auto_update_ip","auto_organize_on_download","auto_organize_on_schedule"]
+AUTO_TASK_WEBHOOK_METHOD=POST
+AUTO_TASK_WEBHOOK_PARAMS={"source":"mousesearch","event":"{event}","status":"{status}"}
+AUTO_TASK_WEBHOOK_BODY={"status":"{status}","summary":"{summary}"}
+```
+
+Example `GET` webhook:
+
+```env
+AUTO_TASK_WEBHOOK_URL=https://hooks.example.com/mousesearch
+AUTO_TASK_WEBHOOK_EVENTS=auto_buy_vip
+AUTO_TASK_WEBHOOK_METHOD=GET
+AUTO_TASK_WEBHOOK_PARAMS=source=mousesearch&event={event}&status={status}&summary={summary}
+```
 
 **How to find your `MAM_ID`:**
 1.  In any web browser, navigate to [Security](https://www.myanonamouse.net/preferences/index.php?view=security) on Myanonamouse
