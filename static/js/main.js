@@ -1158,6 +1158,7 @@ document.addEventListener("DOMContentLoaded", async function () {
         const config = [
             { trigger: 'ENABLE_DYNAMIC_IP_UPDATE', target: 'DYNAMIC_IP_UPDATE_INTERVAL_HOURS' },
             { trigger: 'AUTO_BUY_VIP', target: 'AUTO_BUY_VIP_INTERVAL_HOURS' },
+            { trigger: 'AUTO_BUY_PERSONAL_FL_ON_DOWNLOAD_MIN_SIZE_ENABLED', target: 'AUTO_BUY_PERSONAL_FL_ON_DOWNLOAD_MIN_SIZE_MB' },
             { trigger: 'AUTO_BUY_UPLOAD_ON_RATIO', target: ['AUTO_BUY_UPLOAD_RATIO_THRESHOLD', 'AUTO_BUY_UPLOAD_RATIO_AMOUNT'] },
             { trigger: 'AUTO_BUY_UPLOAD_ON_BUFFER', target: ['AUTO_BUY_UPLOAD_BUFFER_THRESHOLD', 'AUTO_BUY_UPLOAD_BUFFER_AMOUNT'] },
             { trigger: 'AUTO_BUY_UPLOAD_ON_BONUS', target: ['AUTO_BUY_UPLOAD_BONUS_THRESHOLD', 'AUTO_BUY_UPLOAD_BONUS_AMOUNT'] }

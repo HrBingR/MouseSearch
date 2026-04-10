@@ -185,6 +185,8 @@ MouseSearch supports modular torrent clients. Currently supported: **qBittorrent
 | `AUTO_TASK_WEBHOOK_BODY` | No | Optional POST body template. Accepts JSON or raw text. Ignored for `GET` requests. |
 | `BLOCK_DOWNLOAD_ON_LOW_BUFFER` | No | Set to `true` to prevent downloads when torrent size exceeds available buffer (prompts user to purchase upload credit). Defaults to `true`. |
 | `AUTO_BUY_PERSONAL_FL_ON_DOWNLOAD` | No | Set to `true` to auto-attempt spending a personal Freeleech wedge before each download add. If purchase fails, the torrent is still added. Defaults to `false`. |
+| `AUTO_BUY_PERSONAL_FL_ON_DOWNLOAD_MIN_SIZE_ENABLED` | No | Set to `true` to only auto-spend a personal Freeleech wedge when the torrent size is greater than the configured minimum. Defaults to `false`. |
+| `AUTO_BUY_PERSONAL_FL_ON_DOWNLOAD_MIN_SIZE_MB` | No | Minimum torrent size, in MB, required before auto-spending a personal Freeleech wedge when the minimum-size gate is enabled. Defaults to `0`. |
 | `HAPTICS_ENABLED` | No | Set to `true` to enable frontend haptic feedback where the browser/device supports it. Defaults to `true`. |
 | `AUTO_ORGANIZE_ON_ADD` | No | Set to `true` to enable auto-organization when torrents are added. Defaults to `false`. |
 | `AUTO_ORGANIZE_ON_SCHEDULE` | No | Set to `true` to enable scheduled auto-organization. Defaults to `false`. |

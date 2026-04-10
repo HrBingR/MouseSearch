@@ -470,7 +470,7 @@
             </div>
           </div>
 
-          <div class="card mb-3 border-secondary-subtle">
+          <div class="card mb-3 border-secondary-subtle toggle-card">
             <div
               class="card-header border-bottom-0 bg-transparent d-flex justify-content-between align-items-center py-2 cursor-pointer noselect"
               onclick="toggleCardSwitch('AUTO_BUY_PERSONAL_FL_ON_DOWNLOAD')">
@@ -483,12 +483,43 @@
               <div class="form-check form-switch m-0">
                 <input class="form-check-input" type="checkbox" id="AUTO_BUY_PERSONAL_FL_ON_DOWNLOAD"
                   name="AUTO_BUY_PERSONAL_FL_ON_DOWNLOAD" {% if AUTO_BUY_PERSONAL_FL_ON_DOWNLOAD %}checked{% endif %}
-                  onclick="event.stopPropagation()">
+                  data-collapse-target="#collapse-personal-fl" onclick="event.stopPropagation()">
               </div>
             </div>
-            <div class="card-body border-top pt-2 pb-2 small text-body-secondary">
-              Before each download, MouseSearch attempts to spend one personal Freeleech wedge. If purchase fails, the
-              download still proceeds.
+            <div id="collapse-personal-fl" class="collapse {% if AUTO_BUY_PERSONAL_FL_ON_DOWNLOAD %}show{% endif %}">
+              <div class="card-body border-top pt-2 pb-2">
+                <div class="small text-body-secondary mb-2">
+                  Before each download, MouseSearch attempts to spend one personal Freeleech wedge. If purchase fails,
+                  the download still proceeds.
+                </div>
+
+                <div class="border rounded p-2 bg-body">
+                  <div class="d-flex justify-content-between align-items-center cursor-pointer noselect"
+                    onclick="toggleCardSwitch('AUTO_BUY_PERSONAL_FL_ON_DOWNLOAD_MIN_SIZE_ENABLED')">
+                    <span class="small fw-semibold">Only buy for torrents above a minimum size</span>
+                    <div class="form-check form-switch m-0">
+                      <input class="form-check-input" type="checkbox"
+                        id="AUTO_BUY_PERSONAL_FL_ON_DOWNLOAD_MIN_SIZE_ENABLED"
+                        name="AUTO_BUY_PERSONAL_FL_ON_DOWNLOAD_MIN_SIZE_ENABLED"
+                        {% if AUTO_BUY_PERSONAL_FL_ON_DOWNLOAD_MIN_SIZE_ENABLED %}checked{% endif %}
+                        data-collapse-target="#collapse-personal-fl-min-size" onclick="event.stopPropagation()">
+                    </div>
+                  </div>
+                  <div id="collapse-personal-fl-min-size"
+                    class="collapse {% if AUTO_BUY_PERSONAL_FL_ON_DOWNLOAD_MIN_SIZE_ENABLED %}show{% endif %}">
+                    <div class="input-group input-group-sm mt-2">
+                      <input type="number" min="0" step="0.1" class="form-control"
+                        id="AUTO_BUY_PERSONAL_FL_ON_DOWNLOAD_MIN_SIZE_MB"
+                        name="AUTO_BUY_PERSONAL_FL_ON_DOWNLOAD_MIN_SIZE_MB"
+                        value="{{ AUTO_BUY_PERSONAL_FL_ON_DOWNLOAD_MIN_SIZE_MB }}" placeholder="Minimum size">
+                      <span class="input-group-text">MB</span>
+                    </div>
+                    <div class="form-text small">
+                      A wedge is spent only when the torrent size is greater than this value.
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 

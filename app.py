@@ -186,6 +186,48 @@ def coerce_bool(val, default: bool) -> bool:
     return default
 
 
+def parse_size_to_gb(size_value, default=0.0):
+    """Parse a tracker-style size string into GiB-equivalent GB."""
+    if size_value is None:
+        return default
+
+    if isinstance(size_value, (int, float)) and not isinstance(size_value, bool):
+        return float(size_value)
+
+    text = str(size_value).strip().replace(",", "")
+    if not text:
+        return default
+
+    match = re.fullmatch(r"([-+]?(?:\d+(?:\.\d*)?|\.\d+))\s*([KMGT]?i?B|[KMGT]?B)?", text, re.IGNORECASE)
+    if not match:
+        return default
+
+    try:
+        value = float(match.group(1))
+    except (ValueError, TypeError):
+        return default
+
+    unit = (match.group(2) or "GB").upper()
+    if unit in {"TIB", "TB"}:
+        return value * 1024
+    if unit in {"GIB", "GB"}:
+        return value
+    if unit in {"MIB", "MB"}:
+        return value / 1024
+    if unit in {"KIB", "KB"}:
+        return value / (1024 * 1024)
+    if unit == "B":
+        return value / (1024 * 1024 * 1024)
+    return value
+
+
+def coerce_legacy_gb_to_mb(value, default=0.0):
+    gb_value = parse_size_to_gb(value, default=None)
+    if gb_value is None:
+        return default
+    return gb_value * 1024
+
+
 def normalize_string_list(value):
     if isinstance(value, list):
         items = [str(item).strip() for item in value]
@@ -914,6 +956,8 @@ FALLBACK_CONFIG = {
     "AUTO_BUY_UPLOAD_CHECK_INTERVAL_HOURS": 6,
     "BLOCK_DOWNLOAD_ON_LOW_BUFFER": True,
     "AUTO_BUY_PERSONAL_FL_ON_DOWNLOAD": False,
+    "AUTO_BUY_PERSONAL_FL_ON_DOWNLOAD_MIN_SIZE_ENABLED": False,
+    "AUTO_BUY_PERSONAL_FL_ON_DOWNLOAD_MIN_SIZE_MB": 0,
     "ENABLE_FILESYSTEM_THUMBNAIL_CACHE": True,
     "THUMBNAIL_CACHE_MAX_SIZE_MB": 500,
     "MAX_SEARCH_RESULTS": 50,
@@ -1050,6 +1094,13 @@ def load_config():
     # 2. Update with Environment Variables (Medium Priority)
     # These act as fallbacks if the key is missing in config.json
     env_config = {key: os.getenv(key) for key in FALLBACK_CONFIG.keys() if os.getenv(key) is not None}
+    if (
+        "AUTO_BUY_PERSONAL_FL_ON_DOWNLOAD_MIN_SIZE_MB" not in env_config
+        and os.getenv("AUTO_BUY_PERSONAL_FL_ON_DOWNLOAD_MIN_SIZE_GB") is not None
+    ):
+        env_config["AUTO_BUY_PERSONAL_FL_ON_DOWNLOAD_MIN_SIZE_MB"] = coerce_legacy_gb_to_mb(
+            os.getenv("AUTO_BUY_PERSONAL_FL_ON_DOWNLOAD_MIN_SIZE_GB")
+        )
     apply_legacy_config_aliases(env_config, os.environ)
     config.update(env_config)
 
@@ -1064,6 +1115,13 @@ def load_config():
                 pass # corrupted config, ignore
 
     json_overrides = dict(json_config)
+    if (
+        "AUTO_BUY_PERSONAL_FL_ON_DOWNLOAD_MIN_SIZE_MB" not in json_overrides
+        and "AUTO_BUY_PERSONAL_FL_ON_DOWNLOAD_MIN_SIZE_GB" in json_overrides
+    ):
+        json_overrides["AUTO_BUY_PERSONAL_FL_ON_DOWNLOAD_MIN_SIZE_MB"] = coerce_legacy_gb_to_mb(
+            json_overrides.get("AUTO_BUY_PERSONAL_FL_ON_DOWNLOAD_MIN_SIZE_GB")
+        )
     apply_legacy_config_aliases(json_overrides, json_config)
     config.update(json_overrides)
 
@@ -1097,12 +1155,19 @@ def load_config():
         "AUTO_BUY_UPLOAD_BUFFER_THRESHOLD",
         "AUTO_BUY_UPLOAD_BUFFER_AMOUNT",
         "AUTO_BUY_UPLOAD_BONUS_THRESHOLD",
-        "AUTO_BUY_UPLOAD_BONUS_AMOUNT"
+        "AUTO_BUY_UPLOAD_BONUS_AMOUNT",
+        "AUTO_BUY_PERSONAL_FL_ON_DOWNLOAD_MIN_SIZE_MB"
     ]:
         try:
             config[key] = float(config[key])
         except (ValueError, TypeError):
             config[key] = FALLBACK_CONFIG[key]
+
+    if (
+        not math.isfinite(config["AUTO_BUY_PERSONAL_FL_ON_DOWNLOAD_MIN_SIZE_MB"])
+        or config["AUTO_BUY_PERSONAL_FL_ON_DOWNLOAD_MIN_SIZE_MB"] < 0
+    ):
+        config["AUTO_BUY_PERSONAL_FL_ON_DOWNLOAD_MIN_SIZE_MB"] = FALLBACK_CONFIG["AUTO_BUY_PERSONAL_FL_ON_DOWNLOAD_MIN_SIZE_MB"]
 
     # Booleans
     for key in [
@@ -1117,6 +1182,7 @@ def load_config():
         "AUTO_BUY_UPLOAD_ON_BONUS",
         "BLOCK_DOWNLOAD_ON_LOW_BUFFER",
         "AUTO_BUY_PERSONAL_FL_ON_DOWNLOAD",
+        "AUTO_BUY_PERSONAL_FL_ON_DOWNLOAD_MIN_SIZE_ENABLED",
         "ENABLE_FILESYSTEM_THUMBNAIL_CACHE",
         "RTORRENT_DIGEST_AUTH"
     ]:
@@ -3034,24 +3100,8 @@ async def get_user_stats():
                 app.logger.warning(f"Could not parse stat '{val}', defaulting to 0.0")
                 return 0.0
 
-        # Parse uploaded and downloaded (format: "1,234.45 GiB")
-        def parse_size(size_str):
-            if not size_str: return 0.0
-            parts = size_str.split()
-            if len(parts) != 2: return 0.0
-            
-            # Use safe_float here to handle commas in "1,234.56"
-            value = safe_float(parts[0])
-            unit = parts[1].upper()
-            
-            if 'TIB' in unit or 'TB' in unit: return value * 1024
-            elif 'GIB' in unit or 'GB' in unit: return value
-            elif 'MIB' in unit or 'MB' in unit: return value / 1024
-            elif 'KIB' in unit or 'KB' in unit: return value / (1024 * 1024)
-            return value
-        
-        uploaded_gb = parse_size(data.get('uploaded', '0 GiB'))
-        downloaded_gb = parse_size(data.get('downloaded', '0 GiB'))
+        uploaded_gb = parse_size_to_gb(data.get('uploaded', '0 GiB'))
+        downloaded_gb = parse_size_to_gb(data.get('downloaded', '0 GiB'))
         
         # Now safe to use safe_float on these fields too
         ratio = safe_float(data.get('ratio', 0))
@@ -3182,10 +3232,17 @@ async def client_add_torrent():
         is_public_freeleech = int(incoming_data.get('free', 0) or 0) == 1
     except (ValueError, TypeError):
         is_public_freeleech = False
+    is_personal_freeleech = False
+    try:
+        is_personal_freeleech = int(incoming_data.get('personal_freeleech', 0) or 0) == 1
+    except (ValueError, TypeError):
+        is_personal_freeleech = False
 
     if app.config.get("AUTO_BUY_PERSONAL_FL_ON_DOWNLOAD", False):
         if is_public_freeleech:
             app.logger.info("[DOWNLOAD] Auto Freeleech wedge purchase skipped: torrent is already public freeleech.")
+        elif is_personal_freeleech:
+            app.logger.info("[DOWNLOAD] Auto Freeleech wedge purchase skipped: torrent already has personal freeleech.")
         else:
             torrent_id_for_fl = None
             try:
@@ -3195,52 +3252,49 @@ async def client_add_torrent():
                 torrent_id_for_fl = None
 
             if torrent_id_for_fl is not None:
-                try:
-                    if await login_mam():
-                        fl_result = await purchase_personal_fl_wedge(torrent_id_for_fl)
-                        if fl_result.get('success'):
-                            app.logger.info(f"[DOWNLOAD] Auto-purchased Freeleech wedge for torrent {torrent_id_for_fl}")
+                min_size_enabled = app.config.get("AUTO_BUY_PERSONAL_FL_ON_DOWNLOAD_MIN_SIZE_ENABLED", False)
+                min_size_mb = app.config.get("AUTO_BUY_PERSONAL_FL_ON_DOWNLOAD_MIN_SIZE_MB", 0)
+                torrent_size_gb = parse_size_to_gb(torrent_size_str, default=None)
+                should_purchase_fl = True
+
+                if min_size_enabled:
+                    if torrent_size_gb is None:
+                        should_purchase_fl = False
+                        app.logger.info(
+                            f"[DOWNLOAD] Auto Freeleech wedge purchase skipped for torrent {torrent_id_for_fl}; "
+                            f"could not parse torrent size '{torrent_size_str}' for threshold check."
+                        )
+                    elif torrent_size_gb * 1024 <= min_size_mb:
+                        should_purchase_fl = False
+                        app.logger.info(
+                            f"[DOWNLOAD] Auto Freeleech wedge purchase skipped for torrent {torrent_id_for_fl}; "
+                            f"size {torrent_size_gb * 1024:.2f} MB is not greater than threshold {min_size_mb:.2f} MB."
+                        )
+
+                if should_purchase_fl:
+                    try:
+                        if await login_mam():
+                            fl_result = await purchase_personal_fl_wedge(torrent_id_for_fl)
+                            if fl_result.get('success'):
+                                app.logger.info(f"[DOWNLOAD] Auto-purchased Freeleech wedge for torrent {torrent_id_for_fl}")
+                            else:
+                                app.logger.warning(
+                                    f"[DOWNLOAD] Auto Freeleech wedge purchase failed for torrent {torrent_id_for_fl}; continuing download. Result={fl_result}"
+                                )
                         else:
                             app.logger.warning(
-                                f"[DOWNLOAD] Auto Freeleech wedge purchase failed for torrent {torrent_id_for_fl}; continuing download. Result={fl_result}"
+                                f"[DOWNLOAD] Auto Freeleech wedge purchase skipped for torrent {torrent_id_for_fl}; not logged into MAM. Continuing download."
                             )
-                    else:
+                    except Exception as e:
                         app.logger.warning(
-                            f"[DOWNLOAD] Auto Freeleech wedge purchase skipped for torrent {torrent_id_for_fl}; not logged into MAM. Continuing download."
+                            f"[DOWNLOAD] Auto Freeleech wedge purchase errored for torrent {torrent_id_for_fl}; continuing download. Error={e}"
                         )
-                except Exception as e:
-                    app.logger.warning(
-                        f"[DOWNLOAD] Auto Freeleech wedge purchase errored for torrent {torrent_id_for_fl}; continuing download. Error={e}"
-                    )
     
     # Check if download should be blocked due to low buffer
     if app.config.get("BLOCK_DOWNLOAD_ON_LOW_BUFFER", True) and await login_mam():
         stats = await get_user_stats()
         if stats:
-            # Parse torrent size
-            def parse_size(size_str):
-                if not size_str:
-                    return 0.0
-                parts = size_str.split()
-                if len(parts) != 2:
-                    return 0.0
-                try:
-                    value = float(parts[0])
-                except:
-                    return 0.0
-                unit = parts[1].upper()
-                # Convert to GB
-                if 'TIB' in unit or 'TB' in unit:
-                    return value * 1024
-                elif 'GIB' in unit or 'GB' in unit:
-                    return value
-                elif 'MIB' in unit or 'MB' in unit:
-                    return value / 1024
-                elif 'KIB' in unit or 'KB' in unit:
-                    return value / (1024 * 1024)
-                return value
-            
-            torrent_size_gb = parse_size(torrent_size_str)
+            torrent_size_gb = parse_size_to_gb(torrent_size_str)
             buffer_gb = stats['buffer_gb']
             
             if torrent_size_gb > buffer_gb:
@@ -4190,7 +4244,20 @@ async def api_settings():
 async def update_settings():
     form = await request.form
     config_to_update = app.config.copy()
-    boolean_fields = {"AUTO_ORGANIZE_ON_ADD", "AUTO_ORGANIZE_ON_SCHEDULE", "AUTO_ORGANIZE_USE_COPY", "HAPTICS_ENABLED", "ENABLE_DYNAMIC_IP_UPDATE", "AUTO_BUY_VIP", "AUTO_BUY_UPLOAD_ON_RATIO", "AUTO_BUY_UPLOAD_ON_BUFFER", "AUTO_BUY_UPLOAD_ON_BONUS", "BLOCK_DOWNLOAD_ON_LOW_BUFFER", "AUTO_BUY_PERSONAL_FL_ON_DOWNLOAD"}
+    boolean_fields = {
+        "AUTO_ORGANIZE_ON_ADD",
+        "AUTO_ORGANIZE_ON_SCHEDULE",
+        "AUTO_ORGANIZE_USE_COPY",
+        "HAPTICS_ENABLED",
+        "ENABLE_DYNAMIC_IP_UPDATE",
+        "AUTO_BUY_VIP",
+        "AUTO_BUY_UPLOAD_ON_RATIO",
+        "AUTO_BUY_UPLOAD_ON_BUFFER",
+        "AUTO_BUY_UPLOAD_ON_BONUS",
+        "BLOCK_DOWNLOAD_ON_LOW_BUFFER",
+        "AUTO_BUY_PERSONAL_FL_ON_DOWNLOAD",
+        "AUTO_BUY_PERSONAL_FL_ON_DOWNLOAD_MIN_SIZE_ENABLED",
+    }
     for key in FALLBACK_CONFIG.keys():
         if key in boolean_fields: config_to_update[key] = key in form
         elif key in form: config_to_update[key] = form[key]
