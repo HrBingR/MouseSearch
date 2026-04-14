@@ -310,3 +310,4 @@ dist
 CHANGELOG.md
 forum_post.html
 .env.bak
+.playwright-mcp/

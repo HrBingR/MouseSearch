@@ -564,13 +564,160 @@ function currentDetailItemSupportsPages() {
     return !/\b(mp3|m4b|m4a|aac|flac|ogg|opus|aax|audio)\b/.test(filetype);
 }
 
-function configureExpandableDetailDescription(element, html) {
-    if (!element) return;
-    const collapsedHeight = 350;
+let detailColumnBalanceFrame = 0;
 
-    element.dataset.expandableHtml = String(html || '');
-    element.innerHTML = html;
-    element.classList.remove('is-expanded', 'is-collapsible');
+function normalizeCollapsedHeight(value, fallback = 0) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function getExpandableDefaultCollapsedHeight(element, fallback = 0) {
+    return normalizeCollapsedHeight(element?.dataset.collapsedHeight, fallback);
+}
+
+function getExpandableActiveCollapsedHeight(element) {
+    return normalizeCollapsedHeight(
+        element?.dataset.activeCollapsedHeight,
+        normalizeCollapsedHeight(element?.dataset.defaultCollapsedHeight, 0)
+    );
+}
+
+function syncExpandableBalanceState(element) {
+    if (!element) return;
+    const isBalancedOpen = element.classList.contains('is-collapsible')
+        && !element.classList.contains('is-expanded')
+        && element.scrollHeight <= getExpandableActiveCollapsedHeight(element) + 1;
+    element.classList.toggle('is-balanced-open', isBalancedOpen);
+    if (element.classList.contains('is-expanded') || isBalancedOpen || !element.classList.contains('is-collapsible')) {
+        element.removeAttribute('role');
+        element.tabIndex = -1;
+        element.title = '';
+    } else {
+        element.setAttribute('role', 'button');
+        element.tabIndex = 0;
+        element.title = 'Click to expand';
+    }
+}
+
+function setExpandableCollapsedHeight(element, height) {
+    if (!element) return;
+    const nextHeight = Math.max(0, Math.ceil(normalizeCollapsedHeight(height, 0)));
+    element.dataset.activeCollapsedHeight = String(nextHeight);
+    element.style.setProperty('--detail-collapsed-max-height', `${nextHeight}px`);
+    syncExpandableBalanceState(element);
+}
+
+function initializeExpandableCollapsedHeight(element, fallback = 0) {
+    if (!element) return 0;
+    const defaultHeight = getExpandableDefaultCollapsedHeight(element, fallback);
+    element.dataset.defaultCollapsedHeight = String(defaultHeight);
+    setExpandableCollapsedHeight(element, defaultHeight);
+    return defaultHeight;
+}
+
+function resetExpandableCollapsedHeight(element) {
+    if (!element) return;
+    const defaultHeight = normalizeCollapsedHeight(element.dataset.defaultCollapsedHeight, 0);
+    if (!defaultHeight) return;
+    setExpandableCollapsedHeight(element, defaultHeight);
+}
+
+function isBookDetailsDesktopColumnsVisible() {
+    const leftColumn = document.getElementById('detail-primary-column');
+    const rightColumn = document.getElementById('detail-secondary-column');
+    const leftContent = document.getElementById('detail-primary-column-content');
+    const rightContent = document.getElementById('detail-secondary-column-content');
+    if (!leftColumn || !rightColumn || !leftContent || !rightContent) return false;
+    if (window.matchMedia && !window.matchMedia('(min-width: 992px)').matches) return false;
+
+    const leftRect = leftColumn.getBoundingClientRect();
+    const rightRect = rightColumn.getBoundingClientRect();
+    const leftContentRect = leftContent.getBoundingClientRect();
+    const rightContentRect = rightContent.getBoundingClientRect();
+    if (leftRect.width <= 0 || rightRect.width <= 0) return false;
+    if (leftContentRect.width <= 0 || rightContentRect.width <= 0) return false;
+
+    return Math.abs(leftRect.top - rightRect.top) < 8;
+}
+
+function balanceBookDetailsColumns() {
+    const bookModalEl = document.getElementById('bookDetailsModal');
+    const leftColumn = document.getElementById('detail-primary-column-content');
+    const rightColumn = document.getElementById('detail-secondary-column-content');
+    if (!bookModalEl || !leftColumn || !rightColumn) return;
+
+    const candidates = [
+        ...leftColumn.querySelectorAll('[data-balance-expandable="true"]'),
+        ...rightColumn.querySelectorAll('[data-balance-expandable="true"]'),
+    ];
+
+    candidates.forEach((element) => {
+        if (!element.classList.contains('is-expanded')) {
+            resetExpandableCollapsedHeight(element);
+        } else {
+            syncExpandableBalanceState(element);
+        }
+    });
+
+    if (!bookModalEl.classList.contains('show') || !isBookDetailsDesktopColumnsVisible()) {
+        return;
+    }
+
+    const tolerance = 4;
+    const leftHeight = leftColumn.getBoundingClientRect().height;
+    const rightHeight = rightColumn.getBoundingClientRect().height;
+    if (Math.abs(leftHeight - rightHeight) <= tolerance) return;
+
+    const shorterColumn = leftHeight < rightHeight ? leftColumn : rightColumn;
+    const tallerHeight = Math.max(leftHeight, rightHeight);
+    const shorterCandidates = [...shorterColumn.querySelectorAll('[data-balance-expandable="true"]')]
+        .filter((element) => (
+            element.classList.contains('is-collapsible')
+            && !element.classList.contains('is-expanded')
+            && element.getClientRects().length
+        ));
+
+    shorterCandidates.forEach((element) => {
+        const shortage = tallerHeight - shorterColumn.getBoundingClientRect().height;
+        if (shortage <= tolerance) return;
+
+        const currentHeight = getExpandableActiveCollapsedHeight(element);
+        const availableGrowth = Math.max(0, element.scrollHeight - currentHeight);
+        if (availableGrowth <= tolerance) {
+            syncExpandableBalanceState(element);
+            return;
+        }
+
+        setExpandableCollapsedHeight(element, currentHeight + Math.min(shortage, availableGrowth));
+    });
+}
+
+function scheduleBookDetailsColumnBalance() {
+    if (detailColumnBalanceFrame) cancelAnimationFrame(detailColumnBalanceFrame);
+    detailColumnBalanceFrame = requestAnimationFrame(() => {
+        detailColumnBalanceFrame = 0;
+        balanceBookDetailsColumns();
+    });
+}
+
+function configureExpandableTextBlock(element, {
+    html,
+    text,
+    collapsedHeight,
+    preserveExpanded = false,
+    onExpand = null,
+} = {}) {
+    if (!element) return;
+
+    if (html !== undefined) {
+        element.dataset.expandableHtml = String(html || '');
+        element.innerHTML = html;
+    } else if (text !== undefined) {
+        element.textContent = String(text || '');
+    }
+
+    const defaultCollapsedHeight = initializeExpandableCollapsedHeight(element, collapsedHeight);
+    element.classList.remove('is-expanded', 'is-collapsible', 'is-balanced-open');
     element.setAttribute('aria-expanded', 'false');
     element.removeAttribute('role');
     element.tabIndex = -1;
@@ -582,27 +729,57 @@ function configureExpandableDetailDescription(element, html) {
     if (!hasContent) return;
     if (!element.getClientRects().length) return;
 
-    const isCollapsible = element.scrollHeight > collapsedHeight + 1;
+    const isCollapsible = element.scrollHeight > defaultCollapsedHeight + 1;
     if (!isCollapsible) return;
 
     element.classList.add('is-collapsible');
+    if (preserveExpanded) {
+        element.classList.add('is-expanded');
+        element.setAttribute('aria-expanded', 'true');
+        syncExpandableBalanceState(element);
+        return;
+    }
+
     element.setAttribute('role', 'button');
     element.setAttribute('aria-expanded', 'false');
     element.tabIndex = 0;
-    element.title = 'Click to expand';
+    syncExpandableBalanceState(element);
     element.onclick = (event) => {
-        if (element.classList.contains('is-expanded')) return;
+        if (element.classList.contains('is-expanded') || element.classList.contains('is-balanced-open')) return;
         event.preventDefault();
         event.stopPropagation();
         element.classList.add('is-expanded');
+        element.classList.remove('is-balanced-open');
         element.setAttribute('aria-expanded', 'true');
         element.title = '';
+        if (typeof onExpand === 'function') onExpand(element);
     };
     element.onkeydown = (event) => {
         if (event.key !== 'Enter' && event.key !== ' ') return;
         event.preventDefault();
         element.click();
     };
+}
+
+function configureExpandableDetailDescription(element, html) {
+    configureExpandableTextBlock(element, {
+        html,
+        collapsedHeight: 350,
+        onExpand: () => scheduleBookDetailsColumnBalance(),
+    });
+}
+
+function configureExpandableHardcoverDescription(element, text, preserveExpanded = false) {
+    configureExpandableTextBlock(element, {
+        text,
+        collapsedHeight: 96,
+        preserveExpanded,
+        onExpand: () => {
+            const bookModalEl = document.getElementById('bookDetailsModal');
+            if (bookModalEl) bookModalEl.dataset.hardcoverDescriptionExpanded = 'true';
+            scheduleBookDetailsColumnBalance();
+        },
+    });
 }
 
 function clearHardcoverSeriesStrip() {
@@ -838,6 +1015,7 @@ function renderBookDetailsHardcover(enrichment) {
         if (card) card.style.display = 'none';
         if (heroInfo) heroInfo.classList.add('d-none');
         clearHardcoverSeriesStrip();
+        scheduleBookDetailsColumnBalance();
         return;
     }
 
@@ -858,6 +1036,7 @@ function renderBookDetailsHardcover(enrichment) {
 
     // --- Sidebar card ---
     if (card) {
+        card.style.display = '';
         const toggleDetailRow = (row, isVisible) => {
             if (!row) return;
             row.classList.toggle('d-none', !isVisible);
@@ -918,24 +1097,7 @@ function renderBookDetailsHardcover(enrichment) {
         if (subtitleEl) subtitleEl.textContent = subtitleText;
         if (subtitleBlock) subtitleBlock.classList.toggle('d-none', !subtitleText);
         if (descriptionEl) {
-            descriptionEl.textContent = descriptionText;
-            descriptionEl.classList.toggle('is-expanded', preserveHardcoverDescription);
-            descriptionEl.setAttribute('aria-expanded', preserveHardcoverDescription ? 'true' : 'false');
-            descriptionEl.tabIndex = descriptionText ? 0 : -1;
-            descriptionEl.title = descriptionText && !preserveHardcoverDescription ? 'Click to expand' : '';
-            descriptionEl.onclick = descriptionText ? (event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                descriptionEl.classList.add('is-expanded');
-                descriptionEl.setAttribute('aria-expanded', 'true');
-                descriptionEl.title = '';
-                if (bookModalEl) bookModalEl.dataset.hardcoverDescriptionExpanded = 'true';
-            } : null;
-            descriptionEl.onkeydown = descriptionText ? (event) => {
-                if (event.key !== 'Enter' && event.key !== ' ') return;
-                event.preventDefault();
-                descriptionEl.click();
-            } : null;
+            configureExpandableHardcoverDescription(descriptionEl, descriptionText, preserveHardcoverDescription);
         }
         if (descriptionBlock) descriptionBlock.classList.toggle('d-none', !descriptionText);
 
@@ -950,9 +1112,9 @@ function renderBookDetailsHardcover(enrichment) {
                 : '';
         }
 
-        card.style.display = '';
     }
 
+    scheduleBookDetailsColumnBalance();
     loadHardcoverSeriesStrip(metadata);
 
     // --- Hero area ---
@@ -5191,13 +5353,33 @@ document.addEventListener("DOMContentLoaded", async function () {
         }
     });
     document.getElementById('bookDetailsModal')?.addEventListener('shown.bs.modal', function () {
+        const bookModalEl = document.getElementById('bookDetailsModal');
         const detailDescriptionEl = document.getElementById('detail-description');
-        if (!detailDescriptionEl) return;
-        configureExpandableDetailDescription(
-            detailDescriptionEl,
-            detailDescriptionEl.dataset.expandableHtml || detailDescriptionEl.innerHTML || ''
-        );
+        if (detailDescriptionEl) {
+            configureExpandableDetailDescription(
+                detailDescriptionEl,
+                detailDescriptionEl.dataset.expandableHtml || detailDescriptionEl.innerHTML || ''
+            );
+        }
+        const hardcoverDescriptionEl = document.getElementById('detail-hc-description');
+        if (hardcoverDescriptionEl) {
+            configureExpandableHardcoverDescription(
+                hardcoverDescriptionEl,
+                hardcoverDescriptionEl.textContent || '',
+                bookModalEl?.dataset.hardcoverDescriptionExpanded === 'true'
+            );
+        }
+        scheduleBookDetailsColumnBalance();
     });
+    document.getElementById('bookDetailsModal')?.addEventListener('hidden.bs.modal', function () {
+        if (detailColumnBalanceFrame) {
+            cancelAnimationFrame(detailColumnBalanceFrame);
+            detailColumnBalanceFrame = 0;
+        }
+    });
+    window.addEventListener('resize', scheduleBookDetailsColumnBalance);
+    document.getElementById('mediaInfoCollapse')?.addEventListener('shown.bs.collapse', scheduleBookDetailsColumnBalance);
+    document.getElementById('mediaInfoCollapse')?.addEventListener('hidden.bs.collapse', scheduleBookDetailsColumnBalance);
 
     // 3. Settings Offcanvas: Sync History on Manual Close/Open
     const settingsEl = document.getElementById('settingsOffcanvas');
@@ -5706,6 +5888,7 @@ document.addEventListener("DOMContentLoaded", async function () {
 
         // Render Hardcover enrichment card (may already be available or arrive later via SSE)
         renderBookDetailsHardcover(data.hardcover_enrichment);
+        scheduleBookDetailsColumnBalance();
     }
 
     // Confirm Download Modal Action
