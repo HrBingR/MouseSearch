@@ -406,30 +406,22 @@ function renderStarRating(rating, ratingsCount) {
 
 function renderHardcoverMetadata(enrichment) {
     const metadata = enrichment?.hardcover;
-    const logoHtml = `<img src="${HARDCOVER_LOGO_URL}" alt="Hardcover" class="hardcover-logo-icon me-1" loading="lazy" style="width: 1rem; height: 1rem; object-fit: contain;">`;
 
     if (!metadata) {
         const reason = enrichment?.failure_reason || 'unresolved';
         return `
-            <div class="hardcover-match hardcover-match--static text-body-secondary">
-                <div class="d-flex align-items-center gap-1 text-body-emphasis">
-                    ${logoHtml}
-                    <span class="fw-semibold">Hardcover</span>
+            <div class="detail-hero-hc-card d-inline-flex flex-column gap-1 text-decoration-none pe-none opacity-50">
+                <div class="d-flex align-items-center gap-1" style="font-size: 0.7rem;">
+                    <img src="${HARDCOVER_LOGO_URL}" alt="" style="width: 0.8rem; height: 0.8rem; object-fit: contain;" loading="lazy">
+                    <span class="text-uppercase fw-semibold" style="letter-spacing: 0.05em;">Hardcover</span>
                 </div>
-                <div class="mt-1">
-                    No confident match
-                    <span class="opacity-75">(${escapeHtml(reason)})</span>
-                </div>
+                <div style="font-size: 0.8rem;">No match</div>
             </div>`;
     }
 
-    const author = firstListedName(metadata.authors);
-    const series = arrayFromValue(metadata.series_names).join(', ');
     const rating = Number(metadata.rating);
-    const yearText = metadata.release_year ? ` | ${escapeHtml(metadata.release_year)}` : '';
-    const seriesText = series ? `<div class="text-truncate"><i class="bi bi-collection me-1"></i>${escapeHtml(series)}</div>` : '';
-    const ratingRow = renderStarRating(rating, metadata.ratings_count);
-    const compilationText = metadata.compilation ? '<span class="badge text-bg-secondary ms-1">Compilation</span>' : '';
+    const hasRating = Number.isFinite(rating) && rating > 0;
+    const hasYear = !!metadata.release_year;
     const url = hardcoverUrl(metadata);
     const tagName = url ? 'a' : 'div';
     const linkAttrs = url
@@ -437,18 +429,13 @@ function renderHardcoverMetadata(enrichment) {
         : '';
 
     return `
-        <${tagName} class="hardcover-match d-block text-decoration-none text-reset" ${linkAttrs}>
-            <div class="d-flex align-items-center gap-1 text-body-emphasis">
-                ${logoHtml}
-                <span class="fw-semibold text-truncate">${escapeHtml(metadata.title || 'Hardcover match')}</span>
-                ${compilationText}
+        <${tagName} class="detail-hero-hc-card d-inline-flex flex-column gap-1 text-decoration-none ${url ? '' : 'pe-none'}" ${linkAttrs}>
+            <div class="d-flex align-items-center gap-1 opacity-75" style="font-size: 0.7rem;">
+                <img src="${HARDCOVER_LOGO_URL}" alt="" style="width: 0.8rem; height: 0.8rem; object-fit: contain;" loading="lazy">
+                <span class="text-uppercase fw-semibold" style="letter-spacing: 0.05em;">Hardcover</span>
             </div>
-            <div class="text-body-secondary text-truncate">
-                ${author ? `<i class="bi bi-person-lines-fill me-1"></i>${escapeHtml(author)}` : 'Hardcover metadata'}
-                ${yearText}
-            </div>
-            ${ratingRow}
-            ${seriesText}
+            ${hasRating ? `<div>${renderStarRating(rating, metadata.ratings_count)}</div>` : ''}
+            ${hasYear ? `<div class="opacity-75" style="font-size: 0.8rem;">Published ${escapeHtml(metadata.release_year)}</div>` : ''}
         </${tagName}>`;
 }
 
