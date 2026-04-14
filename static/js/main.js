@@ -5646,6 +5646,23 @@ function initAutosuggest(inputId) {
         activeIndex = -1;
     };
 
+    const dismissAutosuggest = () => {
+        clearTimeout(debounceTimer);
+        debounceTimer = null;
+
+        if (abortController) {
+            abortController.abort();
+            abortController = null;
+        }
+        if (cacheProbeController) {
+            cacheProbeController.abort();
+            cacheProbeController = null;
+        }
+
+        container.style.display = 'none';
+        activeIndex = -1;
+    };
+
     const isContainerVisibleInViewport = () => {
         if (container.style.display === 'none') return false;
         const computed = window.getComputedStyle(container);
@@ -5726,8 +5743,7 @@ function initAutosuggest(inputId) {
 
             a.addEventListener('click', (e) => {
                 e.preventDefault();
-                if (abortController) abortController.abort();
-                clearTimeout(debounceTimer);
+                dismissAutosuggest();
 
                 input.value = primaryText;
 
@@ -5736,7 +5752,6 @@ function initAutosuggest(inputId) {
                     mainQuery.value = input.value;
                 }
 
-                container.style.display = 'none';
                 document.getElementById('searchButton').click();
             });
 
@@ -5933,16 +5948,10 @@ function initAutosuggest(inputId) {
                 getItems()[activeIndex]?.click();
                 return;
             }
-            // STOP everything:
-            clearTimeout(debounceTimer);      // 1. Stop the timer if it hasn't fired yet
-            if (abortController) {
-                abortController.abort();      // 2. Kill the fetch if it's currently running
-            }
-            container.style.display = 'none'; // 3. Hide the UI immediately
+            dismissAutosuggest();
         }
         else if (e.key === 'Escape') {
-            container.style.display = 'none';
-            activeIndex = -1;
+            dismissAutosuggest();
         }
     });
 
@@ -5965,8 +5974,7 @@ function initAutosuggest(inputId) {
         } else if (e.key === 'Enter') {
             if (activeIndex >= 0) getItems()[activeIndex]?.click();
         } else if (e.key === 'Escape') {
-            container.style.display = 'none';
-            activeIndex = -1;
+            dismissAutosuggest();
             input.focus();
         }
     });
@@ -5995,7 +6003,7 @@ function initAutosuggest(inputId) {
     }, true);
 
     associatedForm?.addEventListener('submit', () => {
-        hideAllAutosuggestContainers();
+        dismissAutosuggest();
     });
 
     searchFilterElements.forEach((element) => {
