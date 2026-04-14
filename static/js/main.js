@@ -986,10 +986,10 @@ function renderHardcoverSeriesStrip(series, currentBookId, currentPosition) {
 
 async function loadHardcoverSeriesStrip(metadata) {
     const bookModalEl = document.getElementById('bookDetailsModal');
-    const seriesId = Number(metadata?.featured_series?.id);
+    const seriesId = Number(metadata?.series_id ?? metadata?.featured_series?.id);
     const currentBookId = String(metadata?.book_id || '').trim();
     const currentPosition = normalizeHardcoverSeriesPosition(metadata?.featured_series?.position);
-    if (!bookModalEl || !Number.isFinite(seriesId) || seriesId <= 0 || !currentBookId) {
+    if (!bookModalEl || !Number.isFinite(seriesId) || seriesId <= 0) {
         clearHardcoverSeriesStrip();
         if (bookModalEl) bookModalEl.dataset.currentHardcoverSeriesId = '';
         return;

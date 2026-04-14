@@ -160,6 +160,7 @@ def metadata_from_search_candidate(candidate: dict[str, Any], query_type: str) -
     authors = contribution_authors or _listify(candidate.get("author_names"))
     if not authors and candidate.get("author_name"):
         authors = [str(candidate.get("author_name"))]
+    featured_series = _normalize_featured_series(candidate.get("featured_series") or candidate.get("featured_book_series"))
     url_path = "books"
     if is_series:
         url_path = "series"
@@ -183,8 +184,9 @@ def metadata_from_search_candidate(candidate: dict[str, Any], query_type: str) -
         "pages": _positive_int(candidate.get("pages")),
         "slug": candidate.get("slug") or "",
         "book_id": candidate.get("id") if is_book else None,
+        "series_id": candidate.get("id") if is_series else (featured_series or {}).get("id"),
         "series_names": _unique_list(candidate.get("series_names")) if is_book else ([title] if is_series and title else []),
-        "featured_series": _normalize_featured_series(candidate.get("featured_series") or candidate.get("featured_book_series")),
+        "featured_series": featured_series,
         "genres": _unique_list(candidate.get("genres")),
         "moods": _unique_list(candidate.get("moods")),
         "has_audiobook": bool(candidate.get("has_audiobook")),
@@ -205,6 +207,7 @@ def metadata_from_edition(edition: dict[str, Any], original: dict[str, Any] | No
     series_names = _unique_list(book.get("series_names"))
     if not series_names and original.get("series_info"):
         series_names = [name.strip() for name in str(original.get("series_info")).split(",") if name.strip()]
+    featured_series = _normalize_featured_series(book.get("featured_series") or book.get("featured_book_series"))
     return {
         "title": book.get("title") or edition.get("title") or "",
         "authors": authors,
@@ -222,8 +225,9 @@ def metadata_from_edition(edition: dict[str, Any], original: dict[str, Any] | No
         "pages": _positive_int(book.get("pages")),
         "slug": book.get("slug") or "",
         "book_id": book.get("id"),
+        "series_id": (featured_series or {}).get("id"),
         "series_names": series_names,
-        "featured_series": _normalize_featured_series(book.get("featured_series") or book.get("featured_book_series")),
+        "featured_series": featured_series,
         "genres": _unique_list(book.get("genres")),
         "moods": _unique_list(book.get("moods")),
         "has_audiobook": bool(book.get("has_audiobook")),
