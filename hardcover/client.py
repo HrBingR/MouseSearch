@@ -144,6 +144,12 @@ class HardcoverClient:
           subtitle
           description
           slug
+          contributions(limit: 5) {
+            author {
+              name
+              slug
+            }
+          }
           author_names
           series_names
           rating
@@ -189,6 +195,12 @@ class HardcoverClient:
           subtitle
           description
           slug
+          contributions(limit: 5) {
+            author {
+              name
+              slug
+            }
+          }
           author_names
           series_names
           rating
@@ -229,6 +241,7 @@ class HardcoverClient:
         books_count
         author {
           name
+          slug
         }
         book_series(
           distinct_on: position

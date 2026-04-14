@@ -4098,6 +4098,7 @@ async def hardcover_series_details(series_id):
                 "slug": series.get("slug") or "",
                 "author": {
                     "name": str((series.get("author") or {}).get("name") or "").strip(),
+                    "slug": str((series.get("author") or {}).get("slug") or "").strip(),
                 },
                 "books_count": int(series.get("books_count") or len(entries) or 0),
                 "book_series": entries,

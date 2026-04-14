@@ -381,7 +381,7 @@ function hardcoverUrl(metadata) {
     return `https://hardcover.app/${path}/${encodeURIComponent(slug)}`;
 }
 
-function renderStarRating(rating, ratingsCount, { hideCountOnMobile = false } = {}) {
+function renderStarRating(rating, ratingsCount, { hideCountOnMobile = false, countOverride = null, countLinkUrl = '', wrapWithLink = false } = {}) {
     if (!Number.isFinite(rating) || rating <= 0) return '';
     const clamped = Math.max(0, Math.min(5, rating));
     const stars = Array.from({ length: 5 }, (_, index) => {
@@ -395,16 +395,66 @@ function renderStarRating(rating, ratingsCount, { hideCountOnMobile = false } = 
             </span>`;
     }).join('');
 
-    const count = Number(ratingsCount);
-    const countHtml = count > 0
-        ? `&emsp;<span class="opacity-50 fw-normal${hideCountOnMobile ? ' hardcover-review-count-mobile-hide' : ''}">(${count.toLocaleString()})</span>`
-        : '';
+    const count = Number(countOverride ?? ratingsCount);
+    let countHtml = '';
+    if (count > 0) {
+        const countClasses = `opacity-50 fw-normal${hideCountOnMobile ? ' hardcover-review-count-mobile-hide' : ''}`;
+        countHtml = countLinkUrl && !wrapWithLink
+            ? `&emsp;<a href="${escapeHtml(countLinkUrl)}" target="_blank" rel="noopener noreferrer" class="${countClasses} link-secondary text-decoration-none hover-primary">(${count.toLocaleString()})</a>`
+            : `&emsp;<span class="${countClasses}">(${count.toLocaleString()})</span>`;
+    }
 
-    return `
+    const content = `
         <div class="hardcover-rating d-flex align-items-center gap-1 text-body-secondary">
             <span class="d-inline-flex" role="img" aria-label="${clamped.toFixed(1)} out of 5 stars">${stars}</span>
             <span class="fw-medium">${clamped.toFixed(1)}${countHtml}</span>
         </div>`;
+
+    if (countLinkUrl && wrapWithLink) {
+        return `<a href="${escapeHtml(countLinkUrl)}" target="_blank" rel="noopener noreferrer" class="text-decoration-none hover-primary d-inline-block">${content}</a>`;
+    }
+
+    return content;
+}
+
+function renderHardcoverTitleHtml(metadata) {
+    const title = String(metadata?.title || '').trim();
+    if (!title) return '';
+    const url = hardcoverUrl(metadata);
+    return url
+        ? `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer" class="link-body-emphasis text-decoration-none hover-primary">${escapeHtml(title)}</a>`
+        : escapeHtml(title);
+}
+
+function renderHardcoverAuthorHtml(metadata) {
+    const authors = arrayFromValue(metadata?.authors).map((value) => String(value || '').trim()).filter(Boolean);
+    if (!authors.length) return '';
+
+    const authorSlugs = Array.isArray(metadata?.author_slugs) ? metadata.author_slugs : [];
+    return authors.map((authorName, index) => {
+        const authorUrl = hardcoverAuthorLink(authorSlugs[index]);
+        return authorUrl
+            ? `<a href="${escapeHtml(authorUrl)}" target="_blank" rel="noopener noreferrer" class="link-body-emphasis text-decoration-none hover-primary">${escapeHtml(authorName)}</a>`
+            : escapeHtml(authorName);
+    }).join(', ');
+}
+
+function renderHardcoverSeriesHtml(metadata) {
+    const featuredSeries = metadata?.featured_series;
+    if (featuredSeries && typeof featuredSeries === 'object') {
+        const name = String(featuredSeries.name || featuredSeries?.series?.name || '').trim();
+        const position = Number(featuredSeries.position);
+        if (name) {
+            const label = Number.isFinite(position) && position > 0 ? `${name} #${position}` : name;
+            const url = hardcoverSeriesLink(featuredSeries.slug || featuredSeries?.series?.slug);
+            return url
+                ? `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer" class="link-body-emphasis text-decoration-none hover-primary">${escapeHtml(label)}</a>`
+                : escapeHtml(label);
+        }
+    }
+
+    const firstSeries = uniqueHardcoverStrings(metadata?.series_names)[0] || '';
+    return firstSeries ? escapeHtml(firstSeries) : '';
 }
 
 function renderHardcoverMetadata(enrichment) {
@@ -574,6 +624,16 @@ function hardcoverBookLink(slug) {
     return normalized ? `https://hardcover.app/books/${encodeURIComponent(normalized)}` : '';
 }
 
+function hardcoverReviewsLink(slug) {
+    const normalized = String(slug || '').trim();
+    return normalized ? `https://hardcover.app/books/${encodeURIComponent(normalized)}/reviews` : '';
+}
+
+function hardcoverAuthorLink(slug) {
+    const normalized = String(slug || '').trim();
+    return normalized ? `https://hardcover.app/authors/${encodeURIComponent(normalized)}` : '';
+}
+
 function buildMouseSearchUrlForTitle(title) {
     const normalizedTitle = String(title || '').trim();
     if (!normalizedTitle) {
@@ -652,11 +712,14 @@ function renderHardcoverSeriesStrip(series, currentBookId, currentPosition) {
 
     const seriesName = String(series?.name || '').trim();
     const authorName = String(series?.author?.name || '').trim();
+    const authorUrl = hardcoverAuthorLink(series?.author?.slug);
     const seriesUrl = hardcoverSeriesLink(series?.slug);
     if (seriesUrl && seriesName) {
-        meta.innerHTML = `<a href="${escapeHtml(seriesUrl)}" target="_blank" rel="noopener noreferrer" class="link-secondary text-decoration-none hover-primary">${escapeHtml(seriesName)}</a>${authorName ? ` <span class="text-body-secondary">by ${escapeHtml(authorName)}</span>` : ''}`;
+        meta.innerHTML = `<a href="${escapeHtml(seriesUrl)}" target="_blank" rel="noopener noreferrer" class="link-secondary text-decoration-none hover-primary">${escapeHtml(seriesName)}</a>${authorName ? ` <span class="text-body-secondary">by </span>${authorUrl ? `<a href="${escapeHtml(authorUrl)}" target="_blank" rel="noopener noreferrer" class="link-secondary text-decoration-none hover-primary">${escapeHtml(authorName)}</a>` : `<span class="text-body-secondary">${escapeHtml(authorName)}</span>`}` : ''}`;
     } else {
-        meta.textContent = authorName ? `${seriesName} by ${authorName}` : seriesName;
+        meta.innerHTML = authorName
+            ? `${escapeHtml(seriesName)} <span class="text-body-secondary">by </span>${authorUrl ? `<a href="${escapeHtml(authorUrl)}" target="_blank" rel="noopener noreferrer" class="link-secondary text-decoration-none hover-primary">${escapeHtml(authorName)}</a>` : `<span class="text-body-secondary">${escapeHtml(authorName)}</span>`}`
+            : escapeHtml(seriesName);
     }
 
     const currentBookKey = String(currentBookId || '').trim();
@@ -784,11 +847,14 @@ function renderBookDetailsHardcover(enrichment) {
     const publishedText = formatHardcoverDate(metadata.release_date) || (hasYear ? String(metadata.release_year) : '');
     const pagesText = currentDetailItemSupportsPages() ? formatHardcoverCount(metadata.pages) : '';
     const readersText = formatHardcoverCount(metadata.users_read_count ?? metadata.users_count);
-    const seriesText = hardcoverSeriesLabel(metadata);
+    const titleHtml = renderHardcoverTitleHtml(metadata);
+    const authorHtml = renderHardcoverAuthorHtml(metadata);
+    const seriesHtml = renderHardcoverSeriesHtml(metadata);
     const subtitleText = String(metadata.subtitle || '').trim();
     const descriptionText = String(metadata.description || '').trim();
     const genreBadges = renderHardcoverBadges(metadata.genres, 6);
     const moodBadges = renderHardcoverBadges(metadata.moods, 5);
+    const reviewsUrl = hardcoverReviewsLink(metadata.slug);
 
     // --- Sidebar card ---
     if (card) {
@@ -803,6 +869,13 @@ function renderBookDetailsHardcover(enrichment) {
             if (el) el.textContent = hasValue ? value : '';
             toggleDetailRow(row, hasValue);
         };
+        const setDetailRowHtml = (rowId, valueId, html) => {
+            const row = document.getElementById(rowId);
+            const el = document.getElementById(valueId);
+            const hasContent = String(html || '').trim().length > 0;
+            if (el) el.innerHTML = hasContent ? html : '';
+            toggleDetailRow(row, hasContent);
+        };
         const setDetailBlockHtml = (blockId, valueId, html) => {
             const block = document.getElementById(blockId);
             const el = document.getElementById(valueId);
@@ -815,10 +888,15 @@ function renderBookDetailsHardcover(enrichment) {
         const descriptionBlock = document.getElementById('detail-hc-description-block');
         const descriptionEl = document.getElementById('detail-hc-description');
         const preserveHardcoverDescription = bookModalEl?.dataset.hardcoverDescriptionExpanded === 'true';
+        setDetailRowHtml('detail-hc-title-row', 'detail-hc-title', titleHtml);
+        setDetailRowHtml('detail-hc-authors-row', 'detail-hc-authors', authorHtml);
         const ratingRow = document.getElementById('detail-hc-rating-row');
         const ratingEl = document.getElementById('detail-hc-rating');
         if (hasRating) {
-            ratingEl.innerHTML = renderStarRating(rating, metadata.ratings_count);
+            ratingEl.innerHTML = renderStarRating(rating, metadata.ratings_count, {
+                countLinkUrl: reviewsUrl,
+                wrapWithLink: true,
+            });
             toggleDetailRow(ratingRow, true);
         } else {
             toggleDetailRow(ratingRow, false);
@@ -835,7 +913,7 @@ function renderBookDetailsHardcover(enrichment) {
 
         setDetailRow('detail-hc-pages-row', 'detail-hc-pages', pagesText);
         setDetailRow('detail-hc-readers-row', 'detail-hc-readers', readersText);
-        setDetailRow('detail-hc-series-row', 'detail-hc-series', seriesText);
+        setDetailRowHtml('detail-hc-series-row', 'detail-hc-series', seriesHtml);
 
         if (subtitleEl) subtitleEl.textContent = subtitleText;
         if (subtitleBlock) subtitleBlock.classList.toggle('d-none', !subtitleText);

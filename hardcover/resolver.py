@@ -75,6 +75,34 @@ def _release_year(candidate: dict[str, Any]) -> int | None:
     return None
 
 
+def _author_names_and_slugs(contributions: Any) -> tuple[list[str], list[str]]:
+    names: list[str] = []
+    slugs: list[str] = []
+    seen: set[tuple[str, str]] = set()
+
+    if not isinstance(contributions, list):
+        return names, slugs
+
+    for item in contributions:
+        if not isinstance(item, dict):
+            continue
+        author = item.get("author") or {}
+        if not isinstance(author, dict):
+            continue
+        name = str(author.get("name") or "").strip()
+        slug = str(author.get("slug") or "").strip()
+        if not name:
+            continue
+        key = (name, slug)
+        if key in seen:
+            continue
+        seen.add(key)
+        names.append(name)
+        slugs.append(slug)
+
+    return names, slugs
+
+
 def _positive_int(value: Any) -> int | None:
     if value is None or value == "":
         return None
@@ -128,7 +156,8 @@ def metadata_from_search_candidate(candidate: dict[str, Any], query_type: str) -
     is_series = query_type.lower() == "series"
     is_author = query_type.lower() == "author"
     title = candidate.get("title") if is_book else candidate.get("name")
-    authors = _listify(candidate.get("author_names"))
+    contribution_authors, contribution_author_slugs = _author_names_and_slugs(candidate.get("contributions"))
+    authors = contribution_authors or _listify(candidate.get("author_names"))
     if not authors and candidate.get("author_name"):
         authors = [str(candidate.get("author_name"))]
     url_path = "books"
@@ -140,6 +169,7 @@ def metadata_from_search_candidate(candidate: dict[str, Any], query_type: str) -
     return {
         "title": title or "",
         "authors": authors,
+        "author_slugs": contribution_author_slugs if contribution_authors else [],
         "cover_image": _extract_image_url(candidate.get("image")),
         "subtitle": candidate.get("subtitle") or "",
         "description": candidate.get("description") or "",
@@ -168,7 +198,8 @@ def metadata_from_search_candidate(candidate: dict[str, Any], query_type: str) -
 def metadata_from_edition(edition: dict[str, Any], original: dict[str, Any] | None = None) -> dict[str, Any]:
     book = edition.get("book") or {}
     original = original or {}
-    authors = _unique_list(book.get("author_names"))
+    contribution_authors, contribution_author_slugs = _author_names_and_slugs(book.get("contributions"))
+    authors = contribution_authors or _unique_list(book.get("author_names"))
     if not authors and original.get("author_info"):
         authors = [name.strip() for name in str(original.get("author_info")).split(",") if name.strip()]
     series_names = _unique_list(book.get("series_names"))
@@ -177,6 +208,7 @@ def metadata_from_edition(edition: dict[str, Any], original: dict[str, Any] | No
     return {
         "title": book.get("title") or edition.get("title") or "",
         "authors": authors,
+        "author_slugs": contribution_author_slugs if contribution_authors else [],
         "cover_image": _extract_image_url(book.get("image")),
         "subtitle": book.get("subtitle") or "",
         "description": book.get("description") or "",
