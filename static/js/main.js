@@ -320,6 +320,11 @@ function arrayFromValue(value) {
     return [value];
 }
 
+function firstListedName(value) {
+    const first = arrayFromValue(value).map(item => String(item).trim()).find(Boolean) || '';
+    return first.split(',').map(part => part.trim()).find(Boolean) || '';
+}
+
 function updateResultJsonData(resultItem, patch) {
     if (!resultItem) return;
     let data = {};
@@ -396,21 +401,24 @@ function renderStarRating(rating) {
 
 function renderHardcoverMetadata(enrichment) {
     const metadata = enrichment?.hardcover;
-    const path = enrichment?.query_path || 'unresolved';
-    const score = Number(enrichment?.match_score || 0);
     const logoHtml = `<img src="${HARDCOVER_LOGO_URL}" alt="Hardcover" class="hardcover-logo-icon me-1" loading="lazy" style="width: 1rem; height: 1rem; object-fit: contain;">`;
 
     if (!metadata) {
         const reason = enrichment?.failure_reason || 'unresolved';
         return `
-            <div class="text-body-secondary d-flex align-items-center">
-                ${logoHtml}
-                Hardcover: no confident match
-                <span class="opacity-75">(${escapeHtml(reason)}, score ${score.toFixed(1)})</span>
+            <div class="hardcover-match hardcover-match--static text-body-secondary">
+                <div class="d-flex align-items-center gap-1 text-body-emphasis">
+                    ${logoHtml}
+                    <span class="fw-semibold">Hardcover</span>
+                </div>
+                <div class="mt-1">
+                    No confident match
+                    <span class="opacity-75">(${escapeHtml(reason)})</span>
+                </div>
             </div>`;
     }
 
-    const authors = arrayFromValue(metadata.authors).join(', ');
+    const author = firstListedName(metadata.authors);
     const series = arrayFromValue(metadata.series_names).join(', ');
     const rating = Number(metadata.rating);
     const yearText = metadata.release_year ? ` | ${escapeHtml(metadata.release_year)}` : '';
@@ -431,9 +439,8 @@ function renderHardcoverMetadata(enrichment) {
                 ${compilationText}
             </div>
             <div class="text-body-secondary text-truncate">
-                ${authors ? `<i class="bi bi-person-lines-fill me-1"></i>${escapeHtml(authors)}` : 'Hardcover metadata'}
+                ${author ? `<i class="bi bi-person-lines-fill me-1"></i>${escapeHtml(author)}` : 'Hardcover metadata'}
                 ${yearText}
-                <span class="opacity-75"> | ${escapeHtml(path)} | ${score.toFixed(1)}</span>
             </div>
             ${ratingRow}
             ${seriesText}

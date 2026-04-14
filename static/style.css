@@ -514,6 +514,59 @@ input:disabled, select:disabled {
     cursor: pointer;
 }
 
+.hardcover-enrichment {
+    min-width: 0;
+}
+
+.hardcover-match {
+    display: block;
+    width: 100%;
+    min-width: 0;
+    padding: 0.6rem 0.7rem;
+    border: 1px solid var(--bs-border-color-translucent);
+    border-radius: 8px;
+    background-color: rgba(var(--bs-body-bg-rgb), 0.58);
+    box-shadow: 0 0.125rem 0.35rem rgba(0, 0, 0, 0.08);
+    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease, background-color 0.2s ease;
+}
+
+a.hardcover-match {
+    cursor: pointer;
+}
+
+a.hardcover-match:hover,
+a.hardcover-match:focus-visible {
+    transform: translateY(-2px);
+    border-color: var(--bs-primary-border-subtle);
+    background-color: var(--bs-body-bg);
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.14);
+}
+
+a.hardcover-match:focus-visible {
+    outline: 2px solid rgba(var(--bs-primary-rgb), 0.35);
+    outline-offset: 2px;
+}
+
+.hardcover-match--pending {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: default;
+}
+
+.hardcover-match--static {
+    cursor: default;
+}
+
+.hardcover-logo-icon,
+.hardcover-star {
+    flex: 0 0 auto;
+}
+
+.hardcover-rating {
+    min-width: 0;
+}
+
 /* Ensure the image container stands out slightly in both modes */
 .img-container-adaptive {
     background-color: var(--bs-body-tertiary);
