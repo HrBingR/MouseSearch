@@ -89,11 +89,34 @@ class HardcoverClient:
         book {
           id
           title
+          subtitle
+          description
           slug
+          author_names
+          series_names
           rating
           ratings_count
+          reviews_count
+          users_read_count
+          users_count
+          release_date
           release_year
+          pages
           compilation
+          has_audiobook
+          has_ebook
+          genres
+          moods
+          image {
+            url
+          }
+          featured_series {
+            position
+            series {
+              name
+              slug
+            }
+          }
         }
       }
     }
@@ -110,11 +133,34 @@ class HardcoverClient:
         book {
           id
           title
+          subtitle
+          description
           slug
+          author_names
+          series_names
           rating
           ratings_count
+          reviews_count
+          users_read_count
+          users_count
+          release_date
           release_year
+          pages
           compilation
+          has_audiobook
+          has_ebook
+          genres
+          moods
+          image {
+            url
+          }
+          featured_series {
+            position
+            series {
+              name
+              slug
+            }
+          }
         }
       }
     }

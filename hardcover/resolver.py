@@ -32,6 +32,18 @@ def _listify(value: Any) -> list[str]:
     return [str(value)]
 
 
+def _unique_list(value: Any) -> list[str]:
+    seen: set[str] = set()
+    items: list[str] = []
+    for raw in _listify(value):
+        text = str(raw).strip()
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        items.append(text)
+    return items
+
+
 def _extract_image_url(image: Any) -> str:
     if not image:
         return ""
@@ -63,6 +75,40 @@ def _release_year(candidate: dict[str, Any]) -> int | None:
     return None
 
 
+def _positive_int(value: Any) -> int | None:
+    if value is None or value == "":
+        return None
+    try:
+        number = int(value)
+    except (TypeError, ValueError):
+        return None
+    return number if number >= 0 else None
+
+
+def _normalize_featured_series(featured: Any) -> dict[str, Any] | None:
+    if not isinstance(featured, dict):
+        return None
+
+    series = featured.get("series")
+    name = ""
+    slug = ""
+    if isinstance(series, dict):
+        name = str(series.get("name") or "").strip()
+        slug = str(series.get("slug") or "").strip()
+
+    position = _positive_int(featured.get("position"))
+    if position is None:
+        position = _positive_int(featured.get("details"))
+
+    if not name and position is None:
+        return None
+    return {
+        "name": name,
+        "slug": slug,
+        "position": position,
+    }
+
+
 def metadata_from_search_candidate(candidate: dict[str, Any], query_type: str) -> dict[str, Any]:
     is_book = query_type.lower() == "book"
     is_series = query_type.lower() == "series"
@@ -81,13 +127,24 @@ def metadata_from_search_candidate(candidate: dict[str, Any], query_type: str) -
         "title": title or "",
         "authors": authors,
         "cover_image": _extract_image_url(candidate.get("image")),
+        "subtitle": candidate.get("subtitle") or "",
+        "description": candidate.get("description") or "",
         "rating": candidate.get("rating"),
         "ratings_count": candidate.get("ratings_count"),
+        "reviews_count": _positive_int(candidate.get("reviews_count")),
+        "users_read_count": _positive_int(candidate.get("users_read_count")),
+        "users_count": _positive_int(candidate.get("users_count")),
+        "release_date": candidate.get("release_date") or "",
         "release_year": _release_year(candidate),
+        "pages": _positive_int(candidate.get("pages")),
         "slug": candidate.get("slug") or "",
         "book_id": candidate.get("id") if is_book else None,
-        "series_names": _listify(candidate.get("series_names")) if is_book else ([title] if is_series and title else []),
-        "featured_series": candidate.get("featured_series") or candidate.get("featured_book_series"),
+        "series_names": _unique_list(candidate.get("series_names")) if is_book else ([title] if is_series and title else []),
+        "featured_series": _normalize_featured_series(candidate.get("featured_series") or candidate.get("featured_book_series")),
+        "genres": _unique_list(candidate.get("genres")),
+        "moods": _unique_list(candidate.get("moods")),
+        "has_audiobook": bool(candidate.get("has_audiobook")),
+        "has_ebook": bool(candidate.get("has_ebook")),
         "compilation": bool(candidate.get("compilation")) if is_book else False,
         "object_type": candidate.get("object_type") or query_type,
         "url_path": url_path,
@@ -97,23 +154,34 @@ def metadata_from_search_candidate(candidate: dict[str, Any], query_type: str) -
 def metadata_from_edition(edition: dict[str, Any], original: dict[str, Any] | None = None) -> dict[str, Any]:
     book = edition.get("book") or {}
     original = original or {}
-    authors = _listify(book.get("author_names"))
+    authors = _unique_list(book.get("author_names"))
     if not authors and original.get("author_info"):
         authors = [name.strip() for name in str(original.get("author_info")).split(",") if name.strip()]
-    series_names = _listify(book.get("series_names"))
+    series_names = _unique_list(book.get("series_names"))
     if not series_names and original.get("series_info"):
         series_names = [name.strip() for name in str(original.get("series_info")).split(",") if name.strip()]
     return {
         "title": book.get("title") or edition.get("title") or "",
         "authors": authors,
         "cover_image": _extract_image_url(book.get("image")),
+        "subtitle": book.get("subtitle") or "",
+        "description": book.get("description") or "",
         "rating": book.get("rating"),
         "ratings_count": book.get("ratings_count"),
+        "reviews_count": _positive_int(book.get("reviews_count")),
+        "users_read_count": _positive_int(book.get("users_read_count")),
+        "users_count": _positive_int(book.get("users_count")),
+        "release_date": book.get("release_date") or edition.get("release_date") or "",
         "release_year": _release_year(book) or _release_year(edition),
+        "pages": _positive_int(book.get("pages")),
         "slug": book.get("slug") or "",
         "book_id": book.get("id"),
         "series_names": series_names,
-        "featured_series": book.get("featured_series") or book.get("featured_book_series"),
+        "featured_series": _normalize_featured_series(book.get("featured_series") or book.get("featured_book_series")),
+        "genres": _unique_list(book.get("genres")),
+        "moods": _unique_list(book.get("moods")),
+        "has_audiobook": bool(book.get("has_audiobook")),
+        "has_ebook": bool(book.get("has_ebook")),
         "compilation": bool(book.get("compilation")),
         "object_type": "Book",
         "url_path": "books",

@@ -446,6 +446,112 @@ function renderHardcoverMetadata(enrichment) {
         </${tagName}>`;
 }
 
+function formatHardcoverDate(value) {
+    const text = String(value || '').trim();
+    if (!text) return '';
+    const parsed = /^\d{4}-\d{2}-\d{2}$/.test(text)
+        ? new Date(`${text}T12:00:00`)
+        : new Date(text);
+    if (!Number.isNaN(parsed.getTime())) {
+        return parsed.toLocaleDateString(undefined, {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric'
+        });
+    }
+    return text;
+}
+
+function formatHardcoverCount(value) {
+    const count = Number(value);
+    if (!Number.isFinite(count) || count < 0) return '';
+    return count.toLocaleString();
+}
+
+function uniqueHardcoverStrings(values) {
+    if (!Array.isArray(values)) return [];
+    const seen = new Set();
+    const items = [];
+    values.forEach((value) => {
+        const text = String(value || '').trim();
+        if (!text || seen.has(text)) return;
+        seen.add(text);
+        items.push(text);
+    });
+    return items;
+}
+
+function hardcoverSeriesLabel(metadata) {
+    const featuredSeries = metadata?.featured_series;
+    if (featuredSeries && typeof featuredSeries === 'object') {
+        const name = String(featuredSeries.name || featuredSeries?.series?.name || '').trim();
+        const position = Number(featuredSeries.position);
+        if (name) {
+            return Number.isFinite(position) && position > 0 ? `${name} #${position}` : name;
+        }
+    }
+    return uniqueHardcoverStrings(metadata?.series_names)[0] || '';
+}
+
+function renderHardcoverBadges(values, limit = 6) {
+    return uniqueHardcoverStrings(values)
+        .slice(0, limit)
+        .map((value) => `<span class="badge rounded-pill bg-secondary-subtle text-secondary-emphasis border fw-normal">${escapeHtml(value)}</span>`)
+        .join('');
+}
+
+function currentDetailItemSupportsPages() {
+    const bookModalEl = document.getElementById('bookDetailsModal');
+    const mainCat = String(bookModalEl?.dataset.currentMainCat || '').trim();
+    const filetype = String(bookModalEl?.dataset.currentFiletype || '').trim().toLowerCase();
+
+    if (mainCat === '13') return false;
+    if (!filetype) return true;
+
+    return !/\b(mp3|m4b|m4a|aac|flac|ogg|opus|aax|audio)\b/.test(filetype);
+}
+
+function configureExpandableDetailDescription(element, html) {
+    if (!element) return;
+    const collapsedHeight = 350;
+
+    element.dataset.expandableHtml = String(html || '');
+    element.innerHTML = html;
+    element.classList.remove('is-expanded', 'is-collapsible');
+    element.setAttribute('aria-expanded', 'false');
+    element.removeAttribute('role');
+    element.tabIndex = -1;
+    element.title = '';
+    element.onclick = null;
+    element.onkeydown = null;
+
+    const hasContent = String(element.textContent || '').trim().length > 0;
+    if (!hasContent) return;
+    if (!element.getClientRects().length) return;
+
+    const isCollapsible = element.scrollHeight > collapsedHeight + 1;
+    if (!isCollapsible) return;
+
+    element.classList.add('is-collapsible');
+    element.setAttribute('role', 'button');
+    element.setAttribute('aria-expanded', 'false');
+    element.tabIndex = 0;
+    element.title = 'Click to expand';
+    element.onclick = (event) => {
+        if (element.classList.contains('is-expanded')) return;
+        event.preventDefault();
+        event.stopPropagation();
+        element.classList.add('is-expanded');
+        element.setAttribute('aria-expanded', 'true');
+        element.title = '';
+    };
+    element.onkeydown = (event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        element.click();
+    };
+}
+
 function renderBookDetailsHardcover(enrichment) {
     const card = document.getElementById('detail-hardcover-card');
     const heroInfo = document.getElementById('detail-hero-hc-info');
@@ -460,26 +566,89 @@ function renderBookDetailsHardcover(enrichment) {
     const rating = Number(metadata.rating);
     const hasRating = Number.isFinite(rating) && rating > 0;
     const hasYear = !!metadata.release_year;
+    const publishedText = formatHardcoverDate(metadata.release_date) || (hasYear ? String(metadata.release_year) : '');
+    const pagesText = currentDetailItemSupportsPages() ? formatHardcoverCount(metadata.pages) : '';
+    const readersText = formatHardcoverCount(metadata.users_read_count ?? metadata.users_count);
+    const seriesText = hardcoverSeriesLabel(metadata);
+    const subtitleText = String(metadata.subtitle || '').trim();
+    const descriptionText = String(metadata.description || '').trim();
+    const genreBadges = renderHardcoverBadges(metadata.genres, 6);
+    const moodBadges = renderHardcoverBadges(metadata.moods, 5);
 
     // --- Sidebar card ---
     if (card) {
+        const toggleDetailRow = (row, isVisible) => {
+            if (!row) return;
+            row.classList.toggle('d-none', !isVisible);
+        };
+        const setDetailRow = (rowId, valueId, value) => {
+            const row = document.getElementById(rowId);
+            const el = document.getElementById(valueId);
+            const hasValue = String(value || '').trim().length > 0;
+            if (el) el.textContent = hasValue ? value : '';
+            toggleDetailRow(row, hasValue);
+        };
+        const setDetailBlockHtml = (blockId, valueId, html) => {
+            const block = document.getElementById(blockId);
+            const el = document.getElementById(valueId);
+            const hasContent = String(html || '').trim().length > 0;
+            if (el) el.innerHTML = hasContent ? html : '';
+            if (block) block.classList.toggle('d-none', !hasContent);
+        };
+        const subtitleBlock = document.getElementById('detail-hc-subtitle-block');
+        const subtitleEl = document.getElementById('detail-hc-subtitle');
+        const descriptionBlock = document.getElementById('detail-hc-description-block');
+        const descriptionEl = document.getElementById('detail-hc-description');
+        const bookModalEl = document.getElementById('bookDetailsModal');
+        const preserveHardcoverDescription = bookModalEl?.dataset.hardcoverDescriptionExpanded === 'true';
         const ratingRow = document.getElementById('detail-hc-rating-row');
         const ratingEl = document.getElementById('detail-hc-rating');
         if (hasRating) {
             ratingEl.innerHTML = renderStarRating(rating, metadata.ratings_count);
-            ratingRow.style.display = '';
+            toggleDetailRow(ratingRow, true);
         } else {
-            ratingRow.style.display = 'none';
+            toggleDetailRow(ratingRow, false);
         }
 
         const yearRow = document.getElementById('detail-hc-year-row');
         const yearEl = document.getElementById('detail-hc-year');
-        if (hasYear) {
-            yearEl.textContent = metadata.release_year;
-            yearRow.style.display = '';
+        if (publishedText) {
+            yearEl.textContent = publishedText;
+            toggleDetailRow(yearRow, true);
         } else {
-            yearRow.style.display = 'none';
+            toggleDetailRow(yearRow, false);
         }
+
+        setDetailRow('detail-hc-pages-row', 'detail-hc-pages', pagesText);
+        setDetailRow('detail-hc-readers-row', 'detail-hc-readers', readersText);
+        setDetailRow('detail-hc-series-row', 'detail-hc-series', seriesText);
+
+        if (subtitleEl) subtitleEl.textContent = subtitleText;
+        if (subtitleBlock) subtitleBlock.classList.toggle('d-none', !subtitleText);
+        if (descriptionEl) {
+            descriptionEl.textContent = descriptionText;
+            descriptionEl.classList.toggle('is-expanded', preserveHardcoverDescription);
+            descriptionEl.setAttribute('aria-expanded', preserveHardcoverDescription ? 'true' : 'false');
+            descriptionEl.tabIndex = descriptionText ? 0 : -1;
+            descriptionEl.title = descriptionText && !preserveHardcoverDescription ? 'Click to expand' : '';
+            descriptionEl.onclick = descriptionText ? (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                descriptionEl.classList.add('is-expanded');
+                descriptionEl.setAttribute('aria-expanded', 'true');
+                descriptionEl.title = '';
+                if (bookModalEl) bookModalEl.dataset.hardcoverDescriptionExpanded = 'true';
+            } : null;
+            descriptionEl.onkeydown = descriptionText ? (event) => {
+                if (event.key !== 'Enter' && event.key !== ' ') return;
+                event.preventDefault();
+                descriptionEl.click();
+            } : null;
+        }
+        if (descriptionBlock) descriptionBlock.classList.toggle('d-none', !descriptionText);
+
+        setDetailBlockHtml('detail-hc-genres-block', 'detail-hc-genres', genreBadges);
+        setDetailBlockHtml('detail-hc-moods-block', 'detail-hc-moods', moodBadges);
 
         const linkContainer = document.getElementById('detail-hc-link-container');
         if (linkContainer) {
@@ -4705,6 +4874,14 @@ document.addEventListener("DOMContentLoaded", async function () {
             history.back();
         }
     });
+    document.getElementById('bookDetailsModal')?.addEventListener('shown.bs.modal', function () {
+        const detailDescriptionEl = document.getElementById('detail-description');
+        if (!detailDescriptionEl) return;
+        configureExpandableDetailDescription(
+            detailDescriptionEl,
+            detailDescriptionEl.dataset.expandableHtml || detailDescriptionEl.innerHTML || ''
+        );
+    });
 
     // 3. Settings Offcanvas: Sync History on Manual Close/Open
     const settingsEl = document.getElementById('settingsOffcanvas');
@@ -4998,7 +5175,10 @@ document.addEventListener("DOMContentLoaded", async function () {
         document.getElementById('detail-subtitle').innerHTML = seriesLabel ? `<span class="badge bg-secondary opacity-75">Series</span> ${seriesLabel}` : '';
         document.getElementById('detail-authors').textContent = authors;
         document.getElementById('detail-narrators').textContent = narrators;
-        document.getElementById('detail-description').innerHTML = data.description || "No description available.";
+        configureExpandableDetailDescription(
+            document.getElementById('detail-description'),
+            data.description || "No description available."
+        );
 
         // ============================================================
         // NEW: BADGE LOGIC START
@@ -5201,7 +5381,12 @@ document.addEventListener("DOMContentLoaded", async function () {
 
         // Track which torrent is open so live enrichment updates can target the modal
         const bookModalEl = document.getElementById('bookDetailsModal');
-        if (bookModalEl) bookModalEl.dataset.currentTorrentId = String(data.id || '');
+        if (bookModalEl) {
+            bookModalEl.dataset.currentTorrentId = String(data.id || '');
+            bookModalEl.dataset.currentMainCat = String(data.main_cat || '');
+            bookModalEl.dataset.currentFiletype = String(data.filetype || '');
+            bookModalEl.dataset.hardcoverDescriptionExpanded = 'false';
+        }
 
         // Render Hardcover enrichment card (may already be available or arrive later via SSE)
         renderBookDetailsHardcover(data.hardcover_enrichment);
