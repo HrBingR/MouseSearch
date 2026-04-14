@@ -136,6 +136,8 @@ class HardcoverResolver:
     async def enrich_result(self, result: dict[str, Any]) -> dict[str, Any]:
         cleaned_query = clean_title(result.get("title"))
         original = mam_original_metadata(result)
+        author_name = detect_author_name(result)
+        series_names = detect_series_names(result)
 
         try:
             for isbn in extract_isbns(result):
@@ -158,6 +160,8 @@ class HardcoverResolver:
                 cleaned_query,
                 book_candidates,
                 self.config.match_threshold,
+                author_name=author_name,
+                series_names=series_names,
             )
             if candidate:
                 return {
@@ -171,7 +175,7 @@ class HardcoverResolver:
 
             best_score = score
             series_queries = [cleaned_query] + [
-                name for name in detect_series_names(result)
+                name for name in series_names
                 if name.lower() != cleaned_query.lower()
             ]
             for series_query in series_queries:
@@ -180,6 +184,8 @@ class HardcoverResolver:
                     series_query,
                     series_candidates,
                     self.config.match_threshold,
+                    author_name=author_name,
+                    series_names=series_names,
                 )
                 if candidate:
                     return {
@@ -192,13 +198,14 @@ class HardcoverResolver:
                     }
                 best_score = max(best_score, score)
 
-            author_name = detect_author_name(result)
             if author_name:
                 author_candidates = await self.client.search(author_name, "Author", self.config.per_page)
                 candidate, score, _ = pick_valid_candidate(
                     author_name,
                     author_candidates,
                     self.config.match_threshold,
+                    author_name=author_name,
+                    series_names=series_names,
                 )
                 if candidate:
                     metadata = metadata_from_search_candidate(candidate, "Author")
