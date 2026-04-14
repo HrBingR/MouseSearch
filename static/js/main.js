@@ -427,11 +427,13 @@ function renderHardcoverMetadata(enrichment) {
     const rating = Number(metadata.rating);
     const hasRating = Number.isFinite(rating) && rating > 0;
     const hasYear = !!metadata.release_year;
+    const author = firstListedName(metadata.authors);
+    const title = metadata.title || 'Unknown Title';
+    const tooltipText = `<div class='text-start'><strong>Title:</strong> ${escapeHtml(title)}<br><strong>Author:</strong> ${escapeHtml(author)}</div>`;
     const url = hardcoverUrl(metadata);
     const tagName = url ? 'a' : 'div';
-    const linkAttrs = url
-        ? `href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer"`
-        : '';
+    const linkAttrs = (url ? `href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer" ` : '') +
+        `data-bs-toggle="tooltip" data-bs-html="true" title="${escapeHtml(tooltipText)}"`;
 
     return `
         <${tagName} class="detail-hero-hc-card d-inline-flex flex-column gap-1 text-decoration-none ${url ? '' : 'pe-none'}" ${linkAttrs}>
@@ -501,6 +503,21 @@ function renderBookDetailsHardcover(enrichment) {
             heroLink.href = url || '#';
             heroLink.style.pointerEvents = url ? '' : 'none';
             heroLink.style.cursor = url ? '' : 'default';
+            
+            const author = firstListedName(metadata.authors);
+            const title = metadata.title || 'Unknown Title';
+            const tooltipText = `<div class='text-start'><strong>Title:</strong> ${escapeHtml(title)}<br><strong>Author:</strong> ${escapeHtml(author)}</div>`;
+            
+            heroLink.setAttribute('data-bs-toggle', 'tooltip');
+            heroLink.setAttribute('data-bs-html', 'true');
+            heroLink.setAttribute('title', tooltipText);
+            heroLink.setAttribute('data-bs-original-title', tooltipText);
+            
+            const existingTooltip = bootstrap.Tooltip.getInstance(heroLink);
+            if (existingTooltip) {
+                existingTooltip.dispose();
+            }
+            new bootstrap.Tooltip(heroLink);
         }
 
         if (heroRating) {
@@ -536,7 +553,19 @@ function updateHardcoverEnrichment(payload) {
 
     const container = resultItem.querySelector('[data-hardcover-container]');
     if (container) {
+        // Destroy existing tooltip if any
+        const existingTooltipEl = container.querySelector('[data-bs-toggle="tooltip"]');
+        if (existingTooltipEl) {
+            const instance = bootstrap.Tooltip.getInstance(existingTooltipEl);
+            if (instance) instance.dispose();
+        }
+        
         container.innerHTML = renderHardcoverMetadata(enrichment);
+        
+        const newTooltipEl = container.querySelector('[data-bs-toggle="tooltip"]');
+        if (newTooltipEl) {
+            new bootstrap.Tooltip(newTooltipEl);
+        }
     }
 
     const coverUrl = enrichment?.hardcover?.cover_image;
