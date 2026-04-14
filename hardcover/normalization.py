@@ -104,6 +104,8 @@ def _isbn10_is_valid(isbn: str) -> bool:
 def _isbn13_is_valid(isbn: str) -> bool:
     if not re.fullmatch(r"\d{13}", isbn):
         return False
+    if not (isbn.startswith("978") or isbn.startswith("979")):
+        return False
     total = sum((1 if index % 2 == 0 else 3) * int(char) for index, char in enumerate(isbn))
     return total % 10 == 0
 

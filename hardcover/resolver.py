@@ -234,6 +234,90 @@ def metadata_from_edition(edition: dict[str, Any], original: dict[str, Any] | No
     }
 
 
+def _weighted_series_rating(series: dict[str, Any]) -> tuple[float | None, int | None]:
+    if not isinstance(series, dict):
+        return None, None
+
+    weighted_total = 0.0
+    total_ratings = 0
+    rated_books = 0
+    for entry in series.get("book_series") or []:
+        if not isinstance(entry, dict):
+            continue
+        book = entry.get("book") or {}
+        if not isinstance(book, dict):
+            continue
+        try:
+            rating = float(book.get("rating"))
+        except (TypeError, ValueError):
+            continue
+        ratings_count = _positive_int(book.get("ratings_count"))
+        if ratings_count is None or ratings_count <= 0 or rating <= 0:
+            continue
+        weighted_total += rating * ratings_count
+        total_ratings += ratings_count
+        rated_books += 1
+
+    if total_ratings <= 0 or rated_books <= 0:
+        return None, None
+    average_ratings_count = max(1, round(total_ratings / rated_books))
+    return round(weighted_total / total_ratings, 4), average_ratings_count
+
+
+def _series_publication_range(series: dict[str, Any]) -> str:
+    if not isinstance(series, dict):
+        return ""
+
+    points: list[tuple[str, str]] = []
+    for entry in series.get("book_series") or []:
+        if not isinstance(entry, dict):
+            continue
+        book = entry.get("book") or {}
+        if not isinstance(book, dict):
+            continue
+
+        release_date = str(book.get("release_date") or "").strip()
+        if release_date:
+            points.append((release_date, release_date))
+            continue
+
+        release_year = _positive_int(book.get("release_year"))
+        if release_year is not None:
+            year_text = str(release_year)
+            points.append((f"{release_year:04d}", year_text))
+
+    if not points:
+        return ""
+
+    points.sort(key=lambda item: item[0])
+    start = points[0][1]
+    end = points[-1][1]
+    return start if start == end else f"{start} to {end}"
+
+
+def _series_max_readers(series: dict[str, Any]) -> int | None:
+    if not isinstance(series, dict):
+        return None
+
+    max_readers: int | None = None
+    for entry in series.get("book_series") or []:
+        if not isinstance(entry, dict):
+            continue
+        book = entry.get("book") or {}
+        if not isinstance(book, dict):
+            continue
+
+        readers = _positive_int(book.get("users_read_count"))
+        if readers is None:
+            readers = _positive_int(book.get("users_count"))
+        if readers is None:
+            continue
+        if max_readers is None or readers > max_readers:
+            max_readers = readers
+
+    return max_readers
+
+
 class HardcoverResolver:
     def __init__(self, client: HardcoverClient, config: HardcoverEnrichmentConfig):
         self.client = client
@@ -254,10 +338,15 @@ class HardcoverResolver:
         original = mam_original_metadata(result)
         author_name = detect_author_name(result)
         series_names = detect_series_names(result)
+        isbn_failure_reason = ""
 
         try:
             for isbn in extract_isbns(result):
-                edition = await self.client.edition_by_isbn(isbn)
+                try:
+                    edition = await self.client.edition_by_isbn(isbn)
+                except HardcoverAPIError as exc:
+                    isbn_failure_reason = str(exc)
+                    continue
                 if edition:
                     return {
                         "original_mam": original,
@@ -304,9 +393,24 @@ class HardcoverResolver:
                     series_names=series_names,
                 )
                 if candidate:
+                    metadata = metadata_from_search_candidate(candidate, "Series")
+                    try:
+                        series_details = await self.client.series_details(candidate.get("id"))
+                    except HardcoverAPIError:
+                        series_details = None
+                    weighted_rating, weighted_ratings_count = _weighted_series_rating(series_details or {})
+                    if weighted_rating is not None and weighted_ratings_count is not None:
+                        metadata["rating"] = weighted_rating
+                        metadata["ratings_count"] = weighted_ratings_count
+                    publication_range = _series_publication_range(series_details or {})
+                    if publication_range:
+                        metadata["release_date"] = publication_range
+                    max_readers = _series_max_readers(series_details or {})
+                    if max_readers is not None:
+                        metadata["users_read_count"] = max_readers
                     return {
                         "original_mam": original,
-                        "hardcover": metadata_from_search_candidate(candidate, "Series"),
+                        "hardcover": metadata,
                         "match_score": score,
                         "query_path": "series",
                         "failure_reason": "",
@@ -337,6 +441,8 @@ class HardcoverResolver:
                 best_score = max(best_score, score)
 
             failure = "low_confidence" if best_score else "no_match"
+            if isbn_failure_reason:
+                failure = f"{failure}; isbn_lookup_error: {isbn_failure_reason}"
             unresolved = self.unresolved(result, cleaned_query, failure)
             unresolved["match_score"] = best_score
             return unresolved

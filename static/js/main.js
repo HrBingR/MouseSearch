@@ -479,7 +479,7 @@ function renderHardcoverMetadata(enrichment) {
 
     const rating = Number(metadata.rating);
     const hasRating = Number.isFinite(rating) && rating > 0;
-    const hasYear = !!metadata.release_year;
+    const publishedText = formatHardcoverPublishedText(metadata, { preferYearOnly: true });
     const author = firstListedName(metadata.authors);
     const title = metadata.title || 'Unknown Title';
     const tooltipText = `<div class='text-start'><strong>Title:</strong> ${escapeHtml(title)}<br><strong>Author:</strong> ${escapeHtml(author)}</div>`;
@@ -495,13 +495,14 @@ function renderHardcoverMetadata(enrichment) {
                 <span class="text-uppercase fw-semibold" style="letter-spacing: 0.05em;">Hardcover</span>
             </div>
             ${hasRating ? `<div>${renderStarRating(rating, metadata.ratings_count, { hideCountOnMobile: true })}</div>` : ''}
-            ${hasYear ? `<div class="text-body-secondary hardcover-mobile-hide" style="font-size: 0.8rem;">Published ${escapeHtml(metadata.release_year)}</div>` : ''}
+            ${publishedText ? `<div class="text-body-secondary hardcover-mobile-hide" style="font-size: 0.8rem;">Published ${escapeHtml(publishedText)}</div>` : ''}
         </${tagName}>`;
 }
 
 function formatHardcoverDate(value) {
     const text = String(value || '').trim();
     if (!text) return '';
+    if (/^\d{4}$/.test(text)) return text;
     const parsed = /^\d{4}-\d{2}-\d{2}$/.test(text)
         ? new Date(`${text}T12:00:00`)
         : new Date(text);
@@ -513,6 +514,31 @@ function formatHardcoverDate(value) {
         });
     }
     return text;
+}
+
+function formatHardcoverPublishedText(metadata, { preferYearOnly = false } = {}) {
+    const objectType = String(metadata?.object_type || '').trim().toLowerCase();
+    const releaseDate = String(metadata?.release_date || '').trim();
+    const hasYear = !!metadata?.release_year;
+
+    if (objectType === 'series' && releaseDate) {
+        const parts = releaseDate.split(/\s+to\s+/i).map((part) => {
+            const yearMatch = String(part || '').trim().match(/^(\d{4})/);
+            return yearMatch ? yearMatch[1] : formatHardcoverDate(part);
+        }).filter(Boolean);
+        if (parts.length >= 2) {
+            return `${parts[0]} - ${parts[parts.length - 1]}`;
+        }
+        if (parts.length === 1) {
+            return parts[0];
+        }
+    }
+
+    if (preferYearOnly && hasYear) {
+        return String(metadata.release_year);
+    }
+
+    return formatHardcoverDate(releaseDate) || (hasYear ? String(metadata.release_year) : '');
 }
 
 function formatHardcoverCount(value) {
@@ -1021,8 +1047,9 @@ function renderBookDetailsHardcover(enrichment) {
 
     const rating = Number(metadata.rating);
     const hasRating = Number.isFinite(rating) && rating > 0;
-    const hasYear = !!metadata.release_year;
-    const publishedText = formatHardcoverDate(metadata.release_date) || (hasYear ? String(metadata.release_year) : '');
+    const objectType = String(metadata?.object_type || '').trim().toLowerCase();
+    const isSeriesMatch = objectType === 'series';
+    const publishedText = formatHardcoverPublishedText(metadata);
     const pagesText = currentDetailItemSupportsPages() ? formatHardcoverCount(metadata.pages) : '';
     const readersText = formatHardcoverCount(metadata.users_read_count ?? metadata.users_count);
     const titleHtml = renderHardcoverTitleHtml(metadata);
@@ -1066,7 +1093,9 @@ function renderBookDetailsHardcover(enrichment) {
         const subtitleEl = document.getElementById('detail-hc-subtitle');
         const descriptionBlock = document.getElementById('detail-hc-description-block');
         const descriptionEl = document.getElementById('detail-hc-description');
+        const titleLabel = document.getElementById('detail-hc-title-label');
         const preserveHardcoverDescription = bookModalEl?.dataset.hardcoverDescriptionExpanded === 'true';
+        if (titleLabel) titleLabel.textContent = isSeriesMatch ? 'Series:' : 'Title:';
         setDetailRowHtml('detail-hc-title-row', 'detail-hc-title', titleHtml);
         setDetailRowHtml('detail-hc-authors-row', 'detail-hc-authors', authorHtml);
         const ratingRow = document.getElementById('detail-hc-rating-row');
@@ -1092,7 +1121,7 @@ function renderBookDetailsHardcover(enrichment) {
 
         setDetailRow('detail-hc-pages-row', 'detail-hc-pages', pagesText);
         setDetailRow('detail-hc-readers-row', 'detail-hc-readers', readersText);
-        setDetailRowHtml('detail-hc-series-row', 'detail-hc-series', seriesHtml);
+        setDetailRowHtml('detail-hc-series-row', 'detail-hc-series', isSeriesMatch ? '' : seriesHtml);
 
         if (subtitleEl) subtitleEl.textContent = subtitleText;
         if (subtitleBlock) subtitleBlock.classList.toggle('d-none', !subtitleText);
@@ -1150,11 +1179,12 @@ function renderBookDetailsHardcover(enrichment) {
             heroRating.classList.toggle('d-none', !hasRating);
         }
         if (heroYear) {
-            heroYear.textContent = hasYear ? `Published ${metadata.release_year}` : '';
-            heroYear.classList.toggle('d-none', !hasYear);
+            const heroPublishedText = formatHardcoverPublishedText(metadata, { preferYearOnly: true });
+            heroYear.textContent = heroPublishedText ? `Published ${heroPublishedText}` : '';
+            heroYear.classList.toggle('d-none', !heroPublishedText);
         }
 
-        heroInfo.classList.toggle('d-none', !(hasRating || hasYear));
+        heroInfo.classList.toggle('d-none', !(hasRating || formatHardcoverPublishedText(metadata, { preferYearOnly: true })));
     }
 }
 

@@ -150,8 +150,6 @@ class HardcoverClient:
               slug
             }
           }
-          author_names
-          series_names
           rating
           ratings_count
           reviews_count
@@ -161,14 +159,10 @@ class HardcoverClient:
           release_year
           pages
           compilation
-          has_audiobook
-          has_ebook
-          genres
-          moods
           image {
             url
           }
-          featured_series {
+          featured_book_series {
             position
             series {
               id
@@ -201,8 +195,6 @@ class HardcoverClient:
               slug
             }
           }
-          author_names
-          series_names
           rating
           ratings_count
           reviews_count
@@ -212,14 +204,10 @@ class HardcoverClient:
           release_year
           pages
           compilation
-          has_audiobook
-          has_ebook
-          genres
-          moods
           image {
             url
           }
-          featured_series {
+          featured_book_series {
             position
             series {
               id
@@ -256,7 +244,12 @@ class HardcoverClient:
             id
             slug
             title
+            release_date
             release_year
+            rating
+            ratings_count
+            users_read_count
+            users_count
             image {
               url
             }
