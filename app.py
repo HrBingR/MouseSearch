@@ -48,6 +48,7 @@ from hardcover.resolver import HardcoverBatchRunner, HardcoverEnrichmentConfig, 
 app = Quart(__name__)
 
 UPSTREAM_CLIENT: httpx.AsyncClient | None = None
+HARDCOVER_CLIENT: HardcoverClient | None = None
 
 torrent_client = None
 mam_session_cookies = {}
@@ -69,6 +70,8 @@ pending_mid_resolutions = {}  # Maps MID -> {"added_at": timestamp, "metadata": 
 connected_websockets = set() 
 hardcover_enrichment_batches = {}
 HARDCOVER_ENRICHMENT_BATCH_TTL_SECONDS = 10 * 60
+hardcover_series_response_cache = {}
+HARDCOVER_SERIES_CACHE_TTL_SECONDS = 6 * 60 * 60
 
 # --- RATE LIMITING HELPER ---
 class LeakyBucket:
@@ -750,6 +753,11 @@ async def shutdown():
         scheduler.shutdown()
         app.logger.info("AsyncIOScheduler shutdown")
 
+    global HARDCOVER_CLIENT
+    if HARDCOVER_CLIENT is not None:
+        await HARDCOVER_CLIENT.aclose()
+        HARDCOVER_CLIENT = None
+
     global UPSTREAM_CLIENT
     if UPSTREAM_CLIENT is not None:
         await UPSTREAM_CLIENT.aclose()
@@ -979,6 +987,7 @@ FALLBACK_CONFIG = {
     "HARDCOVER_API_TOKEN": "",
     "HARDCOVER_API_URL": "https://api.hardcover.app/v1/graphql",
     "HARDCOVER_USER_AGENT": "MouseSearch Hardcover Enrichment",
+    "HARDCOVER_RATE_LIMIT": 55,
     "HARDCOVER_MATCH_THRESHOLD": 78.0,
     "HARDCOVER_CONCURRENCY": 6,
     "HARDCOVER_SEARCH_PER_PAGE": 5,
@@ -1176,6 +1185,7 @@ def load_config():
         "THUMBNAIL_CACHE_MAX_SIZE_MB",
         "MAX_SEARCH_RESULTS",
         "MAX_AUTOCOMPLETE_RESULTS",
+        "HARDCOVER_RATE_LIMIT",
         "HARDCOVER_CONCURRENCY",
         "HARDCOVER_SEARCH_PER_PAGE",
     ]:
@@ -1188,6 +1198,8 @@ def load_config():
         config["MAX_SEARCH_RESULTS"] = FALLBACK_CONFIG["MAX_SEARCH_RESULTS"]
     if config["MAX_AUTOCOMPLETE_RESULTS"] <= 0:
         config["MAX_AUTOCOMPLETE_RESULTS"] = FALLBACK_CONFIG["MAX_AUTOCOMPLETE_RESULTS"]
+    if config["HARDCOVER_RATE_LIMIT"] <= 0:
+        config["HARDCOVER_RATE_LIMIT"] = FALLBACK_CONFIG["HARDCOVER_RATE_LIMIT"]
     if config["HARDCOVER_CONCURRENCY"] <= 0:
         config["HARDCOVER_CONCURRENCY"] = FALLBACK_CONFIG["HARDCOVER_CONCURRENCY"]
     if config["HARDCOVER_SEARCH_PER_PAGE"] <= 0:
@@ -3864,6 +3876,47 @@ def hardcover_enrichment_is_active() -> bool:
     return bool(app.config.get("HARDCOVER_ENRICHMENT_ENABLED", True) and token)
 
 
+def create_hardcover_client() -> HardcoverClient | None:
+    global HARDCOVER_CLIENT
+    if not hardcover_enrichment_is_active():
+        return None
+
+    token = str(app.config.get("HARDCOVER_API_TOKEN") or "").strip()
+    endpoint = str(app.config.get("HARDCOVER_API_URL") or FALLBACK_CONFIG["HARDCOVER_API_URL"]).strip()
+    user_agent = str(app.config.get("HARDCOVER_USER_AGENT") or FALLBACK_CONFIG["HARDCOVER_USER_AGENT"]).strip()
+    rate_limit = int(app.config.get("HARDCOVER_RATE_LIMIT", FALLBACK_CONFIG["HARDCOVER_RATE_LIMIT"]))
+    if HARDCOVER_CLIENT is None:
+        HARDCOVER_CLIENT = HardcoverClient(
+            token,
+            endpoint=endpoint,
+            user_agent=user_agent,
+            timeout_seconds=30.0,
+            rate_limit=rate_limit,
+        )
+    return HARDCOVER_CLIENT
+
+
+def get_cached_hardcover_series_response(series_id: int) -> dict | None:
+    entry = hardcover_series_response_cache.get(int(series_id))
+    if not isinstance(entry, dict):
+        return None
+
+    fetched_at = float(entry.get("fetched_at") or 0)
+    if (time.time() - fetched_at) > HARDCOVER_SERIES_CACHE_TTL_SECONDS:
+        hardcover_series_response_cache.pop(int(series_id), None)
+        return None
+
+    payload = entry.get("payload")
+    return copy.deepcopy(payload) if isinstance(payload, dict) else None
+
+
+def set_cached_hardcover_series_response(series_id: int, payload: dict) -> None:
+    hardcover_series_response_cache[int(series_id)] = {
+        "fetched_at": time.time(),
+        "payload": copy.deepcopy(payload),
+    }
+
+
 def prune_hardcover_enrichment_batches() -> None:
     cutoff = time.time() - HARDCOVER_ENRICHMENT_BATCH_TTL_SECONDS
     expired = [
@@ -3901,23 +3954,13 @@ def store_hardcover_enrichment_result(search_id: str, index: int, torrent_id: st
 
 
 async def run_hardcover_enrichment_batch(search_id: str, results: list[dict]):
-    if not hardcover_enrichment_is_active():
+    client = create_hardcover_client()
+    if client is None:
         return
 
-    token = str(app.config.get("HARDCOVER_API_TOKEN") or "").strip()
-    endpoint = str(app.config.get("HARDCOVER_API_URL") or FALLBACK_CONFIG["HARDCOVER_API_URL"]).strip()
-    user_agent = str(app.config.get("HARDCOVER_USER_AGENT") or FALLBACK_CONFIG["HARDCOVER_USER_AGENT"]).strip()
     threshold = float(app.config.get("HARDCOVER_MATCH_THRESHOLD", FALLBACK_CONFIG["HARDCOVER_MATCH_THRESHOLD"]))
     concurrency = int(app.config.get("HARDCOVER_CONCURRENCY", FALLBACK_CONFIG["HARDCOVER_CONCURRENCY"]))
     per_page = int(app.config.get("HARDCOVER_SEARCH_PER_PAGE", FALLBACK_CONFIG["HARDCOVER_SEARCH_PER_PAGE"]))
-
-    client = HardcoverClient(
-        token,
-        endpoint=endpoint,
-        user_agent=user_agent,
-        timeout_seconds=30.0,
-        rate_limit=60,
-    )
     resolver = HardcoverResolver(
         client,
         HardcoverEnrichmentConfig(
@@ -3944,8 +3987,7 @@ async def run_hardcover_enrichment_batch(search_id: str, results: list[dict]):
 
     started = time.monotonic()
     try:
-        async with client:
-            await runner.run(results, publish)
+        await runner.run(results, publish)
         batch = hardcover_enrichment_batches.get(search_id)
         if batch is not None:
             batch["completed"] = True
@@ -3986,6 +4028,88 @@ async def hardcover_enrichment_status(search_id):
         "results": results,
         "error": batch.get("error", ""),
     })
+
+
+@app.route('/hardcover/series/<int:series_id>', methods=['GET'])
+async def hardcover_series_details(series_id):
+    client = create_hardcover_client()
+    if client is None or int(series_id) <= 0:
+        return jsonify({"series": []})
+
+    cached_payload = get_cached_hardcover_series_response(series_id)
+    if cached_payload is not None:
+        return jsonify(cached_payload)
+
+    def extract_image_url(image):
+        if not image:
+            return ""
+        if isinstance(image, str):
+            return image
+        if isinstance(image, dict):
+            for key in ("url", "image_url", "large", "medium", "small", "original"):
+                value = image.get(key)
+                if isinstance(value, str) and value:
+                    return value
+        return ""
+
+    def normalize_position(value):
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+    try:
+        series = await client.series_details(series_id)
+        if not isinstance(series, dict):
+            return jsonify({"series": []})
+
+        entries = []
+        for entry in series.get("book_series") or []:
+            if not isinstance(entry, dict):
+                continue
+            book = entry.get("book") or {}
+            if not isinstance(book, dict):
+                continue
+            title = str(book.get("title") or "").strip()
+            slug = str(book.get("slug") or "").strip()
+            if not title or not slug:
+                continue
+            entries.append({
+                "position": normalize_position(entry.get("position")),
+                "book": {
+                    "id": book.get("id"),
+                    "slug": slug,
+                    "title": title,
+                    "release_year": book.get("release_year"),
+                    "image_url": extract_image_url(book.get("image")),
+                },
+            })
+
+        entries.sort(key=lambda item: (
+            item.get("position") is None,
+            item.get("position") if item.get("position") is not None else float("inf"),
+            str(item.get("book", {}).get("title") or "").lower(),
+        ))
+
+        payload = {
+            "series": [{
+                "id": series.get("id"),
+                "name": series.get("name") or "",
+                "slug": series.get("slug") or "",
+                "author": {
+                    "name": str((series.get("author") or {}).get("name") or "").strip(),
+                },
+                "books_count": int(series.get("books_count") or len(entries) or 0),
+                "book_series": entries,
+            }]
+        }
+        set_cached_hardcover_series_response(series_id, payload)
+        return jsonify(payload)
+    except Exception as exc:
+        app.logger.error(f"[HARDCOVER] Series fetch failed series_id={series_id}: {exc}", exc_info=True)
+        if cached_payload is not None:
+            return jsonify(cached_payload)
+        return jsonify({"series": [], "error": str(exc)}), 500
 
 
 @app.route('/mam/search', methods=['GET'])

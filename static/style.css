@@ -666,6 +666,150 @@ a.hardcover-match:focus-visible {
     border-radius: 0.25rem;
 }
 
+.hardcover-series-strip {
+    display: flex;
+    gap: 0.85rem;
+    overflow-x: auto;
+    padding-bottom: 0.35rem;
+    scrollbar-width: thin;
+    scroll-snap-type: x proximity;
+}
+
+.hardcover-series-card {
+    position: relative;
+    flex: 0 0 auto;
+    width: 100px;
+    color: inherit;
+    scroll-snap-align: start;
+}
+
+.hardcover-series-card__main-link {
+    display: block;
+    color: inherit;
+}
+
+.hardcover-series-card__frame {
+    position: relative;
+    overflow: hidden;
+    border-radius: 0.6rem;
+    border: 1px solid var(--bs-border-color);
+    background: var(--bs-body-tertiary);
+    box-shadow: 0 0.35rem 0.9rem rgba(0, 0, 0, 0.12);
+    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.hardcover-series-card__frame::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: rgba(17, 24, 39, 0.34);
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.hardcover-series-card:hover .hardcover-series-card__frame,
+.hardcover-series-card:focus-within .hardcover-series-card__frame {
+    transform: translateY(-2px);
+    border-color: rgba(var(--bs-primary-rgb), 0.45);
+    box-shadow: 0 0.55rem 1.15rem rgba(0, 0, 0, 0.16);
+}
+
+.hardcover-series-card:hover .hardcover-series-card__frame::after,
+.hardcover-series-card:focus-within .hardcover-series-card__frame::after {
+    opacity: 1;
+}
+
+.hardcover-series-card__cover {
+    display: block;
+    width: 100%;
+    aspect-ratio: 2 / 3;
+    object-fit: cover;
+    background: var(--bs-body-bg);
+}
+
+.hardcover-series-card__position,
+.hardcover-series-card__current {
+    position: absolute;
+    z-index: 1;
+    font-size: 0.72rem;
+    font-weight: 700;
+    line-height: 1;
+    padding: 0.35rem 0.45rem;
+    border-radius: 999px;
+    box-shadow: 0 0.2rem 0.5rem rgba(0, 0, 0, 0.16);
+}
+
+.hardcover-series-card__position {
+    right: 0.4rem;
+    bottom: 0.4rem;
+    background: rgba(255, 193, 7, 0.95);
+    color: #5c4400;
+}
+
+.hardcover-series-card__current {
+    left: 0.4rem;
+    top: 0.4rem;
+    background: rgba(var(--bs-primary-rgb), 0.92);
+    color: #fff;
+}
+
+.hardcover-series-card__actions {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+}
+
+.hardcover-series-card:hover .hardcover-series-card__actions,
+.hardcover-series-card:focus-within .hardcover-series-card__actions {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.hardcover-series-card__action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.2rem;
+    height: 2.2rem;
+    border-radius: 999px;
+    background: rgba(var(--bs-body-bg-rgb), 0.92);
+    border: 1px solid rgba(var(--bs-body-color-rgb), 0.12);
+    box-shadow: 0 0.35rem 0.8rem rgba(0, 0, 0, 0.22);
+    transition: transform 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease;
+}
+
+.hardcover-series-card__action:hover,
+.hardcover-series-card__action:focus-visible {
+    transform: scale(1.06);
+    background: rgba(var(--bs-body-bg-rgb), 0.98);
+    box-shadow: 0 0.45rem 0.95rem rgba(0, 0, 0, 0.28);
+    outline: none;
+}
+
+.hardcover-series-card__action img {
+    width: 1.15rem;
+    height: 1.15rem;
+    object-fit: contain;
+}
+
+.hardcover-series-card--current .hardcover-series-card__frame {
+    border-color: rgba(var(--bs-primary-rgb), 0.72);
+    box-shadow: 0 0 0 2px rgba(var(--bs-primary-rgb), 0.18), 0 0.7rem 1.35rem rgba(var(--bs-primary-rgb), 0.18);
+}
+
+.hardcover-series-card:focus-visible,
+.hardcover-series-card__main-link:focus-visible {
+    outline: none;
+}
+
 /* Hardcover card in the book detail hero */
 .detail-hero-hc-card {
     padding: 0.55rem 0.75rem;

@@ -1,5 +1,6 @@
 import asyncio
 import copy
+import hashlib
 import time
 from typing import Any
 
@@ -31,6 +32,57 @@ class AsyncTokenBucket:
                     return
                 wait_for = (1.0 - self.tokens) / refill_rate
             await asyncio.sleep(wait_for)
+
+
+class HardcoverRateController:
+    def __init__(self, limit: int, period_seconds: float):
+        self.limit = max(1, int(limit))
+        self.period_seconds = float(period_seconds)
+        self.bucket = AsyncTokenBucket(self.limit, self.period_seconds)
+        self.cooldown_until = 0.0
+        self.cooldown_lock = asyncio.Lock()
+
+    async def acquire(self) -> None:
+        while True:
+            async with self.cooldown_lock:
+                wait_for = self.cooldown_until - time.monotonic()
+            if wait_for > 0:
+                await asyncio.sleep(wait_for)
+                continue
+
+            await self.bucket.acquire()
+
+            async with self.cooldown_lock:
+                wait_for = self.cooldown_until - time.monotonic()
+            if wait_for <= 0:
+                return
+
+    async def note_rate_limited(self, attempt: int, retry_after: str | None = None) -> None:
+        delay_seconds = self._retry_delay_seconds(attempt, retry_after)
+        async with self.cooldown_lock:
+            self.cooldown_until = max(self.cooldown_until, time.monotonic() + delay_seconds)
+
+    def _retry_delay_seconds(self, attempt: int, retry_after: str | None) -> float:
+        if retry_after is not None:
+            try:
+                parsed = float(str(retry_after).strip())
+            except (TypeError, ValueError):
+                parsed = None
+            if parsed is not None and parsed > 0:
+                return parsed
+        return min(15.0, 1.0 * (2 ** max(0, int(attempt))))
+
+
+_HARDCOVER_RATE_CONTROLLERS: dict[str, HardcoverRateController] = {}
+
+
+def get_hardcover_rate_controller(endpoint: str, authorization_header: str, limit: int) -> HardcoverRateController:
+    scope = f"{str(endpoint or '').strip().lower()}:{hashlib.sha256(str(authorization_header or '').encode('utf-8')).hexdigest()}"
+    controller = _HARDCOVER_RATE_CONTROLLERS.get(scope)
+    if controller is None or controller.limit != max(1, int(limit)):
+        controller = HardcoverRateController(limit, 60.0)
+        _HARDCOVER_RATE_CONTROLLERS[scope] = controller
+    return controller
 
 
 def normalize_search_results(results: Any) -> list[dict[str, Any]]:
@@ -113,6 +165,7 @@ class HardcoverClient:
           featured_series {
             position
             series {
+              id
               name
               slug
             }
@@ -157,8 +210,42 @@ class HardcoverClient:
           featured_series {
             position
             series {
+              id
               name
               slug
+            }
+          }
+        }
+      }
+    }
+    """
+
+    SERIES_DETAILS_QUERY = """
+    query SeriesDetails($id: Int!) {
+      series(where: {id: {_eq: $id}}, limit: 1) {
+        id
+        name
+        slug
+        books_count
+        author {
+          name
+        }
+        book_series(
+          distinct_on: position
+          order_by: [{position: asc}, {book: {users_count: desc}}]
+          where: {
+            book: {canonical_id: {_is_null: true}}
+            compilation: {_eq: false}
+          }
+        ) {
+          position
+          book {
+            id
+            slug
+            title
+            release_year
+            image {
+              url
             }
           }
         }
@@ -179,7 +266,12 @@ class HardcoverClient:
         self.endpoint = endpoint
         self.user_agent = user_agent
         self.timeout_seconds = timeout_seconds
-        self.limiter = AsyncTokenBucket(rate_limit, 60.0)
+        self.rate_limit_per_minute = max(1, int(rate_limit))
+        self.rate_controller = get_hardcover_rate_controller(
+            self.endpoint,
+            self.authorization_header(),
+            self.rate_limit_per_minute,
+        )
         self._client: httpx.AsyncClient | None = None
         self._cache: dict[str, Any] = {}
 
@@ -228,7 +320,7 @@ class HardcoverClient:
         retry_429 = 3
         attempt = 0
         while True:
-            await self.limiter.acquire()
+            await self.rate_controller.acquire()
             try:
                 response = await self._client.post(
                     self.endpoint,
@@ -240,7 +332,7 @@ class HardcoverClient:
                 raise HardcoverAPIError(f"request_error: {exc}") from exc
 
             if response.status_code == 429 and attempt < retry_429:
-                await asyncio.sleep(min(8.0, 0.75 * (2 ** attempt)))
+                await self.rate_controller.note_rate_limited(attempt, response.headers.get("Retry-After"))
                 attempt += 1
                 continue
 
@@ -295,4 +387,22 @@ class HardcoverClient:
         editions = data.get("editions") or []
         if isinstance(editions, list) and editions:
             return editions[0]
+        return None
+
+    async def series_details(self, series_id: int) -> dict[str, Any] | None:
+        try:
+            normalized_id = int(series_id)
+        except (TypeError, ValueError):
+            return None
+        if normalized_id <= 0:
+            return None
+
+        data = await self.graphql(
+            self.SERIES_DETAILS_QUERY,
+            {"id": normalized_id},
+            cache_key=f"series:{normalized_id}",
+        )
+        series = data.get("series") or []
+        if isinstance(series, list) and series:
+            return series[0]
         return None

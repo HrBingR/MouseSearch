@@ -85,6 +85,16 @@ def _positive_int(value: Any) -> int | None:
     return number if number >= 0 else None
 
 
+def _non_negative_float(value: Any) -> float | None:
+    if value is None or value == "":
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if number >= 0 else None
+
+
 def _normalize_featured_series(featured: Any) -> dict[str, Any] | None:
     if not isinstance(featured, dict):
         return None
@@ -93,16 +103,20 @@ def _normalize_featured_series(featured: Any) -> dict[str, Any] | None:
     name = ""
     slug = ""
     if isinstance(series, dict):
+        series_id = _positive_int(series.get("id"))
         name = str(series.get("name") or "").strip()
         slug = str(series.get("slug") or "").strip()
+    else:
+        series_id = None
 
-    position = _positive_int(featured.get("position"))
+    position = _non_negative_float(featured.get("position"))
     if position is None:
-        position = _positive_int(featured.get("details"))
+        position = _non_negative_float(featured.get("details"))
 
     if not name and position is None:
         return None
     return {
+        "id": series_id,
         "name": name,
         "slug": slug,
         "position": position,

@@ -206,6 +206,7 @@ MouseSearch supports modular torrent clients. Currently supported: **qBittorrent
 | `HARDCOVER_API_TOKEN` | No | Hardcover GraphQL API token. Keep this server-side; it is never sent to browser code. Use the raw token; `Bearer ` is added automatically if omitted. |
 | `HARDCOVER_API_URL` | No | Hardcover GraphQL endpoint. Defaults to `https://api.hardcover.app/v1/graphql`. |
 | `HARDCOVER_USER_AGENT` | No | Descriptive User-Agent sent to Hardcover. Defaults to `MouseSearch Hardcover Enrichment`. |
+| `HARDCOVER_RATE_LIMIT` | No | Shared global rate cap for all server-side Hardcover API requests, in requests per minute. Defaults to `55` to stay under Hardcover's `60/min` limit. |
 | `HARDCOVER_MATCH_THRESHOLD` | No | Fuzzy validation threshold on a 0-100 scale. Defaults to `78`. |
 | `HARDCOVER_CONCURRENCY` | No | Maximum in-flight Hardcover enrichments. Defaults to `6`. |
 | `HARDCOVER_SEARCH_PER_PAGE` | No | Hardcover candidates checked per search path. Defaults to `5`. |

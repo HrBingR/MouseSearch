@@ -31,6 +31,9 @@ const AUTOSUGGEST_CACHE_MAX_ENTRIES = 300;
 const AUTOSUGGEST_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const autosuggestCache = window.__autosuggestCache instanceof Map ? window.__autosuggestCache : new Map();
 window.__autosuggestCache = autosuggestCache;
+const hardcoverSeriesCache = window.__hardcoverSeriesCache instanceof Map ? window.__hardcoverSeriesCache : new Map();
+window.__hardcoverSeriesCache = hardcoverSeriesCache;
+const MOUSESEARCH_LOGO_URL = '/static/icons/mouse.svg';
 const HARDCOVER_LOGO_URL = 'https://hardcover.app/logo.svg';
 const UPLOAD_AMOUNT_STEP = 50;
 const UPLOAD_AMOUNT_MIN = 50;
@@ -552,14 +555,226 @@ function configureExpandableDetailDescription(element, html) {
     };
 }
 
+function clearHardcoverSeriesStrip() {
+    const section = document.getElementById('detail-hc-series-strip-section');
+    const meta = document.getElementById('detail-hc-series-strip-meta');
+    const strip = document.getElementById('detail-hc-series-strip');
+    if (meta) meta.textContent = '';
+    if (strip) strip.innerHTML = '';
+    if (section) section.classList.add('d-none');
+}
+
+function hardcoverSeriesLink(slug) {
+    const normalized = String(slug || '').trim();
+    return normalized ? `https://hardcover.app/series/${encodeURIComponent(normalized)}` : '';
+}
+
+function hardcoverBookLink(slug) {
+    const normalized = String(slug || '').trim();
+    return normalized ? `https://hardcover.app/books/${encodeURIComponent(normalized)}` : '';
+}
+
+function buildMouseSearchUrlForTitle(title) {
+    const normalizedTitle = String(title || '').trim();
+    if (!normalizedTitle) {
+        return window.location.pathname || '/';
+    }
+
+    const searchForm = document.getElementById('search-form');
+    const params = searchForm
+        ? new URLSearchParams(new FormData(searchForm))
+        : new URLSearchParams(window.location.search);
+
+    params.set('query', normalizedTitle);
+    params.set('search_in_title', 'on');
+    [
+        'search_in_author',
+        'search_in_series',
+        'search_in_narrator',
+        'search_in_description',
+        'search_in_tags',
+        'search_in_filenames'
+    ].forEach((key) => params.delete(key));
+
+    const queryString = params.toString();
+    return queryString ? `${window.location.pathname}?${queryString}` : (window.location.pathname || '/');
+}
+
+function formatHardcoverSeriesPosition(value) {
+    const position = Number(value);
+    if (!Number.isFinite(position)) return '';
+    return Number.isInteger(position) ? `#${position}` : `#${position.toString().replace(/\.0+$/, '')}`;
+}
+
+function normalizeHardcoverSeriesPosition(value) {
+    const position = Number(value);
+    return Number.isFinite(position) ? position : null;
+}
+
+function isPrimaryHardcoverSeriesPosition(value) {
+    const position = normalizeHardcoverSeriesPosition(value);
+    if (position === null) return false;
+    const doubled = position * 2;
+    return Math.abs(doubled - Math.round(doubled)) < 0.0001;
+}
+
+function filterHardcoverSeriesEntries(entries, currentBookId, currentPosition) {
+    const list = Array.isArray(entries) ? entries : [];
+    const bookIdKey = String(currentBookId || '').trim();
+    const currentIsPrimaryLane = currentPosition === null || isPrimaryHardcoverSeriesPosition(currentPosition);
+    if (!currentIsPrimaryLane) {
+        return list;
+    }
+
+    const filtered = list.filter((entry) => {
+        const entryBookId = String(entry?.book?.id || '').trim();
+        if (bookIdKey && entryBookId === bookIdKey) {
+            return true;
+        }
+        const position = normalizeHardcoverSeriesPosition(entry?.position);
+        return position === null || isPrimaryHardcoverSeriesPosition(position);
+    });
+
+    return filtered.length ? filtered : list;
+}
+
+function renderHardcoverSeriesStrip(series, currentBookId, currentPosition) {
+    const section = document.getElementById('detail-hc-series-strip-section');
+    const meta = document.getElementById('detail-hc-series-strip-meta');
+    const strip = document.getElementById('detail-hc-series-strip');
+    if (!section || !meta || !strip) return;
+
+    const entries = filterHardcoverSeriesEntries(series?.book_series, currentBookId, currentPosition);
+    if (!entries.length) {
+        clearHardcoverSeriesStrip();
+        return;
+    }
+
+    const seriesName = String(series?.name || '').trim();
+    const authorName = String(series?.author?.name || '').trim();
+    const seriesUrl = hardcoverSeriesLink(series?.slug);
+    if (seriesUrl && seriesName) {
+        meta.innerHTML = `<a href="${escapeHtml(seriesUrl)}" target="_blank" rel="noopener noreferrer" class="link-secondary text-decoration-none hover-primary">${escapeHtml(seriesName)}</a>${authorName ? ` <span class="text-body-secondary">by ${escapeHtml(authorName)}</span>` : ''}`;
+    } else {
+        meta.textContent = authorName ? `${seriesName} by ${authorName}` : seriesName;
+    }
+
+    const currentBookKey = String(currentBookId || '').trim();
+    strip.innerHTML = entries.map((entry) => {
+        const book = entry?.book || {};
+        const bookId = String(book.id || '').trim();
+        const title = String(book.title || '').trim() || 'Unknown title';
+        const slug = String(book.slug || '').trim();
+        const hardcoverUrl = hardcoverBookLink(slug);
+        const mouseSearchUrl = buildMouseSearchUrlForTitle(title);
+        const coverUrl = String(book.image_url || '').trim();
+        const proxyCoverUrl = coverUrl ? `/proxy_thumbnail?url=${encodeURIComponent(coverUrl)}` : '/static/icons/no_cover.png';
+        const positionLabel = formatHardcoverSeriesPosition(entry?.position);
+        const releaseYear = String(book.release_year || '').trim();
+        const tooltipText = [title, releaseYear ? `(${releaseYear})` : '']
+            .filter(Boolean)
+            .join(' ');
+        const isCurrent = currentBookKey && bookId === currentBookKey;
+
+        return `
+            <div class="hardcover-series-card${isCurrent ? ' hardcover-series-card--current' : ''}">
+                <a class="hardcover-series-card__main-link hardcover-series-search-link text-decoration-none"
+                    href="${escapeHtml(mouseSearchUrl)}"
+                    data-bs-toggle="tooltip" title="${escapeHtml(tooltipText)}"
+                    data-search-title="${escapeHtml(title)}"
+                    ${isCurrent ? 'aria-current="true"' : ''}>
+                    <div class="hardcover-series-card__frame">
+                        ${positionLabel ? `<span class="hardcover-series-card__position">${escapeHtml(positionLabel)}</span>` : ''}
+                        ${isCurrent ? '<span class="hardcover-series-card__current">Current</span>' : ''}
+                        <img class="hardcover-series-card__cover" src="${escapeHtml(proxyCoverUrl)}" alt="${escapeHtml(title)}" loading="lazy">
+                    </div>
+                </a>
+                <div class="hardcover-series-card__actions">
+                    <a class="hardcover-series-card__action hardcover-series-card__action--search hardcover-series-search-link"
+                        href="${escapeHtml(mouseSearchUrl)}"
+                        aria-label="Search MouseSearch for ${escapeHtml(title)}"
+                        data-search-title="${escapeHtml(title)}">
+                        <img src="${escapeHtml(MOUSESEARCH_LOGO_URL)}" alt="" loading="lazy">
+                    </a>
+                    ${hardcoverUrl ? `
+                        <a class="hardcover-series-card__action hardcover-series-card__action--hardcover"
+                            href="${escapeHtml(hardcoverUrl)}"
+                            aria-label="Open ${escapeHtml(title)} on Hardcover"
+                            target="_blank" rel="noopener noreferrer">
+                            <img src="${escapeHtml(HARDCOVER_LOGO_URL)}" alt="" loading="lazy">
+                        </a>` : ''}
+                </div>
+            </div>`;
+    }).join('');
+
+    section.classList.remove('d-none');
+    strip.querySelectorAll('[data-bs-toggle="tooltip"]').forEach((el) => {
+        new bootstrap.Tooltip(el);
+    });
+    strip.querySelector('.hardcover-series-card--current')?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'nearest',
+        inline: 'center',
+    });
+}
+
+async function loadHardcoverSeriesStrip(metadata) {
+    const bookModalEl = document.getElementById('bookDetailsModal');
+    const seriesId = Number(metadata?.featured_series?.id);
+    const currentBookId = String(metadata?.book_id || '').trim();
+    const currentPosition = normalizeHardcoverSeriesPosition(metadata?.featured_series?.position);
+    if (!bookModalEl || !Number.isFinite(seriesId) || seriesId <= 0 || !currentBookId) {
+        clearHardcoverSeriesStrip();
+        if (bookModalEl) bookModalEl.dataset.currentHardcoverSeriesId = '';
+        return;
+    }
+
+    bookModalEl.dataset.currentHardcoverSeriesId = String(seriesId);
+    const cached = hardcoverSeriesCache.get(String(seriesId));
+    if (cached) {
+        renderHardcoverSeriesStrip(cached, currentBookId, currentPosition);
+        return;
+    }
+
+    const section = document.getElementById('detail-hc-series-strip-section');
+    const strip = document.getElementById('detail-hc-series-strip');
+    const meta = document.getElementById('detail-hc-series-strip-meta');
+    if (meta) meta.textContent = 'Loading series...';
+    if (strip) strip.innerHTML = '<div class="text-body-secondary small py-2">Loading series…</div>';
+    if (section) section.classList.remove('d-none');
+
+    try {
+        const response = await fetch(`/hardcover/series/${encodeURIComponent(String(seriesId))}`);
+        if (!response.ok) {
+            throw new Error(`Hardcover series HTTP ${response.status}`);
+        }
+        const payload = await response.json();
+        const series = Array.isArray(payload?.series) ? payload.series[0] : null;
+        if (!series) {
+            clearHardcoverSeriesStrip();
+            return;
+        }
+        hardcoverSeriesCache.set(String(seriesId), series);
+        if (bookModalEl.dataset.currentHardcoverSeriesId !== String(seriesId)) {
+            return;
+        }
+        renderHardcoverSeriesStrip(series, currentBookId, currentPosition);
+    } catch (error) {
+        console.error('Hardcover series load error', error);
+        clearHardcoverSeriesStrip();
+    }
+}
+
 function renderBookDetailsHardcover(enrichment) {
     const card = document.getElementById('detail-hardcover-card');
     const heroInfo = document.getElementById('detail-hero-hc-info');
+    const bookModalEl = document.getElementById('bookDetailsModal');
 
     const metadata = enrichment?.hardcover;
     if (!metadata) {
         if (card) card.style.display = 'none';
         if (heroInfo) heroInfo.classList.add('d-none');
+        clearHardcoverSeriesStrip();
         return;
     }
 
@@ -599,7 +814,6 @@ function renderBookDetailsHardcover(enrichment) {
         const subtitleEl = document.getElementById('detail-hc-subtitle');
         const descriptionBlock = document.getElementById('detail-hc-description-block');
         const descriptionEl = document.getElementById('detail-hc-description');
-        const bookModalEl = document.getElementById('bookDetailsModal');
         const preserveHardcoverDescription = bookModalEl?.dataset.hardcoverDescriptionExpanded === 'true';
         const ratingRow = document.getElementById('detail-hc-rating-row');
         const ratingEl = document.getElementById('detail-hc-rating');
@@ -660,6 +874,8 @@ function renderBookDetailsHardcover(enrichment) {
 
         card.style.display = '';
     }
+
+    loadHardcoverSeriesStrip(metadata);
 
     // --- Hero area ---
     if (heroInfo) {
@@ -4809,6 +5025,28 @@ document.addEventListener("DOMContentLoaded", async function () {
             performSearch(queryString);
         });
     }
+
+    document.addEventListener('click', (event) => {
+        const searchLink = event.target.closest('.hardcover-series-search-link');
+        if (!searchLink) return;
+        if (event.defaultPrevented) return;
+        if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+
+        const href = searchLink.getAttribute('href');
+        if (!href) return;
+
+        event.preventDefault();
+        triggerHaptic('search');
+
+        const url = new URL(href, window.location.origin);
+        const queryString = url.searchParams.toString();
+        const newUrl = `${window.location.pathname}${queryString ? `?${queryString}` : ''}`;
+
+        restoreFormFromURL(url.searchParams);
+        history.pushState({ type: 'search', query: queryString }, '', newUrl);
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('bookDetailsModal')).hide();
+        performSearch(queryString);
+    });
 
     // ============================================================
     //  UNIFIED HISTORY & NAVIGATION MANAGER
