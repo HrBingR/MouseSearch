@@ -567,21 +567,31 @@ a.hardcover-match:focus-visible {
     min-width: 0;
 }
 
-/* Hardcover info block in the book detail hero */
-#detail-hero-hc-info {
-    align-items: center; /* mirrors text-center on mobile */
+/* Hardcover card in the book detail hero */
+.detail-hero-hc-card {
+    padding: 0.55rem 0.75rem;
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.28);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    color: rgba(255, 255, 255, 0.9);
+    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease, background 0.2s ease;
 }
-@media (min-width: 768px) {
-    #detail-hero-hc-info {
-        align-items: flex-start; /* mirrors text-md-start */
-    }
+.detail-hero-hc-card:hover {
+    transform: translateY(-2px);
+    border-color: rgba(255, 255, 255, 0.5);
+    background: rgba(0, 0, 0, 0.45);
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.35);
+    color: rgba(255, 255, 255, 0.9);
+    text-decoration: none;
 }
-/* Star rating sits inside a d-flex, so override text-body-secondary to suit the white hero */
-#detail-hero-hc-info .hardcover-rating {
+/* Override star rating text-body-secondary for the dark hero context */
+.detail-hero-hc-card .hardcover-rating {
     color: rgba(255, 255, 255, 0.85) !important;
 }
-/* Empty-star spans use text-body-secondary — make them ghost-white instead of dark */
-#detail-hero-hc-info .hardcover-star .text-body-secondary {
+/* Empty stars — ghost-white instead of theme secondary */
+.detail-hero-hc-card .hardcover-star .text-body-secondary {
     color: rgba(255, 255, 255, 0.3) !important;
 }
 

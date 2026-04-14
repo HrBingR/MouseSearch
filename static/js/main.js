@@ -495,8 +495,16 @@ function renderBookDetailsHardcover(enrichment) {
 
     // --- Hero area ---
     if (heroInfo) {
+        const heroLink = document.getElementById('detail-hero-hc-link');
         const heroRating = document.getElementById('detail-hero-hc-rating');
         const heroYear = document.getElementById('detail-hero-hc-year');
+
+        const url = hardcoverUrl(metadata);
+        if (heroLink) {
+            heroLink.href = url || '#';
+            heroLink.style.pointerEvents = url ? '' : 'none';
+            heroLink.style.cursor = url ? '' : 'default';
+        }
 
         if (heroRating) {
             heroRating.innerHTML = hasRating ? renderStarRating(rating) : '';
@@ -507,13 +515,7 @@ function renderBookDetailsHardcover(enrichment) {
             heroYear.classList.toggle('d-none', !hasYear);
         }
 
-        if (hasRating || hasYear) {
-            heroInfo.classList.remove('d-none');
-            heroInfo.classList.add('d-flex');
-        } else {
-            heroInfo.classList.add('d-none');
-            heroInfo.classList.remove('d-flex');
-        }
+        heroInfo.classList.toggle('d-none', !(hasRating || hasYear));
     }
 }
 
