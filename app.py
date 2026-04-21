@@ -50,6 +50,7 @@ app = Quart(__name__)
 
 UPSTREAM_CLIENT: httpx.AsyncClient | None = None
 HARDCOVER_CLIENT: HardcoverClient | None = None
+HARDCOVER_USER_BOOK_PRELOAD_ACTIVE = False
 
 torrent_client = None
 mam_session_cookies = {}
@@ -3897,6 +3898,22 @@ def create_hardcover_client() -> HardcoverClient | None:
     return HARDCOVER_CLIENT
 
 
+async def preload_hardcover_user_book_cache() -> None:
+    global HARDCOVER_USER_BOOK_PRELOAD_ACTIVE
+
+    client = create_hardcover_client()
+    if client is None or not client.user_id or HARDCOVER_USER_BOOK_PRELOAD_ACTIVE:
+        return
+
+    HARDCOVER_USER_BOOK_PRELOAD_ACTIVE = True
+    try:
+        await client.user_book_map()
+    except Exception as exc:
+        app.logger.warning(f"[HARDCOVER] User book cache preload failed: {exc}")
+    finally:
+        HARDCOVER_USER_BOOK_PRELOAD_ACTIVE = False
+
+
 def get_cached_hardcover_series_response(series_id: int) -> dict | None:
     entry = hardcover_series_response_cache.get(int(series_id))
     if not isinstance(entry, dict):
@@ -4703,6 +4720,8 @@ async def index():
             pass
 
     language_choices = sorted(language_dict.items(), key=lambda item: item[0].lower())
+    if hardcover_enrichment_is_active():
+        app.add_background_task(preload_hardcover_user_book_cache)
 
     return await render_template(
         "index.html",

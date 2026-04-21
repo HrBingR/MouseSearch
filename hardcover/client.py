@@ -14,6 +14,8 @@ import httpx
 
 logger = logging.getLogger(__name__)
 HARDCOVER_BATCH_QUERY_SIZE = 20
+_CACHE_TTL_USER_LIBRARY = 10 * 60.0
+_USER_LIBRARY_PAGE_SIZE = 500
 
 
 class HardcoverAPIError(Exception):
@@ -153,6 +155,21 @@ def graphql_inflight_key(query: str, variables: dict[str, Any], cache_key: str |
 
 
 class HardcoverClient:
+    USER_BOOK_CORE_FIELDS = """
+        id
+        book_id
+        edition_id
+        user_id
+        status_id
+        rating
+        privacy_setting_id
+        updated_at
+        user_book_status {
+          id
+          status
+        }
+    """
+
     SEARCH_FIELDS = """
         ids
         results
@@ -202,18 +219,7 @@ class HardcoverClient:
         order_by: {updated_at: desc}
         limit: 1
       ) {
-        id
-        book_id
-        edition_id
-        user_id
-        status_id
-        rating
-        privacy_setting_id
-        updated_at
-        user_book_status {
-          id
-          status
-        }
+""" + USER_BOOK_CORE_FIELDS + """
       }
     """
 
@@ -311,18 +317,7 @@ class HardcoverClient:
         order_by: {updated_at: desc}
         limit: 1
       ) {
-        id
-        book_id
-        edition_id
-        user_id
-        status_id
-        rating
-        privacy_setting_id
-        updated_at
-        user_book_status {
-          id
-          status
-        }
+""" + USER_BOOK_CORE_FIELDS + """
       }
     }
     """
@@ -337,18 +332,23 @@ class HardcoverClient:
         distinct_on: book_id
         order_by: [{book_id: asc}, {updated_at: desc}]
       ) {
-        id
-        book_id
-        edition_id
-        user_id
-        status_id
-        rating
-        privacy_setting_id
-        updated_at
-        user_book_status {
-          id
-          status
+""" + USER_BOOK_CORE_FIELDS + """
+      }
+    }
+    """
+
+    USER_LIBRARY_QUERY = """
+    query UserLibrary($user_id: Int!, $limit: Int!, $offset: Int!) {
+      user_books(
+        where: {
+          user_id: {_eq: $user_id}
         }
+        distinct_on: book_id
+        order_by: [{book_id: asc}, {updated_at: desc}]
+        limit: $limit
+        offset: $offset
+      ) {
+""" + USER_BOOK_CORE_FIELDS + """
       }
     }
     """
@@ -471,6 +471,9 @@ class HardcoverClient:
         self._cache: dict[str, Any] = {}
         self._inflight: dict[str, asyncio.Future[dict[str, Any]]] = {}
         self._inflight_lock = asyncio.Lock()
+        self._user_book_map: dict[int, dict[str, Any]] | None = None
+        self._user_book_map_expires_at = 0.0
+        self._user_book_map_lock = asyncio.Lock()
 
     def authorization_header(self) -> str:
         token = str(self.token or "").strip()
@@ -532,6 +535,107 @@ class HardcoverClient:
         if self._client is not None:
             await self._client.aclose()
             self._client = None
+
+    def _invalidate_personalized_query_cache(self) -> None:
+        stale_keys = [
+            key for key in self._cache
+            if key.startswith("edition:isbn:") or key.startswith("book:")
+        ]
+        for key in stale_keys:
+            self._cache.pop(key, None)
+
+    def _normalize_user_book_mapping(self, items: Any) -> dict[int, dict[str, Any]]:
+        mapping: dict[int, dict[str, Any]] = {}
+        if not isinstance(items, list):
+            return mapping
+
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            try:
+                book_id = int(item.get("book_id"))
+            except (TypeError, ValueError):
+                continue
+            if book_id <= 0 or book_id in mapping:
+                continue
+            mapping[book_id] = copy.deepcopy(item)
+        return mapping
+
+    def _set_user_book_map(self, mapping: dict[int, dict[str, Any]]) -> None:
+        self._user_book_map = copy.deepcopy(mapping)
+        self._user_book_map_expires_at = time.monotonic() + _CACHE_TTL_USER_LIBRARY
+
+    def _user_book_map_snapshot(self) -> dict[int, dict[str, Any]] | None:
+        if self._user_book_map is None:
+            return None
+        if time.monotonic() >= self._user_book_map_expires_at:
+            self._user_book_map = None
+            return None
+        return copy.deepcopy(self._user_book_map)
+
+    def _upsert_user_book_map_entry(self, user_book: dict[str, Any] | None) -> None:
+        if not isinstance(user_book, dict):
+            return
+        try:
+            book_id = int(user_book.get("book_id"))
+        except (TypeError, ValueError):
+            return
+        if book_id <= 0:
+            return
+        current = self._user_book_map_snapshot() or {}
+        current[book_id] = copy.deepcopy(user_book)
+        self._set_user_book_map(current)
+
+    def _remove_user_book_map_entry(self, book_id: Any) -> None:
+        try:
+            normalized_book_id = int(book_id)
+        except (TypeError, ValueError):
+            return
+        if normalized_book_id <= 0:
+            return
+        current = self._user_book_map_snapshot() or {}
+        if normalized_book_id in current:
+            current.pop(normalized_book_id, None)
+            self._set_user_book_map(current)
+
+    async def user_book_map(self, *, force_refresh: bool = False) -> dict[int, dict[str, Any]]:
+        if not self.user_id:
+            return {}
+
+        if not force_refresh:
+            cached = self._user_book_map_snapshot()
+            if cached is not None:
+                return cached
+
+        async with self._user_book_map_lock:
+            if not force_refresh:
+                cached = self._user_book_map_snapshot()
+                if cached is not None:
+                    return cached
+
+            mapping: dict[int, dict[str, Any]] = {}
+            offset = 0
+
+            while True:
+                data = await self.graphql(
+                    self.USER_LIBRARY_QUERY,
+                    {
+                        "user_id": self.user_id,
+                        "limit": _USER_LIBRARY_PAGE_SIZE,
+                        "offset": offset,
+                    },
+                    cache_key=None,
+                )
+                page = data.get("user_books") or []
+                mapping.update(self._normalize_user_book_mapping(page))
+
+                page_size = len(page) if isinstance(page, list) else 0
+                if page_size < _USER_LIBRARY_PAGE_SIZE:
+                    break
+                offset += _USER_LIBRARY_PAGE_SIZE
+
+            self._set_user_book_map(mapping)
+            return copy.deepcopy(mapping)
 
     async def graphql(
         self,
@@ -815,6 +919,20 @@ class HardcoverClient:
         if normalized_id <= 0:
             return None
 
+        mapping_loaded = False
+        try:
+            mapping = await self.user_book_map()
+        except HardcoverAPIError:
+            mapping = {}
+        else:
+            mapping_loaded = True
+
+        cached_user_book = mapping.get(normalized_id)
+        if isinstance(cached_user_book, dict):
+            return copy.deepcopy(cached_user_book)
+        if mapping_loaded:
+            return None
+
         data = await self.graphql(
             self.USER_BOOK_FOR_BOOK_QUERY,
             {"book_id": normalized_id, "user_id": self.user_id},
@@ -822,7 +940,10 @@ class HardcoverClient:
         )
         user_books = data.get("user_books") or []
         if isinstance(user_books, list) and user_books:
-            return user_books[0]
+            user_book = user_books[0]
+            if isinstance(user_book, dict):
+                self._upsert_user_book_map_entry(user_book)
+                return user_book
         return None
 
     async def user_books_for_books(self, book_ids: list[int]) -> dict[int, dict[str, Any]]:
@@ -844,26 +965,29 @@ class HardcoverClient:
         if not normalized_ids:
             return {}
 
+        mapping_loaded = False
+        try:
+            library_map = await self.user_book_map()
+        except HardcoverAPIError:
+            library_map = {}
+        else:
+            mapping_loaded = True
+
+        if mapping_loaded:
+            return {
+                book_id: copy.deepcopy(library_map[book_id])
+                for book_id in normalized_ids
+                if book_id in library_map
+            }
+
         data = await self.graphql(
             self.USER_BOOKS_FOR_BOOKS_QUERY,
             {"book_ids": normalized_ids, "user_id": self.user_id},
             cache_key=None,
         )
-        user_books = data.get("user_books") or []
-        mapping: dict[int, dict[str, Any]] = {}
-        if not isinstance(user_books, list):
-            return mapping
-
-        for item in user_books:
-            if not isinstance(item, dict):
-                continue
-            try:
-                book_id = int(item.get("book_id"))
-            except (TypeError, ValueError):
-                continue
-            if book_id <= 0 or book_id in mapping:
-                continue
-            mapping[book_id] = item
+        mapping = self._normalize_user_book_mapping(data.get("user_books") or [])
+        for item in mapping.values():
+            self._upsert_user_book_map_entry(item)
         return mapping
 
     async def update_user_book_status(
@@ -902,9 +1026,12 @@ class HardcoverClient:
         if error_message:
             raise HardcoverAPIError(error_message)
 
-        self._cache.clear()
         user_book = response.get("userBook")
-        return user_book if isinstance(user_book, dict) else None
+        if isinstance(user_book, dict):
+            self._upsert_user_book_map_entry(user_book)
+            self._invalidate_personalized_query_cache()
+            return user_book
+        return None
 
     async def delete_user_book(self, user_book_id: int) -> dict[str, Any] | None:
         try:
@@ -919,8 +1046,10 @@ class HardcoverClient:
             {"id": normalized_user_book_id},
             cache_key=None,
         )
-        self._cache.clear()
         deleted_user_book = data.get("deleteResponse")
+        if isinstance(deleted_user_book, dict):
+            self._remove_user_book_map_entry(deleted_user_book.get("bookId"))
+            self._invalidate_personalized_query_cache()
         return deleted_user_book if isinstance(deleted_user_book, dict) else None
 
     async def create_user_book(
@@ -968,14 +1097,19 @@ class HardcoverClient:
         if error_message:
             raise HardcoverAPIError(error_message)
 
-        self._cache.clear()
         user_book = response.get("userBook")
         if isinstance(user_book, dict):
+            self._upsert_user_book_map_entry(user_book)
+            self._invalidate_personalized_query_cache()
             return user_book
 
         inserted_id = response.get("id")
         if inserted_id:
-            return await self.user_book_for_book(normalized_book_id)
+            created = await self.user_book_for_book(normalized_book_id)
+            if isinstance(created, dict):
+                self._upsert_user_book_map_entry(created)
+                self._invalidate_personalized_query_cache()
+            return created
         return None
 
     async def series_details(self, series_id: int) -> dict[str, Any] | None:
