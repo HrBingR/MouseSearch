@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import copy
+import collections
 import hashlib
 import json
 import logging
@@ -48,6 +49,25 @@ class HardcoverRateController:
         self.pacer = AsyncRequestPacer(self.limit, self.period_seconds)
         self.cooldown_until = 0.0
         self.cooldown_lock = asyncio.Lock()
+        self.request_history: collections.deque[float] = collections.deque()
+        self.history_lock = asyncio.Lock()
+
+    async def _record_request(self) -> int:
+        now = time.monotonic()
+        cutoff = now - 60.0
+        async with self.history_lock:
+            self.request_history.append(now)
+            while self.request_history and self.request_history[0] < cutoff:
+                self.request_history.popleft()
+            return len(self.request_history)
+
+    async def current_requests_per_minute(self) -> int:
+        now = time.monotonic()
+        cutoff = now - 60.0
+        async with self.history_lock:
+            while self.request_history and self.request_history[0] < cutoff:
+                self.request_history.popleft()
+            return len(self.request_history)
 
     async def acquire(self) -> float:
         waited_total = 0.0
@@ -64,6 +84,7 @@ class HardcoverRateController:
             async with self.cooldown_lock:
                 wait_for = self.cooldown_until - time.monotonic()
             if wait_for <= 0:
+                await self._record_request()
                 return waited_total
 
     async def note_rate_limited(self, attempt: int, retry_after: str | None = None) -> float:

@@ -4107,9 +4107,11 @@ async def run_hardcover_enrichment_batch(search_id: str, results: list[dict]):
         if batch is not None:
             batch["completed"] = not batch.get("queued_torrent_ids")
             batch["updated_at"] = time.time()
+        hardcover_rpm = await client.rate_controller.current_requests_per_minute()
         app.logger.info(
             f"[HARDCOVER] search_id={search_id} enriched={len(results)} "
-            f"duration_ms={(time.monotonic() - started) * 1000:.1f}"
+            f"duration_ms={(time.monotonic() - started) * 1000:.1f} "
+            f"rpm={hardcover_rpm}"
         )
     except Exception as e:
         batch = hardcover_enrichment_batches.get(search_id)

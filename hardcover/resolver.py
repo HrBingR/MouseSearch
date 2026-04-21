@@ -436,15 +436,10 @@ class HardcoverResolver:
 
         cleaned_query = _resolution_key_text(clean_title(result.get("title")))
         author_name = _resolution_key_text(detect_author_name(result))
-        series_names = sorted({
-            _resolution_key_text(name)
-            for name in detect_series_names(result)
-            if _resolution_key_text(name)
-        })
 
-        if not cleaned_query and not author_name and not series_names:
+        if not cleaned_query and not author_name:
             return None
-        return f"query:{cleaned_query}|author:{author_name}|series:{'|'.join(series_names)}"
+        return f"query:{cleaned_query}|author:{author_name}"
 
     async def enrich_result(self, result: dict[str, Any]) -> dict[str, Any]:
         cleaned_query = clean_title(result.get("title"))
