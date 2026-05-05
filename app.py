@@ -2253,7 +2253,7 @@ async def monitor_downloads_loop():
                 if app.config.get("AUTO_ORGANIZE_ON_ADD"):
                     try:
                         org_details = _get_torrent_metadata_summary(h)
-                        success, msg = await _perform_organization(h)
+                        success, msg = await _perform_organization(h, require_stable_source=True)
                         if success:
                             app.logger.info(f"[MONITOR] Auto-organize succeeded for {h}: {msg}")
                         else:
@@ -5816,7 +5816,7 @@ async def wait_for_stable_source_tree(
 
         await asyncio.sleep(poll_interval_seconds)
 
-async def _perform_organization(hash_val: str) -> tuple[bool, str]:
+async def _perform_organization(hash_val: str, *, require_stable_source: bool = False) -> tuple[bool, str]:
     """
     Performs the file organization for a given torrent hash.
 
@@ -5866,25 +5866,36 @@ async def _perform_organization(hash_val: str) -> tuple[bool, str]:
         dest_path = organized_path / sanitize_filename(torrent_meta['author']) / sanitize_filename(torrent_meta['title'])
     # --- CHANGED LOGIC END ---
     
-    source_ready, stable_snapshot = await wait_for_stable_source_tree(
-        content_path,
-        poll_interval_seconds=2,
-        max_wait_seconds=30,
-        required_stable_count=2,
-    )
-
-    if not content_path.exists():
-        app.logger.debug(f"[ORGANIZE] Source path missing: {content_path}")
-        await broadcast_toast(f"Auto-organization failed for '{torrent_meta.get('title', 'Unknown')}': Source path missing", "danger")
-        return False, f"Source missing: {content_path}"
-
-    if not source_ready or not stable_snapshot:
-        app.logger.warning(f"[ORGANIZE] Source tree did not stabilize within 30s: {content_path}")
-        await broadcast_toast(
-            f"Auto-organization delayed for '{torrent_meta.get('title', 'Unknown')}': Source files still changing",
-            "warning"
+    stable_snapshot = None
+    if require_stable_source:
+        source_ready, stable_snapshot = await wait_for_stable_source_tree(
+            content_path,
+            poll_interval_seconds=2,
+            max_wait_seconds=30,
+            required_stable_count=2,
         )
-        return False, f"Source tree did not stabilize within 30s: {content_path}"
+
+        if not content_path.exists():
+            app.logger.debug(f"[ORGANIZE] Source path missing: {content_path}")
+            await broadcast_toast(f"Auto-organization failed for '{torrent_meta.get('title', 'Unknown')}': Source path missing", "danger")
+            return False, f"Source missing: {content_path}"
+
+        if not source_ready or not stable_snapshot:
+            app.logger.warning(f"[ORGANIZE] Source tree did not stabilize within 30s: {content_path}")
+            await broadcast_toast(
+                f"Auto-organization delayed for '{torrent_meta.get('title', 'Unknown')}': Source files still changing",
+                "warning"
+            )
+            return False, f"Source tree did not stabilize within 30s: {content_path}"
+    else:
+        stable_snapshot = build_source_tree_snapshot(content_path)
+        if not content_path.exists():
+            app.logger.debug(f"[ORGANIZE] Source path missing: {content_path}")
+            await broadcast_toast(f"Auto-organization failed for '{torrent_meta.get('title', 'Unknown')}': Source path missing", "danger")
+            return False, f"Source missing: {content_path}"
+        if not stable_snapshot:
+            await broadcast_toast(f"Auto-organization delayed for '{torrent_meta.get('title', 'Unknown')}': No files linked", "warning")
+            return False, "No files found."
     
     try: dest_path.mkdir(parents=True, exist_ok=True)
     except Exception as e:
@@ -5930,7 +5941,7 @@ async def _perform_organization(hash_val: str) -> tuple[bool, str]:
         return False, "No files found."
 
     final_snapshot = build_source_tree_snapshot(content_path)
-    if final_snapshot != stable_snapshot:
+    if require_stable_source and final_snapshot != stable_snapshot:
         app.logger.warning(f"[ORGANIZE] Source tree changed during organization for {hash_val}")
         await broadcast_toast(
             f"Auto-organization delayed for '{torrent_meta.get('title', 'Unknown')}': Source files changed during linking",
