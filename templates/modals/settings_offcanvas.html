@@ -172,6 +172,7 @@
                   <i id="mousehole-settings-logo-fallback" class="bi bi-plugin me-2 d-none"></i>
                   Use Mousehole
                   Cookie
+                  <span id="mousehole-health-badge" class="badge text-bg-secondary ms-2">Checking</span>
                   <i class="bi bi-info-circle-fill text-secondary ms-2" data-bs-html="true" data-bs-toggle="tooltip"
                     data-bs-placement="top" onclick="event.stopPropagation()"
                     title="<div class='text-start'>Mousehole and MouseSearch must use the same public IP address, such as the same server or VPN connection. If they do not, MouseSearch may not function.</div>"></i>
@@ -194,22 +195,16 @@
                     Mousehole handles MAM IP updates on its own. Mousehole and MouseSearch must share the same public
                     IP address, such as the same server or VPN connection.
                   </div>
-                  <div id="mousehole-ip-warning" class="alert small mt-3 mb-0 d-none"
+                  <div id="mousehole-ip-warning" class="alert alert-secondary small mt-3 mb-0"
                     data-mousehole-ip="{{ MOUSEHOLE_LAST_HOST_IP }}">
-                    <div class="fw-semibold mb-1">IP addresses: <span id="mousehole-ip-status-label">Checking</span></div>
-                    <div class="d-flex flex-column gap-1">
-                      <div>Mousehole IP: <span id="mousehole-reported-ip" class="font-monospace"></span></div>
-                      <div>Direct Server IP: <span id="mousesearch-reported-ip" class="font-monospace"></span></div>
-                      <div>Proxy IP: <span id="mousesearch-proxy-ip" class="font-monospace"></span></div>
-                      <div id="mousehole-ip-status-message" class="small"></div>
-                    </div>
+                    Status: <span id="mousehole-ip-status-message">Checking...</span>
                   </div>
                   <div class="mt-3">
                     <div class="input-group">
                       <div class="form-floating">
                         <input type="text" class="form-control font-monospace" id="mousehole-last-cookie"
-                          value="{{ MOUSEHOLE_LAST_MAM_COOKIE }}" placeholder="Last Mousehole cookie" readonly>
-                        <label for="mousehole-last-cookie">Last Mousehole cookie</label>
+                          value="{{ MOUSEHOLE_LAST_MAM_COOKIE }}" placeholder="Mousehole cookie" readonly>
+                        <label for="mousehole-last-cookie">Mousehole cookie</label>
                       </div>
                       <button type="button" class="btn btn-outline-secondary copy-field-btn d-none"
                         data-copy-target="#mousehole-last-cookie" title="Copy Mousehole cookie">
@@ -223,7 +218,7 @@
                 </div>
               </div>
             </div>
-            <div class="mb-3">
+            <div id="mam-id-config" class="mb-3 {% if USE_MOUSEHOLE_MAM_COOKIE %}d-none{% endif %}">
               <div class="input-group">
                 <div class="form-floating">
                   <input type="text" class="form-control font-monospace" id="MAM_ID" name="MAM_ID" value="{{ MAM_ID }}"
@@ -238,18 +233,10 @@
               <div class="form-text">The <code class="text-primary">mam_id</code> value from MyAnonaMouse
                 <a href="https://www.myanonamouse.net/preferences/index.php?view=security">Settings</a>. Ignored when
                 Mousehole Cookie is enabled.
-                <div
-                  class="mt-4 p-2 bg-body-secondary rounded border d-flex justify-content-between align-items-center">
-                  <div class="small">
-                    Direct Server IP: <strong
-                      class="backend-ip-display font-monospace text-body-emphasis">Loading...</strong>
-                  </div>
-                  <button type="button" class="btn btn-sm btn-link p-0 text-decoration-none copy-ip-btn"
-                    title="Copy IP">
-                    <i class="bi bi-clipboard"></i>
-                  </button>
-                </div>
               </div>
+            </div>
+            <div id="mam-cookie-status-alert" class="alert alert-secondary small mb-3" role="status">
+              MAM cookie: <span id="mam-cookie-status-message">Checking...</span>
             </div>
             <div class="card mb-3 border-secondary-subtle toggle-card">
               <div
@@ -257,6 +244,7 @@
                 onclick="toggleCardSwitch('MAM_PROXY_ENABLED')">
                 <span class="small fw-bold d-flex align-items-center">
                   <i class="bi bi-shuffle me-2"></i> MAM Proxy
+                  <span id="mam-proxy-health-badge" class="badge text-bg-secondary ms-2">Checking</span>
                 </span>
                 <div class="form-check form-switch m-0">
                   <input class="form-check-input" type="checkbox" id="MAM_PROXY_ENABLED" name="MAM_PROXY_ENABLED" {% if
@@ -276,13 +264,31 @@
                   <code>http://user:pass@gluetun:8888</code>.
                 </div>
                 <div id="mam-proxy-status-alert" class="alert alert-secondary small mb-0" role="status">
-                  <div class="fw-semibold mb-1">Route status: <span id="mam-proxy-route-status">Direct</span></div>
-                  <div id="mam-proxy-status-message">No MAM proxy configured. MAM requests are going direct.</div>
-                  <div id="mam-proxy-last-error-row" class="mt-2 d-none">Last proxy error:
-                    <span id="mam-proxy-last-error" class="font-monospace"></span>
-                  </div>
+                  Status: <span id="mam-proxy-status-message">Checking...</span>
                 </div>
               </div>
+              </div>
+            </div>
+
+            <h6 class="text-uppercase section-title mb-3">Network</h6>
+            <div id="network-status-card" class="card mb-3 border-secondary-subtle">
+              <div class="card-body">
+                <div id="network-status-alert" class="alert alert-secondary small mb-0" role="status">
+                  <div class="fw-semibold mb-2">Status: <span id="network-health-label">Checking</span></div>
+                  <div id="network-status-message" class="mb-2">Waiting for network status.</div>
+                  <div class="d-flex flex-column gap-1">
+                    <div>Current route: <span id="network-route-label" class="font-monospace">Direct</span></div>
+                    <div>MAM cookie: <span id="network-mam-cookie-status" class="font-monospace">Checking...</span></div>
+                    <div id="network-ip-list" class="d-flex flex-column gap-1">
+                      <div id="network-direct-ip-row">Direct Server IP: <span id="network-direct-ip" class="font-monospace">Unavailable</span></div>
+                      <div id="network-proxy-ip-row">Proxy IP: <span id="network-proxy-ip" class="font-monospace">Unavailable</span></div>
+                      <div id="network-mousehole-ip-row">Mousehole IP: <span id="network-mousehole-ip" class="font-monospace">Unavailable</span></div>
+                    </div>
+                  </div>
+                  <div id="network-proxy-error-row" class="mt-2 d-none">Last proxy error:
+                    <span id="network-proxy-error" class="font-monospace"></span>
+                  </div>
+                </div>
               </div>
             </div>
           </div>

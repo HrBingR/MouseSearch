@@ -1092,6 +1092,7 @@ async def request_with_optional_proxy(
     track_proxy_status: bool = False,
     force_proxy: bool = False,
     force_direct: bool = False,
+    allow_fallback: bool | None = None,
     **kwargs,
 ) -> httpx.Response:
     proxy_url = current_mam_proxy_url()
@@ -1099,8 +1100,11 @@ async def request_with_optional_proxy(
     fallback_direct = coerce_bool(
         app.config.get("MAM_PROXY_FALLBACK_DIRECT"),
         FALLBACK_CONFIG["MAM_PROXY_FALLBACK_DIRECT"],
-    )
+    ) if allow_fallback is None else bool(allow_fallback)
     should_use_proxy = (not force_direct) and bool(proxy_url) and (force_proxy or track_proxy_status or not proxy_only)
+
+    if force_proxy and not proxy_url:
+        raise RuntimeError("Proxy route requested, but no proxy URL is configured.")
 
     async def perform_direct_request() -> httpx.Response:
         if UPSTREAM_CLIENT is not None:
@@ -3590,6 +3594,16 @@ async def fetch_mam_json_load_result():
         response.raise_for_status()
         data = response.json()
         return {"data": data, "message": "MyAnonaMouse is connected.", "status_code": response.status_code}
+    except httpx.TimeoutException as exc:
+        message = f"MAM API request timed out: {exc}" if str(exc).strip() else "MAM API request timed out."
+        app.logger.warning(
+            "[MAM-API] jsonLoad.php timeout: url=%s status=%s mam_id_present=%s error=%s",
+            sanitized_url,
+            "n/a",
+            mam_id_present,
+            str(exc),
+        )
+        return {"data": None, "message": message, "status_code": 504}
     except httpx.HTTPStatusError as exc:
         status_code = exc.response.status_code if exc.response is not None else 502
         response_preview = ""
@@ -5220,6 +5234,7 @@ async def get_public_ip():
         ("api.ipify.org", "https://api.ipify.org"),
         ("ifconfig.me", "https://ifconfig.me/ip"),
     ]
+    resolver_errors: list[str] = []
 
     try:
         for resolver_name, resolver_url in resolvers:
@@ -5229,6 +5244,7 @@ async def get_public_ip():
                     resolver_url,
                     force_proxy=use_mam_route,
                     force_direct=not use_mam_route,
+                    allow_fallback=not use_mam_route,
                     headers={"Accept": "application/json, text/plain;q=0.9, */*;q=0.8"},
                     timeout=5.0,
                 )
@@ -5245,7 +5261,10 @@ async def get_public_ip():
                 app.logger.warning(
                     f"Public IP resolver {resolver_name} returned an unusable response"
                 )
+                resolver_errors.append(f"{resolver_name}: unusable response")
             except Exception as resolver_error:
+                error_text = f"{resolver_name}: {resolver_error}"
+                resolver_errors.append(error_text)
                 app.logger.warning(
                     f"Public IP resolver {resolver_name} failed: {resolver_error}"
                 )
@@ -5255,6 +5274,7 @@ async def get_public_ip():
     app.logger.error("Failed to fetch public IP from all configured resolvers")
     return jsonify({
         'error': 'Could not fetch IP',
+        'resolver_errors': resolver_errors,
         'route': 'mam' if use_mam_route else 'direct',
         'proxy_status': build_mam_proxy_status_payload(),
     }), 500
