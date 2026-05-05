@@ -373,6 +373,52 @@ function showToast(message, type = 'primary') {
     toast.show();
 }
 
+function setInlineConnectionStatus({
+    alertId,
+    iconId,
+    messageId,
+    state = 'idle',
+    message = '',
+}) {
+    const alertEl = document.getElementById(alertId);
+    const iconEl = document.getElementById(iconId);
+    const messageEl = document.getElementById(messageId);
+    if (!alertEl || !messageEl) return;
+
+    const normalizedState = String(state || 'idle').toLowerCase();
+    alertEl.className = 'alert small mt-3 mb-0';
+    let iconMarkup = '';
+
+    if (normalizedState === 'success') {
+        alertEl.classList.add('alert-success');
+        iconMarkup = greenCheckIcon;
+    } else if (normalizedState === 'error') {
+        alertEl.classList.add('alert-danger');
+        iconMarkup = redXIcon;
+    } else {
+        alertEl.classList.add('alert-secondary');
+    }
+
+    if (iconEl) iconEl.innerHTML = iconMarkup;
+    messageEl.textContent = message || '';
+}
+
+function setInlineActionStatus(alertId, state, message) {
+    const alertEl = document.getElementById(alertId);
+    if (!alertEl) return;
+
+    const normalizedState = String(state || 'idle').toLowerCase();
+    alertEl.className = 'alert small mt-3 mb-0';
+    if (normalizedState === 'success') {
+        alertEl.classList.add('alert-success');
+    } else if (normalizedState === 'error') {
+        alertEl.classList.add('alert-danger');
+    } else {
+        alertEl.classList.add('alert-secondary');
+    }
+    alertEl.textContent = message || '';
+}
+
 /**
  * Formats seconds into a human-readable string (e.g., 1h 5m)
  */
@@ -3332,6 +3378,128 @@ document.addEventListener("DOMContentLoaded", async function () {
     let settingsSnapshot = null;
     let settingsDirty = false;
     let isRestoringSettings = false;
+    let settingsTorrentProbeRequestId = 0;
+    let settingsHardcoverProbeRequestId = 0;
+
+    function getTorrentClientProbePayload() {
+        return {
+            TORRENT_CLIENT_TYPE: document.getElementById('TORRENT_CLIENT_TYPE')?.value || '',
+            TORRENT_CLIENT_URL: document.getElementById('TORRENT_CLIENT_URL')?.value || '',
+            TORRENT_CLIENT_USERNAME: document.getElementById('TORRENT_CLIENT_USERNAME')?.value || '',
+            TORRENT_CLIENT_PASSWORD: document.getElementById('TORRENT_CLIENT_PASSWORD')?.value || '',
+        };
+    }
+
+    function getHardcoverProbePayload() {
+        return {
+            HARDCOVER_API_TOKEN: document.getElementById('HARDCOVER_API_TOKEN')?.value || '',
+        };
+    }
+
+    async function checkSettingsTorrentClientConnection() {
+        const payload = getTorrentClientProbePayload();
+        if (!String(payload.TORRENT_CLIENT_URL || '').trim()) {
+            setInlineConnectionStatus({
+                alertId: 'settings-torrent-client-status',
+                iconId: 'settings-torrent-client-status-icon',
+                messageId: 'settings-torrent-client-status-message',
+                state: 'idle',
+                message: 'Enter a torrent client URL to test the connection.',
+            });
+            return;
+        }
+
+        const requestId = ++settingsTorrentProbeRequestId;
+        setInlineConnectionStatus({
+            alertId: 'settings-torrent-client-status',
+            iconId: 'settings-torrent-client-status-icon',
+            messageId: 'settings-torrent-client-status-message',
+            state: 'idle',
+            message: 'Checking torrent client connection...',
+        });
+
+        try {
+            const response = await fetch('/api/settings/test-torrent-client', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            const data = await response.json().catch(() => ({}));
+            if (requestId !== settingsTorrentProbeRequestId) return;
+
+            const state = data.status === 'success' ? 'success' : 'error';
+            const message = String(data.message || `Torrent client probe failed (HTTP ${response.status}).`).trim();
+            setInlineConnectionStatus({
+                alertId: 'settings-torrent-client-status',
+                iconId: 'settings-torrent-client-status-icon',
+                messageId: 'settings-torrent-client-status-message',
+                state,
+                message,
+            });
+        } catch (error) {
+            if (requestId !== settingsTorrentProbeRequestId) return;
+            setInlineConnectionStatus({
+                alertId: 'settings-torrent-client-status',
+                iconId: 'settings-torrent-client-status-icon',
+                messageId: 'settings-torrent-client-status-message',
+                state: 'error',
+                message: error?.message || 'Unable to reach the torrent client probe endpoint.',
+            });
+        }
+    }
+
+    async function checkSettingsHardcoverConnection() {
+        const payload = getHardcoverProbePayload();
+        if (!String(payload.HARDCOVER_API_TOKEN || '').trim()) {
+            setInlineConnectionStatus({
+                alertId: 'settings-hardcover-status',
+                iconId: 'settings-hardcover-status-icon',
+                messageId: 'settings-hardcover-status-message',
+                state: 'idle',
+                message: 'Enter a Hardcover API key to test the connection.',
+            });
+            return;
+        }
+
+        const requestId = ++settingsHardcoverProbeRequestId;
+        setInlineConnectionStatus({
+            alertId: 'settings-hardcover-status',
+            iconId: 'settings-hardcover-status-icon',
+            messageId: 'settings-hardcover-status-message',
+            state: 'idle',
+            message: 'Checking Hardcover connection...',
+        });
+
+        try {
+            const response = await fetch('/api/settings/test-hardcover', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            const data = await response.json().catch(() => ({}));
+            if (requestId !== settingsHardcoverProbeRequestId) return;
+
+            const rawStatus = String(data.status || '').toLowerCase();
+            const state = rawStatus === 'success' ? 'success' : rawStatus === 'idle' ? 'idle' : 'error';
+            const message = String(data.message || `Hardcover probe failed (HTTP ${response.status}).`).trim();
+            setInlineConnectionStatus({
+                alertId: 'settings-hardcover-status',
+                iconId: 'settings-hardcover-status-icon',
+                messageId: 'settings-hardcover-status-message',
+                state,
+                message,
+            });
+        } catch (error) {
+            if (requestId !== settingsHardcoverProbeRequestId) return;
+            setInlineConnectionStatus({
+                alertId: 'settings-hardcover-status',
+                iconId: 'settings-hardcover-status-icon',
+                messageId: 'settings-hardcover-status-message',
+                state: 'error',
+                message: error?.message || 'Unable to reach the Hardcover probe endpoint.',
+            });
+        }
+    }
 
     function captureSettingsSnapshot() {
         if (!settingsForm) return;
@@ -3413,6 +3581,20 @@ document.addEventListener("DOMContentLoaded", async function () {
         });
     }
 
+    settingsForm?.addEventListener('focusout', (event) => {
+        if (isRestoringSettings) return;
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) return;
+
+        if (target.matches('#TORRENT_CLIENT_URL, #TORRENT_CLIENT_USERNAME, #TORRENT_CLIENT_PASSWORD')) {
+            checkSettingsTorrentClientConnection();
+        }
+
+        if (target.matches('#HARDCOVER_API_TOKEN')) {
+            checkSettingsHardcoverConnection();
+        }
+    });
+
     if (settingsOffcanvasEl) {
         settingsOffcanvasEl.addEventListener('show.bs.offcanvas', () => {
             captureSettingsSnapshot();
@@ -3426,6 +3608,8 @@ document.addEventListener("DOMContentLoaded", async function () {
 
     if (settingsForm) {
         captureSettingsSnapshot();
+        checkSettingsTorrentClientConnection();
+        checkSettingsHardcoverConnection();
     }
 
     document.querySelectorAll('.copy-field-btn').forEach(btn => {
@@ -3548,6 +3732,8 @@ document.addEventListener("DOMContentLoaded", async function () {
                 dd.innerHTML = tempMsg;
                 dd.disabled = true;
             });
+
+            checkSettingsTorrentClientConnection();
         });
     }
 
@@ -3591,10 +3777,50 @@ document.addEventListener("DOMContentLoaded", async function () {
                     const clientUrl = document.getElementById('TORRENT_CLIENT_URL').value;
                     if (clientLink) { clientLink.href = clientUrl; clientLink.textContent = clientUrl; }
                     checkClientStatus();
+                    checkSettingsTorrentClientConnection();
+                    checkSettingsHardcoverConnection();
                     loadMamUserData();
                 }
             })
             .catch(() => showToast("Error saving settings.", 'danger'));
+    });
+
+    document.getElementById('organize-now-button')?.addEventListener('click', async function () {
+        document.getElementById('organize-now-status-body')?.classList.remove('d-none');
+        const originalHtml = this.innerHTML;
+        this.disabled = true;
+        this.innerHTML = '<span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>Running...';
+        setInlineActionStatus('organize-now-status', 'idle', 'Running one-time organization pass...');
+
+        try {
+            const response = await fetch('/organize', { method: 'POST' });
+            const data = await response.json().catch(() => ({}));
+            const results = data?.results || {};
+            const succeeded = Number(results.succeeded || 0);
+            const failed = Number(results.failed || 0);
+            let message = '';
+
+            if (data.status === 'success') {
+                message = `Finished organizing pending torrents. Succeeded: ${succeeded}.`;
+                setInlineActionStatus('organize-now-status', 'success', message);
+                showToast(message, 'success');
+            } else if (data.status === 'partial') {
+                message = `Organization finished with partial success. Succeeded: ${succeeded}. Failed: ${failed}.`;
+                setInlineActionStatus('organize-now-status', 'error', message);
+                showToast(message, 'warning');
+            } else {
+                message = String(data.message || `Organization run failed. Succeeded: ${succeeded}. Failed: ${failed}.`).trim();
+                setInlineActionStatus('organize-now-status', 'error', message);
+                showToast(message, 'danger');
+            }
+        } catch (error) {
+            const message = error?.message || 'Unable to start the organization run.';
+            setInlineActionStatus('organize-now-status', 'error', message);
+            showToast(message, 'danger');
+        } finally {
+            this.disabled = false;
+            this.innerHTML = originalHtml;
+        }
     });
 
     document.getElementById('sync-mousehole-cookie-button')?.addEventListener('click', function () {
