@@ -152,6 +152,36 @@ Open the `.env` file and configure the following settings.
 | `MAM_PROXY_ONLY` | No | Keeps the proxy scoped to MAM traffic when `true`. Defaults to `true`. |
 | `MAM_PROXY_FALLBACK_DIRECT` | No | If the configured MAM proxy is unavailable, fall back to a direct connection when `true`. Defaults to `true`. |
 
+### MAM Proxy Routing
+
+MouseSearch can route only MyAnonamouse traffic through a proxy while leaving the web UI reachable on its normal LAN or Docker network path. This is useful when your torrent client is behind Gluetun or another VPN/proxy gateway, but you do not want MouseSearch itself to share that network namespace.
+
+Why this matters:
+
+* MouseSearch depends on a valid `mam_id` cookie for MAM requests.
+* Many setups also rely on MAM's Dynamic Seedbox IP update flow so downloads are allowed from the expected public IP.
+* MAM download permissions are IP-sensitive: in practice, your browser session, MouseSearch, Mousehole, and torrent client often need to agree on which public IP is being presented to MAM.
+* If MouseSearch talks to MAM from a different public IP than the rest of your stack, MAM cookie auth may still work, but downloads or Dynamic Seedbox API behavior can become inconsistent.
+* A MAM-only proxy lets MouseSearch keep its UI on the normal network path while sending MAM-bound traffic through the same VPN/proxy egress as qBittorrent, Mousehole, or another downloader.
+
+Typical example:
+
+```env
+MAM_PROXY_ENABLED=true
+MAM_PROXY_URL=http://gluetun:8888
+MAM_PROXY_ONLY=true
+MAM_PROXY_FALLBACK_DIRECT=true
+```
+
+Notes:
+
+* `MAM_PROXY_ENABLED=true` turns the feature on.
+* `MAM_PROXY_URL` supports `http://`, `https://`, `socks5://`, and `socks5h://`.
+* Proxy auth can be embedded inline, for example `http://user:pass@gluetun:8888`.
+* `MAM_PROXY_ONLY=true` keeps non-MAM traffic off the proxy.
+* `MAM_PROXY_FALLBACK_DIRECT=true` allows MAM requests to fall back direct if the proxy is down. Set it to `false` if you want fail-closed behavior instead.
+* If you use SOCKS and want remote DNS resolution, prefer `socks5h://` over `socks5://`.
+
 ### Torrent Client Configuration
 
 MouseSearch supports modular torrent clients. Currently supported: **qBittorrent**, **Deluge**, **Transmission**, and **rTorrent**.
