@@ -5754,6 +5754,68 @@ async def update_default_search_filters():
 
 # --- ORGANIZE LOGIC ---
 
+def build_source_tree_snapshot(content_path: Path) -> tuple[tuple[str, int], ...] | None:
+    """Return a deterministic snapshot of the current source files."""
+    try:
+        if not content_path.exists():
+            return None
+
+        if content_path.is_file():
+            stat_result = content_path.stat()
+            return ((content_path.name, int(stat_result.st_size)),)
+
+        if not content_path.is_dir():
+            return tuple()
+
+        entries = []
+        source_files = sorted(
+            (path for path in content_path.rglob('*') if path.is_file()),
+            key=lambda path: path.as_posix().casefold(),
+        )
+        for source_file in source_files:
+            try:
+                stat_result = source_file.stat()
+            except FileNotFoundError:
+                return None
+            rel_path = source_file.relative_to(content_path).as_posix()
+            entries.append((rel_path, int(stat_result.st_size)))
+        return tuple(entries)
+    except FileNotFoundError:
+        return None
+
+
+async def wait_for_stable_source_tree(
+    content_path: Path,
+    *,
+    poll_interval_seconds: int = 2,
+    max_wait_seconds: int = 30,
+    required_stable_count: int = 2,
+) -> tuple[bool, tuple[tuple[str, int], ...] | None]:
+    """Wait until the source tree stops changing across consecutive polls."""
+    deadline = time.monotonic() + max_wait_seconds
+    previous_snapshot = None
+    last_snapshot = None
+    stable_count = 0
+
+    while True:
+        snapshot = build_source_tree_snapshot(content_path)
+        last_snapshot = snapshot
+
+        if snapshot and snapshot == previous_snapshot:
+            stable_count += 1
+        else:
+            stable_count = 0
+
+        previous_snapshot = snapshot
+
+        if snapshot and stable_count >= required_stable_count:
+            return True, snapshot
+
+        if time.monotonic() >= deadline:
+            return False, last_snapshot
+
+        await asyncio.sleep(poll_interval_seconds)
+
 async def _perform_organization(hash_val: str) -> tuple[bool, str]:
     """
     Performs the file organization for a given torrent hash.
@@ -5768,7 +5830,6 @@ async def _perform_organization(hash_val: str) -> tuple[bool, str]:
     status = metadata[hash_val].get('status', 'pending')
     if status == 'organized': return True, f"Already organized: {hash_val}."
     if status == 'unknown': return True, f"Torrent {hash_val} is marked as unknown - skipping organization."
-    if metadata[hash_val].get('retry_count', 0) >= 3: return True, "Max retries exceeded."
     
     if not torrent_client: return False, "Client not initialized."
     # Try to rely on session, fall back to explicit login
@@ -5805,16 +5866,25 @@ async def _perform_organization(hash_val: str) -> tuple[bool, str]:
         dest_path = organized_path / sanitize_filename(torrent_meta['author']) / sanitize_filename(torrent_meta['title'])
     # --- CHANGED LOGIC END ---
     
-    # Wait up to 10s for the filesystem to settle (fix for "Move on Completion" race condition)
-    for _ in range(5):
-        if content_path.exists():
-            break
-        await asyncio.sleep(2)
-    
-    if not content_path.exists(): 
+    source_ready, stable_snapshot = await wait_for_stable_source_tree(
+        content_path,
+        poll_interval_seconds=2,
+        max_wait_seconds=30,
+        required_stable_count=2,
+    )
+
+    if not content_path.exists():
         app.logger.debug(f"[ORGANIZE] Source path missing: {content_path}")
         await broadcast_toast(f"Auto-organization failed for '{torrent_meta.get('title', 'Unknown')}': Source path missing", "danger")
         return False, f"Source missing: {content_path}"
+
+    if not source_ready or not stable_snapshot:
+        app.logger.warning(f"[ORGANIZE] Source tree did not stabilize within 30s: {content_path}")
+        await broadcast_toast(
+            f"Auto-organization delayed for '{torrent_meta.get('title', 'Unknown')}': Source files still changing",
+            "warning"
+        )
+        return False, f"Source tree did not stabilize within 30s: {content_path}"
     
     try: dest_path.mkdir(parents=True, exist_ok=True)
     except Exception as e:
@@ -5822,44 +5892,63 @@ async def _perform_organization(hash_val: str) -> tuple[bool, str]:
         return False, f"Dest create failed: {e}"
     
     files_linked, files_exist = 0, 0
-    
-    if content_path.is_dir():
-        source_files = content_path.rglob('*')
-        base_path = content_path
-    else:
-        source_files = [content_path]
-        base_path = content_path.parent  # Use parent so relative_to keeps the filename
-    
-    for source_file in source_files:
-        if source_file.is_file():
-            # NO FILTERING: Link/copy everything found in the torrent
-            rel_path = source_file.relative_to(base_path)
-            dest_file = dest_path / rel_path
+    failed_files = []
+    source_base_path = content_path.parent if content_path.is_file() else content_path
+
+    for rel_path_str, _ in stable_snapshot:
+        source_file = source_base_path / Path(rel_path_str)
+        dest_file = dest_path / Path(rel_path_str)
+        try:
             dest_file.parent.mkdir(parents=True, exist_ok=True)
-            if dest_file.exists(): 
-                files_exist += 1
-                app.logger.debug(f"[ORGANIZE] Exists: {dest_file}")
+        except Exception as e:
+            failed_files.append((rel_path_str, f"Destination parent create failed: {e}"))
+            continue
+
+        if dest_file.exists():
+            files_exist += 1
+            app.logger.debug(f"[ORGANIZE] Exists: {dest_file}")
+            continue
+
+        try:
+            if app.config.get("AUTO_ORGANIZE_USE_COPY", False):
+                # Run copy in a separate thread to prevent blocking
+                await asyncio.to_thread(shutil.copy2, source_file, dest_file)
+                files_linked += 1
+                app.logger.debug(f"[ORGANIZE] Copied: {source_file} -> {dest_file}")
             else:
-                try:
-                    if app.config.get("AUTO_ORGANIZE_USE_COPY", False):
-                        # Run copy in a separate thread to prevent blocking
-                        await asyncio.to_thread(shutil.copy2, source_file, dest_file)
-                        files_linked += 1
-                        app.logger.debug(f"[ORGANIZE] Copied: {source_file} -> {dest_file}")
-                    else:
-                        os.link(source_file, dest_file)
-                        files_linked += 1
-                        app.logger.debug(f"[ORGANIZE] Linked: {source_file} -> {dest_file}")
-                except Exception as e:
-                    operation = "Copy" if app.config.get("AUTO_ORGANIZE_USE_COPY", False) else "Link"
-                    app.logger.error(f"[ORGANIZE] {operation} error {source_file}: {e}")
+                os.link(source_file, dest_file)
+                files_linked += 1
+                app.logger.debug(f"[ORGANIZE] Linked: {source_file} -> {dest_file}")
+        except Exception as e:
+            operation = "Copy" if app.config.get("AUTO_ORGANIZE_USE_COPY", False) else "Link"
+            app.logger.error(f"[ORGANIZE] {operation} error {source_file}: {e}")
+            failed_files.append((rel_path_str, str(e)))
 
     total = files_linked + files_exist
     if total == 0:
-        metadata[hash_val]['retry_count'] += 1
-        save_database(metadata)
-        await broadcast_toast(f"Auto-organization failed for '{torrent_meta.get('title', 'Unknown')}': No files linked", "warning")
+        await broadcast_toast(f"Auto-organization delayed for '{torrent_meta.get('title', 'Unknown')}': No files linked", "warning")
         return False, "No files found."
+
+    final_snapshot = build_source_tree_snapshot(content_path)
+    if final_snapshot != stable_snapshot:
+        app.logger.warning(f"[ORGANIZE] Source tree changed during organization for {hash_val}")
+        await broadcast_toast(
+            f"Auto-organization delayed for '{torrent_meta.get('title', 'Unknown')}': Source files changed during linking",
+            "warning"
+        )
+        return False, f"Source tree changed during organization: {content_path}"
+
+    if failed_files:
+        failed_count = len(failed_files)
+        first_failed_path, first_error = failed_files[0]
+        await broadcast_toast(
+            f"Auto-organization delayed for '{torrent_meta.get('title', 'Unknown')}': {failed_count} file operation(s) failed",
+            "warning"
+        )
+        return False, (
+            f"Organization incomplete: {failed_count} file operation(s) failed. "
+            f"First failure: {first_failed_path} ({first_error})"
+        )
     
     metadata[hash_val]['status'] = 'organized'
     save_database(metadata)
