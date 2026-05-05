@@ -91,6 +91,13 @@
                 </select>
                 <label for="TORRENT_CLIENT_CATEGORY">Default category</label>
               </div>
+
+              <div id="settings-torrent-client-status" class="alert alert-secondary small mt-3 mb-0" role="status">
+                <div class="d-flex align-items-center gap-2">
+                  <span id="settings-torrent-client-status-icon" aria-hidden="true"></span>
+                  <span id="settings-torrent-client-status-message">Change a field to test the torrent client connection.</span>
+                </div>
+              </div>
             </div>
 
             <div class="card mb-4 border-secondary-subtle">
@@ -364,6 +371,24 @@
             </div>
           </div>
 
+          <div class="card mb-3 border-secondary-subtle">
+            <button type="button"
+              class="card-header border-bottom-0 bg-transparent d-flex justify-content-between align-items-center py-2 cursor-pointer noselect w-100 text-start border-0"
+              id="organize-now-button">
+              <span class="d-flex small fw-bold">
+                <i class="bi bi-play-circle me-2"></i> Organize Now
+              </span>
+              <span class="small text-primary text-nowrap">
+                <i class="bi bi-lightning-charge me-1"></i>Run Once
+              </span>
+            </button>
+            <div class="card-body border-top pt-2 pb-2 d-none" id="organize-now-status-body">
+              <div id="organize-now-status" class="alert alert-secondary small mb-0" role="status">
+                Ready to run a one-time organization pass.
+              </div>
+            </div>
+          </div>
+
           <div id="auto-organize-advanced-section"
             class="collapse {% if AUTO_ORGANIZE_ON_ADD or AUTO_ORGANIZE_ON_SCHEDULE %}show{% endif %}">
             <hr class="settings-divider my-4">
@@ -567,6 +592,12 @@
                   <input type="password" class="form-control" id="HARDCOVER_API_TOKEN" name="HARDCOVER_API_TOKEN"
                     value="{{ HARDCOVER_API_TOKEN }}" placeholder="Hardcover API key" autocomplete="off">
                   <label for="HARDCOVER_API_TOKEN" class="small">Hardcover API key</label>
+                </div>
+                <div id="settings-hardcover-status" class="alert alert-secondary small mt-3 mb-0" role="status">
+                  <div class="d-flex align-items-center gap-2">
+                    <span id="settings-hardcover-status-icon" aria-hidden="true"></span>
+                    <span id="settings-hardcover-status-message">Change the API key field to test Hardcover.</span>
+                  </div>
                 </div>
               </div>
             </div>

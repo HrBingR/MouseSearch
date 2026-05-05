@@ -3770,6 +3770,171 @@ async def client_status():
                 "display_name": getattr(torrent_client, "display_name", "Torrent Client"),
             }), 502
 
+
+def build_torrent_client_probe_config(payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    probe_config = app.config.copy()
+    if not isinstance(payload, dict):
+        return probe_config
+
+    for key in (
+        "TORRENT_CLIENT_TYPE",
+        "TORRENT_CLIENT_URL",
+        "TORRENT_CLIENT_USERNAME",
+        "TORRENT_CLIENT_PASSWORD",
+    ):
+        if key not in payload:
+            continue
+        probe_config[key] = str(payload.get(key) or "")
+
+    return probe_config
+
+
+async def get_torrent_client_probe_status(payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    probe_config = build_torrent_client_probe_config(payload)
+    try:
+        probe_client = get_torrent_client(probe_config)
+    except Exception as exc:
+        return {
+            "status": "error",
+            "message": f"Unable to initialize torrent client: {exc}",
+            "display_name": get_client_display_name(probe_config.get("TORRENT_CLIENT_TYPE")),
+        }
+
+    try:
+        status = await probe_client.get_status()
+    except Exception as exc:
+        app.logger.warning(f"[CLIENT-PROBE] Initial status check failed; retrying login: {exc}")
+        try:
+            await probe_client.login()
+            status = await probe_client.get_status()
+        except Exception as retry_exc:
+            app.logger.error(f"[CLIENT-PROBE] Retry failed after login attempt: {retry_exc}")
+            status = {
+                "status": "error",
+                "message": f"Torrent client probe failed: {retry_exc}",
+                "display_name": getattr(probe_client, "display_name", "Torrent Client"),
+            }
+
+    if not status.get("display_name"):
+        status["display_name"] = getattr(probe_client, "display_name", "Torrent Client")
+    return status
+
+
+@app.route('/api/settings/test-torrent-client', methods=['POST'])
+async def test_torrent_client_settings():
+    payload = await request.get_json(silent=True) or {}
+    status = await get_torrent_client_probe_status(payload)
+    return jsonify(status)
+
+
+HARDCOVER_SETTINGS_PROBE_QUERY = """
+query {
+  me {
+    id
+    username
+  }
+}
+"""
+
+
+def format_hardcover_probe_error(exc: Exception) -> tuple[str, int | None]:
+    raw_message = str(exc or "").strip()
+    if raw_message.startswith("http_"):
+        try:
+            status_code = int(raw_message.split("_", 1)[1])
+        except (IndexError, ValueError):
+            return raw_message or "Hardcover request failed.", None
+        return f"HTTP {status_code}", status_code
+
+    if raw_message.startswith("graphql_error:"):
+        return raw_message.split(":", 1)[1].strip() or "GraphQL error", None
+
+    if raw_message.startswith("request_error:"):
+        return f"Request error: {raw_message.split(':', 1)[1].strip()}", None
+
+    if raw_message.startswith("timeout:"):
+        return f"Timeout: {raw_message.split(':', 1)[1].strip()}", None
+
+    return raw_message or "Hardcover request failed.", None
+
+
+@app.route('/api/settings/test-hardcover', methods=['POST'])
+async def test_hardcover_settings():
+    payload = await request.get_json(silent=True) or {}
+    token = str(payload.get("HARDCOVER_API_TOKEN") or "").strip()
+    if not token:
+        return jsonify({
+            "status": "idle",
+            "message": "Enter a Hardcover API key to test the connection.",
+        })
+
+    endpoint = str(
+        payload.get("HARDCOVER_API_URL")
+        or app.config.get("HARDCOVER_API_URL")
+        or FALLBACK_CONFIG["HARDCOVER_API_URL"]
+    ).strip() or FALLBACK_CONFIG["HARDCOVER_API_URL"]
+    user_agent = str(
+        app.config.get("HARDCOVER_USER_AGENT")
+        or FALLBACK_CONFIG["HARDCOVER_USER_AGENT"]
+    ).strip() or FALLBACK_CONFIG["HARDCOVER_USER_AGENT"]
+    try:
+        rate_limit = int(app.config.get("HARDCOVER_RATE_LIMIT", FALLBACK_CONFIG["HARDCOVER_RATE_LIMIT"]))
+    except (TypeError, ValueError):
+        rate_limit = FALLBACK_CONFIG["HARDCOVER_RATE_LIMIT"]
+
+    client = HardcoverClient(
+        token,
+        endpoint=endpoint,
+        user_agent=user_agent,
+        timeout_seconds=15.0,
+        rate_limit=rate_limit,
+    )
+    try:
+        async with client:
+            data = await client.graphql(HARDCOVER_SETTINGS_PROBE_QUERY, {}, cache_key=None, retry_5xx=0)
+    except HardcoverAPIError as exc:
+        message, http_status = format_hardcover_probe_error(exc)
+        return jsonify({
+            "status": "error",
+            "message": message,
+            "http_status": http_status,
+        })
+    except Exception as exc:
+        return jsonify({
+            "status": "error",
+            "message": str(exc) or "Hardcover request failed.",
+            "http_status": None,
+        })
+
+    me = data.get("me") if isinstance(data, dict) else None
+    if isinstance(me, list):
+        me = me[0] if me else None
+
+    if not isinstance(me, dict):
+        return jsonify({
+            "status": "error",
+            "message": "Hardcover responded without account details.",
+            "http_status": 200,
+        })
+
+    username = str(me.get("username") or "").strip()
+    account_id = me.get("id")
+    account_label = username or "unknown user"
+    if account_id not in (None, ""):
+        message = f"HTTP 200: Connected as {account_label} (ID {account_id})."
+    else:
+        message = f"HTTP 200: Connected as {account_label}."
+
+    return jsonify({
+        "status": "success",
+        "message": message,
+        "http_status": 200,
+        "me": {
+            "id": account_id,
+            "username": username,
+        },
+    })
+
 @app.route('/client/categories', methods=['GET'])
 async def client_categories():
     if not torrent_client: return jsonify({'error': 'Not connected'}), 401
